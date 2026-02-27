@@ -1,0 +1,55 @@
+name: Daily Newsletter
+
+on:
+  schedule:
+    # UTC 05:00 = Türkiye saati 08:00
+    - cron: '0 5 * * *'
+  workflow_dispatch:  # Manual trigger
+
+permissions:
+  contents: read
+
+jobs:
+  generate-and-send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install chromium --with-deps
+
+      - name: Generate newsletter
+        run: python main.py
+        env:
+          CI: 'true'
+
+      - name: Send newsletter email
+        if: success()
+        run: python email_sender.py
+        env:
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+
+      - name: Upload newsletter artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: newsletter-${{ github.run_number }}
+          path: |
+            daily_bulletin.html
+            daily_bulletin.pdf
+            *.png
+          retention-days: 7
