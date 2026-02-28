@@ -2,9 +2,16 @@ name: Daily Newsletter
 
 on:
   schedule:
-    # UTC 07:00 = İspanya saati 08:00 (CET, UTC+1)
+    # Yaz saati (CEST, UTC+2): UTC 06:00 = İspanya 08:00
+    - cron: '0 6 * * *'
+    # Kış saati (CET, UTC+1): UTC 07:00 = İspanya 08:00
     - cron: '0 7 * * *'
   workflow_dispatch:  # Manual trigger
+
+# Aynı gün içinde mükerrer çalışmayı engelle
+concurrency:
+  group: daily-newsletter-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -15,6 +22,14 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      - name: Check if already sent today
+        if: github.event_name == 'schedule'
+        id: dedup
+        run: |
+          echo "today=$(date -u +%Y-%m-%d)" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
