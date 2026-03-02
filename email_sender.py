@@ -40,7 +40,8 @@ def _inline_images(html_content, base_dir="."):
 
 
 def send_newsletter_email(html_path="daily_bulletin.html",
-                          pdf_path="daily_bulletin.pdf"):
+                          pdf_path="daily_bulletin.pdf",
+                          data=None):
     """
     Send the newsletter HTML as an email.
 
@@ -63,17 +64,79 @@ def send_newsletter_email(html_path="daily_bulletin.html",
             print("   - EMAIL_TO ayarlanmamış")
         return False
 
-    # ── Read HTML content ──
-    if not os.path.isfile(html_path):
-        print(f"❌ HTML dosyası bulunamadı: {html_path}")
-        return False
+    # ── Read or Build HTML content ──
+    if data:
+        # Build minimal HTML containing only Summary and News
+        macro = data.get('macro_indicators', {})
+        crypto_ov = data.get('crypto_market_overview', {})
+        fng = data.get('fear_and_greed', {})
+        
+        summary_text = (
+            f"<strong>Makroekonomik göstergeler</strong>e bakıldığında, <strong>VIX</strong> endeksi "
+            f"<strong>{macro.get('VIX', 0):.1f}</strong> seviyesinde, "
+            f"<strong>DXY</strong> (Dolar Endeksi) {macro.get('DXY', 0):.2f} noktasında işlem görmektedir. "
+            f"<strong>ABD 10 Yıllık Tahvil Getirisi</strong> %{macro.get('US 10-Year Treasury Yield', 0):.2f} seviyesindedir. "
+            f"Kripto piyasalarında <strong>Crypto Fear &amp; Greed Index</strong> "
+            f"<strong>{fng.get('value', 0)}</strong> ({fng.get('classification', 'N/A')}) olarak kaydedildi. "
+            f"Toplam kripto <strong>market cap</strong> ${crypto_ov.get('total_market_cap', 0)/1e12:.2f} Trilyon, "
+            f"<strong>BTC Dominance</strong> %{crypto_ov.get('btc_dominance', 0):.1f} seviyesindedir."
+        )
 
-    with open(html_path, "r", encoding="utf-8") as f:
-        html_content = f.read()
+        for ev in data.get('economic_calendar', []):
+            actual = ev.get('actual', '—')
+            if actual != '—':
+                if 'CPI' in ev.get('event', '') or 'TÜFE' in ev.get('event', '') or 'PCE' in ev.get('event', ''):
+                    summary_text += f" Öte yandan, piyasaların merakla beklediği <strong>{ev.get('event', '')}</strong> verisi <strong>{actual}</strong> seviyesinde gerçekleşti."
+                elif 'Non-Farm' in ev.get('event', '') or 'Tarım Dışı' in ev.get('event', ''):
+                    summary_text += f" Ayrıca <strong>ABD Tarım Dışı İstihdam</strong> verisi son olarak <strong>{actual}</strong> olarak açıklandı."
 
-    # Inline images for email compatibility
-    base_dir = os.path.dirname(os.path.abspath(html_path))
-    html_content = _inline_images(html_content, base_dir)
+        news_list = data.get('macro_news', {}).get('news', [])
+        news_html = "".join([f"<li style='margin-bottom:12px; font-size:14px; color:#334155;'>{item}</li>" for item in news_list])
+
+        html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+    <div style="background-color: #1e293b; padding: 24px; text-align: center;">
+      <h2 style="color: #ffffff; margin: 0; font-size: 22px;">📊 Daily Financial Bulletin</h2>
+      <p style="color: #94a3b8; margin: 8px 0 0; font-size: 14px;">{datetime.now().strftime('%d %B %Y')}</p>
+    </div>
+    
+    <div style="padding: 32px 24px;">
+      <h3 style="color: #0f172a; font-size: 18px; margin-top: 0; margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">Genel Değerlendirme</h3>
+      <div style="background-color: #fefce8; border: 1px solid #fef08a; border-radius: 8px; padding: 20px; margin-bottom: 32px;">
+        <p style="margin: 0; color: #422006; font-size: 15px; line-height: 1.6;">{summary_text}</p>
+      </div>
+      
+      <h3 style="color: #0f172a; font-size: 18px; margin-top: 0; margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">🌍 Öne Çıkan Haberler</h3>
+      <ul style="padding-left: 20px; margin-bottom: 32px; line-height: 1.5;">
+        {news_html}
+      </ul>
+      
+      <div style="text-align: center; margin-top: 40px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
+        <p style="font-size: 14px; color: #64748b; font-style: italic; margin: 0;">
+          📌 Detaylı grafikler, takvim ve tüm veriler için e-postanın ekindeki <strong>PDF dosyasını</strong> inceleyebilirsiniz.
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+"""
+    else:
+        if not os.path.isfile(html_path):
+            print(f"❌ HTML dosyası bulunamadı: {html_path}")
+            return False
+
+        with open(html_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+
+        # Inline images for email compatibility
+        base_dir = os.path.dirname(os.path.abspath(html_path))
+        html_content = _inline_images(html_content, base_dir)
 
     # ── Build email ──
     today_str = datetime.now().strftime("%d %B %Y")

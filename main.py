@@ -2,9 +2,9 @@ import os
 import sys
 from data_fetcher import (
     get_crypto_prices, get_macro_indicators, get_fear_and_greed_index,
-    get_crypto_etf_flows, get_token_unlocks_mock, get_macro_news_mock,
-    get_coinbase_premium_mock, get_funding_rates, get_crypto_market_overview,
-    get_magnificent_7, get_commodities, get_economic_calendar
+    get_macro_news_mock,
+    get_coinbase_premium_index, get_funding_rates, get_crypto_market_overview,
+    get_magnificent_7, get_commodities, get_economic_calendar, get_options_market_data
 )
 from html_generator import generate_newsletter_html
 from email_sender import send_newsletter_email
@@ -50,6 +50,11 @@ def generate_daily_newsletter():
     # ── Fetch all data ──
     print("  → Crypto fiyatları...")
     crypto_prices = get_crypto_prices(watchlist)
+    btc_price = 0
+    for c in crypto_prices:
+        if c['Symbol'] == 'BTC':
+            btc_price = c.get('Current Price USD', 0)
+            break
 
     print("  → Crypto piyasa özeti...")
     crypto_market_overview = get_crypto_market_overview()
@@ -72,17 +77,14 @@ def generate_daily_newsletter():
     print("  → Ekonomik takvim...")
     economic_calendar = get_economic_calendar()
 
-    print("  → ETF flows...")
-    etf_flows = get_crypto_etf_flows()
-
     print("  → Coinbase premium...")
-    coinbase_premium = get_coinbase_premium_mock()
-
-    print("  → Token unlocks...")
-    token_unlocks = get_token_unlocks_mock(watchlist)
+    coinbase_premium = get_coinbase_premium_index()
 
     print("  → Macro haberler...")
     macro_news = get_macro_news_mock()
+
+    print("  → Opsiyon Piyasaları...")
+    options_data = get_options_market_data()
 
     data = {
         'crypto_prices': crypto_prices,
@@ -93,10 +95,9 @@ def generate_daily_newsletter():
         'fear_and_greed': fear_and_greed,
         'funding_rates': funding_rates,
         'economic_calendar': economic_calendar,
-        'etf_flows': etf_flows,
         'coinbase_premium': coinbase_premium,
-        'token_unlocks': token_unlocks,
         'macro_news': macro_news,
+        'options_data': options_data,
     }
 
     # ── Generate HTML ──
@@ -125,7 +126,7 @@ def generate_daily_newsletter():
 
     if should_email:
         print("\n📧 E-posta gönderimi başlatılıyor...")
-        send_newsletter_email(html_filename, pdf_filename)
+        send_newsletter_email(html_filename, pdf_filename, data=data)
     else:
         print("\n💡 E-posta göndermek için:")
         print("   • SEND_EMAIL=true python main.py")

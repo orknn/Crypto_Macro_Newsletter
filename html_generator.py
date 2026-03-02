@@ -74,17 +74,17 @@ def _generate_ticker_bar(data):
 
     tickers = [
         {'name': 'NASDAQ 100', 'price': _fmt_price(macro.get('NASDAQ 100 Futures', 0), 'index'),
-         'chg': macro.get('NASDAQ 100 Futures', 0), 'chg_val': 0},
+         'chg': macro.get('NASDAQ 100 Futures_chg', 0), 'chg_val': macro.get('NASDAQ 100 Futures_chg', 0)},
         {'name': 'DXY', 'price': _fmt_price(macro.get('DXY', 0), 'fx4'),
-         'chg': 0, 'chg_val': 0},
+         'chg': macro.get('DXY_chg', 0), 'chg_val': macro.get('DXY_chg', 0)},
         {'name': 'BTC', 'price': _fmt_price(btc_price, 'crypto'),
          'chg': btc_chg, 'chg_val': btc_chg},
         {'name': 'Gold', 'price': _fmt_price(gold_price, 'price2'),
          'chg': gold_chg, 'chg_val': gold_chg},
         {'name': '10Y UST', 'price': _fmt_price(macro.get('US 10-Year Treasury Yield', 0), 'pct'),
-         'chg': 0, 'chg_val': 0},
+         'chg': macro.get('US 10-Year Treasury Yield_chg', 0), 'chg_val': macro.get('US 10-Year Treasury Yield_chg', 0)},
         {'name': 'VIX', 'price': _fmt_price(macro.get('VIX', 0), 'price2'),
-         'chg': 0, 'chg_val': 0},
+         'chg': macro.get('VIX_chg', 0), 'chg_val': macro.get('VIX_chg', 0)},
     ]
 
     items = []
@@ -104,6 +104,7 @@ def _generate_economic_calendar(events):
     """Generate the weekly economic calendar table."""
     rows = []
     for ev in events:
+        actual = ev.get('actual', '—')
         rows.append(f'''
         <tr>
           <td style="color:var(--text-mid); white-space:nowrap;">{ev.get('date', '')}</td>
@@ -112,6 +113,7 @@ def _generate_economic_calendar(events):
           <td style="color:var(--text-dim);">{ev.get('country', '')}</td>
           <td class="mono" style="color:var(--text-dim);">{ev.get('previous', '—')}</td>
           <td class="mono" style="color:var(--straw);">{ev.get('forecast', '—')}</td>
+          <td class="mono" style="font-weight:600; color:var(--text-bright);">{actual}</td>
         </tr>''')
     return '\n'.join(rows)
 
@@ -291,104 +293,10 @@ def _generate_asset_table(assets, columns, id_prefix="row"):
     return '\n'.join(rows)
 
 
-def _generate_etf_flows(etf_data):
-    """Generate ETF inflow/outflow section."""
-    net_flow = etf_data.get('net_flow', 0)
-    total_in = etf_data.get('total_net_inflow', 0)
-    total_out = abs(etf_data.get('total_net_outflow', 0))
-
-    net_cls = "up" if net_flow >= 0 else "down"
-    net_sign = "+" if net_flow >= 0 else ""
-
-    # Build bar chart rows for individual ETFs
-    all_etfs = etf_data.get('btc_etfs', []) + etf_data.get('eth_etfs', [])
-    max_abs = max(abs(e['flow_m']) for e in all_etfs) if all_etfs else 1
-
-    bars = []
-    for etf in all_etfs:
-        flow = etf['flow_m']
-        pct = abs(flow) / max_abs * 100
-        neg_cls = ' negative' if flow < 0 else ''
-        val_cls = 'up' if flow >= 0 else 'down'
-        sign = '+' if flow >= 0 else ''
-        bars.append(f'''
-      <div class="bar-row">
-        <div class="bar-label">{etf['name'].split('(')[0].strip() if '(' in etf['name'] else etf['name']}</div>
-        <div class="bar-track"><div class="bar-fill{neg_cls}" style="width:{pct:.0f}%"></div></div>
-        <div class="bar-val {val_cls}">{sign}{flow:.1f}M</div>
-      </div>''')
-
-    return f'''
-    <div class="kpi-grid" style="margin-bottom:16px;">
-      <div class="kpi-card">
-        <div class="kpi-label">Total Inflow</div>
-        <div class="kpi-value up">+{total_in:.0f}M</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Total Outflow</div>
-        <div class="kpi-value down">-{total_out:.0f}M</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Net Flow</div>
-        <div class="kpi-value {net_cls}">{net_sign}{net_flow:.0f}M</div>
-      </div>
-    </div>
-    <div class="chart-title">Per ETF Breakdown (USD Millions)</div>
-    <div class="bar-chart">
-      {''.join(bars)}
-    </div>'''
 
 
-def _generate_token_unlocks(unlocks):
-    """Generate token unlock/burn section."""
-    if not unlocks:
-        return '<p style="color:var(--text-dim); font-size:13px;">Bu hafta için izleme listesinde önemli bir token unlock veya burn planlanmamaktadır.</p>'
 
-    items = []
-    for i, ev in enumerate(unlocks):
-        event_type = ev.get('event', 'token unlock')
-        tag = "🔓 UNLOCK" if 'unlock' in event_type.lower() else "🔥 BURN"
-        tag_bg = "rgba(232,197,71,0.15)" if 'unlock' in event_type.lower() else "rgba(224,92,107,0.15)"
-        tag_color = "var(--straw)" if 'unlock' in event_type.lower() else "var(--red)"
 
-        # Market impact note
-        amount = ev.get('amount_usd_m', 0)
-        if 'unlock' in event_type.lower():
-            if amount > 100:
-                impact = '⚠️ Yüksek hacimli unlock — potential selling pressure bekleniyor'
-                impact_color = 'var(--red)'
-            elif amount > 50:
-                impact = 'Orta ölçekli unlock — kısa vadeli selling pressure olasılığı mevcut'
-                impact_color = 'var(--straw)'
-            else:
-                impact = 'Düşük hacimli unlock — piyasa etkisi sınırlı kalabilir'
-                impact_color = 'var(--text-dim)'
-        else:
-            if amount > 50:
-                impact = '🔥 Yüksek hacimli burn — supply azalması fiyat için pozitif sinyal'
-                impact_color = '#10B981'
-            else:
-                impact = 'Token burn — uzun vadede supply deflasyonu açısından pozitif'
-                impact_color = '#10B981'
-
-        items.append(f'''
-      <div class="story-item">
-        <div class="story-num">{i+1:02d}</div>
-        <div class="story-content">
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-            <span style="background:{tag_bg}; color:{tag_color}; padding:2px 8px; border-radius:10px; font-size:9px; font-weight:600; letter-spacing:1px;">{tag}</span>
-            <span class="story-tag">{ev.get('date', '')}</span>
-          </div>
-          <div class="story-headline">{ev['symbol']} — {event_type.title()}</div>
-          <div class="story-body">Tahmini değer: <strong>${amount:.1f}M USD</strong></div>
-          <div style="margin-top:4px; font-size:11px; font-style:italic; color:{impact_color}; line-height:1.5;">{impact}</div>
-        </div>
-      </div>''')
-
-    return f'''
-    <div class="story-list">
-      {''.join(items)}
-    </div>'''
 
 
 def _generate_news_stories(news_data):
@@ -415,6 +323,8 @@ def _generate_news_stories(news_data):
             return 'Enflasyon verileri para politikası beklentilerini şekillendirecek — market volatility artabilir.'
         if 'istihdam' in h or 'işsizlik' in h:
             return 'İstihdam verileri ekonomik sağlık göstergesi — tahvil getirileri ve DXY üzerinde etkili olabilir.'
+        if 'iran' in h or 'savaş' in h or 'gerilim' in h or 'jeopolitik' in h:
+            return 'Jeopolitik risk düzeyini artıran gelişme — petrol, altın ve güvenli liman varlıklarında yükselişe, riskli varlıklarda ise volatility artışına neden olabilir.'
         return 'Makroekonomik gelişme — piyasa katılımcıları tarafından yakından takip edilmeli.'
 
     items = []
@@ -430,6 +340,45 @@ def _generate_news_stories(news_data):
         </div>
       </div>''')
     return '\n'.join(items)
+
+def _generate_options_market(options_data):
+    """Generate the Options Market (Deribit) section."""
+    if not options_data:
+        return ""
+    
+    dvol = options_data.get('dvol_index', 0)
+    dvol_chg = options_data.get('dvol_change_24h', 0)
+    pcr = options_data.get('put_call_ratio', 0)
+    oi = options_data.get('open_interest_btc', 0)
+    max_pain = options_data.get('max_pain_price', 0)
+    
+    dvol_chg_text, dvol_chg_cls = _fmt_change(dvol_chg)
+    
+    return f'''
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">BTC DVOL (Zımni Volatilite)</div>
+        <div class="kpi-value">{dvol:.1f}</div>
+        <div class="kpi-change {dvol_chg_cls}">{dvol_chg_text}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Put/Call Ratio (Hacim)</div>
+        <div class="kpi-value">{pcr:.2f}</div>
+        <div class="kpi-change">{"Ayı Eğilimli" if pcr > 1.0 else "Boğa Eğilimli"}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Açık Pozisyon (OI)</div>
+        <div class="kpi-value">{oi/1000:.1f}K BTC</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Max Pain Fiyatı</div>
+        <div class="kpi-value">${max_pain:,.0f}</div>
+      </div>
+    </div>
+    <div style="margin-top:12px; font-size:11.5px; color:var(--text-dim); line-height:1.5;">
+      💡 <strong style="color:var(--text-mid);">Opsiyon Piyasası Notu:</strong> 
+      DVOL endeksi piyasaların öngördüğü volatiliteti gösterir. Put/Call oranının 1'in altında olması call (alım) yönlü beklentinin ağırlıkta olduğuna işaret edebilir. Max pain, opsiyon satıcılarının en az zarar edeceği uzlaşma fiyatıdır.
+    </div>'''
 
 
 def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
@@ -459,6 +408,15 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
         f"<strong>BTC Dominance</strong> %{crypto_ov.get('btc_dominance', 0):.1f} seviyesindedir."
     )
 
+    # Inject actuals from economic calendar if available
+    for ev in data.get('economic_calendar', []):
+        actual = ev.get('actual', '—')
+        if actual != '—':
+            if 'CPI' in ev.get('event', '') or 'TÜFE' in ev.get('event', '') or 'PCE' in ev.get('event', ''):
+                summary_text += f" Öte yandan, piyasaların merakla beklediği <strong>{ev.get('event', '')}</strong> verisi <strong>{actual}</strong> seviyesinde gerçekleşti."
+            elif 'Non-Farm' in ev.get('event', '') or 'Tarım Dışı' in ev.get('event', ''):
+                summary_text += f" Ayrıca <strong>ABD Tarım Dışı İstihdam</strong> verisi son olarak <strong>{actual}</strong> olarak açıklandı."
+
     # Build all sections
     ticker_bar = _generate_ticker_bar(data)
     econ_calendar = _generate_economic_calendar(data.get('economic_calendar', []))
@@ -471,9 +429,8 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
         'mag7', 'row'
     )
     crypto_rows = _generate_asset_table(data.get('crypto_prices', []), 'crypto', 'row')
-    etf_flows = _generate_etf_flows(data.get('etf_flows', {}))
-    token_unlocks = _generate_token_unlocks(data.get('token_unlocks', []))
     news_stories = _generate_news_stories(data.get('macro_news', {}))
+    options_market = _generate_options_market(data.get('options_data', {}))
 
     # BTC 4-Hour Status with support/resistance
     cp = data.get('coinbase_premium', {})
@@ -672,7 +629,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   .down {{ color: var(--red); }}
 
   /* ── SECTION ── */
-  .section {{ padding: 28px 40px; border-bottom: 1px solid var(--navy-border); break-inside: avoid; page-break-inside: avoid; }}
+  .section {{ padding: 22px 40px; border-bottom: 1px solid var(--navy-border); break-inside: avoid; page-break-inside: avoid; }}
   .summary-card, .kpi-card, .heatmap-table, .sparkline-wrap, .news-card {{ break-inside: avoid; page-break-inside: avoid; }}
   .heatmap-table tr {{ break-inside: avoid; page-break-inside: avoid; }}
   .kpi-grid {{ break-inside: avoid; page-break-inside: avoid; }}
@@ -887,15 +844,17 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     font-weight: 600;
   }}
   .econ-calendar th:nth-child(5),
-  .econ-calendar th:nth-child(6) {{
+  .econ-calendar th:nth-child(6),
+  .econ-calendar th:nth-child(7) {{
     text-align: right;
   }}
   .econ-calendar col:nth-child(1) {{ width: 13%; }}
   .econ-calendar col:nth-child(2) {{ width: 10%; }}
-  .econ-calendar col:nth-child(3) {{ width: 40%; }}
-  .econ-calendar col:nth-child(4) {{ width: 12%; }}
-  .econ-calendar col:nth-child(5) {{ width: 12%; }}
-  .econ-calendar col:nth-child(6) {{ width: 13%; }}
+  .econ-calendar col:nth-child(3) {{ width: 32%; }}
+  .econ-calendar col:nth-child(4) {{ width: 10%; }}
+  .econ-calendar col:nth-child(5) {{ width: 11%; }}
+  .econ-calendar col:nth-child(6) {{ width: 11%; }}
+  .econ-calendar col:nth-child(7) {{ width: 13%; }}
   .econ-calendar td {{
     padding: 12px 16px;
     font-size: 12px;
@@ -903,7 +862,8 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     vertical-align: middle;
   }}
   .econ-calendar td:nth-child(5),
-  .econ-calendar td:nth-child(6) {{
+  .econ-calendar td:nth-child(6),
+  .econ-calendar td:nth-child(7) {{
     text-align: right;
   }}
   .econ-calendar tr:last-child td {{ border-bottom: none; }}
@@ -1027,8 +987,8 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     </div>
     <table class="econ-calendar">
       <colgroup>
-        <col style="width:13%"><col style="width:10%"><col style="width:40%">
-        <col style="width:12%"><col style="width:12%"><col style="width:13%">
+        <col style="width:13%"><col style="width:10%"><col style="width:32%">
+        <col style="width:10%"><col style="width:11%"><col style="width:11%"><col style="width:13%">
       </colgroup>
       <thead>
         <tr>
@@ -1038,6 +998,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
           <th>Ülke</th>
           <th>Önceki</th>
           <th>Beklenti</th>
+          <th style="color:var(--text-bright);">Gerçekleşen</th>
         </tr>
       </thead>
       <tbody>
@@ -1064,6 +1025,12 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   <div class="section">
     <div class="section-label">BTC — Support & Resistance Analizi</div>
     {btc_status_html}
+  </div>
+
+  <!-- OPSIYON PIYASALARI -->
+  <div class="section">
+    <div class="section-label">Deribit Opsiyon Piyasaları Analizi</div>
+    {options_market}
   </div>
 
   <!-- VARLIK ÖZETİ — COMMODİTİES -->
@@ -1109,17 +1076,8 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     </div>
   </div>
 
-  <!-- ETF INFLOW / OUTFLOW -->
-  <div class="section">
-    <div class="section-label">Crypto ETF Inflows / Outflows</div>
-    {etf_flows}
-  </div>
 
-  <!-- TOKEN UNLOCK / BURN -->
-  <div class="section">
-    <div class="section-label">Token Unlocks &amp; Burns</div>
-    {token_unlocks}
-  </div>
+
 
   <!-- ÖNE ÇIKAN HABERLER -->
   <div class="section">
@@ -1128,8 +1086,6 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
       {news_stories}
     </div>
   </div>
-
-  <!-- FOOTER -->
   <div class="footer">
     <div>
       <div class="footer-brand">Orkun Biçen · Daily Financial Bulletin</div>
