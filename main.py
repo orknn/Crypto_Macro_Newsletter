@@ -6,6 +6,7 @@ from data_fetcher import (
     get_coinbase_premium_index, get_funding_rates, get_crypto_market_overview,
     get_magnificent_7, get_commodities, get_economic_calendar, get_options_market_data
 )
+from agents import ContentEditorAgent, ExperienceDesignerAgent
 from html_generator import generate_newsletter_html
 from email_sender import send_newsletter_email
 
@@ -99,6 +100,21 @@ def generate_daily_newsletter():
         'macro_news': macro_news,
         'options_data': options_data,
     }
+
+    # ── AI Agent Analysis ──
+    print("\n🤖 AI Agent'lar çalıştırılıyor...")
+
+    print("  → Finansal İçerik Editörü...")
+    content_report = ContentEditorAgent().analyze(data)
+    data['content_strategy_report'] = content_report
+
+    # Kota aşımını önlemek için kısa bekleme
+    import time
+    time.sleep(5)
+
+    print("  → Bülten Deneyim Tasarımcısı...")
+    design_report = ExperienceDesignerAgent().analyze(data)
+    data['design_improvement_report'] = design_report
 
     # ── Generate HTML ──
     print("\nHTML bülten oluşturuluyor...")

@@ -381,6 +381,100 @@ def _generate_options_market(options_data):
     </div>'''
 
 
+def _md_to_html(md_text):
+    """Convert simple markdown to HTML for agent reports."""
+    import re
+    lines = md_text.split('\n')
+    html_lines = []
+    in_list = False
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            if in_list:
+                html_lines.append('</ul>')
+                in_list = False
+            html_lines.append('<br>')
+            continue
+
+        # Headers
+        if stripped.startswith('## '):
+            if in_list:
+                html_lines.append('</ul>')
+                in_list = False
+            heading = stripped[3:]
+            # Bold within heading
+            heading = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', heading)
+            html_lines.append(f'<h4 style="color:var(--straw); font-size:13px; font-weight:600; margin:16px 0 8px; letter-spacing:0.5px;">{heading}</h4>')
+            continue
+
+        if stripped.startswith('### '):
+            if in_list:
+                html_lines.append('</ul>')
+                in_list = False
+            heading = stripped[4:]
+            heading = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', heading)
+            html_lines.append(f'<h5 style="color:var(--text-mid); font-size:12px; font-weight:600; margin:12px 0 6px;">{heading}</h5>')
+            continue
+
+        # List items
+        if stripped.startswith('- ') or stripped.startswith('* '):
+            if not in_list:
+                html_lines.append('<ul style="margin:4px 0; padding-left:20px;">')
+                in_list = True
+            item = stripped[2:]
+            item = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color:var(--text-bright);">\1</strong>', item)
+            item = re.sub(r'`(.*?)`', r'<code style="background:rgba(232,197,71,0.1); padding:1px 5px; border-radius:3px; font-size:11px; color:var(--straw);">\1</code>', item)
+            html_lines.append(f'<li style="margin-bottom:6px; font-size:12px; color:var(--text-mid); line-height:1.6;">{item}</li>')
+            continue
+
+        # Regular paragraph - close list if open
+        if in_list:
+            html_lines.append('</ul>')
+            in_list = False
+
+        # Bold + code + inline formatting
+        p = stripped
+        p = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color:var(--text-bright);">\1</strong>', p)
+        p = re.sub(r'`(.*?)`', r'<code style="background:rgba(232,197,71,0.1); padding:1px 5px; border-radius:3px; font-size:11px; color:var(--straw);">\1</code>', p)
+        html_lines.append(f'<p style="margin:4px 0; font-size:12px; color:var(--text-mid); line-height:1.65;">{p}</p>')
+
+    if in_list:
+        html_lines.append('</ul>')
+
+    return '\n'.join(html_lines)
+
+
+def _generate_agent_section(title, icon, report_data):
+    """Generate an agent report section for the newsletter."""
+    if not report_data:
+        return ''
+
+    report = report_data.get('report', '')
+    success = report_data.get('success', False)
+
+    status_badge = (
+        '<span style="background:#10B981; color:#fff; padding:2px 8px; border-radius:10px; '
+        'font-size:9px; font-weight:600; letter-spacing:0.5px;">AI ACTIVE</span>'
+        if success else
+        '<span style="background:var(--text-dim); color:var(--navy); padding:2px 8px; border-radius:10px; '
+        'font-size:9px; font-weight:600; letter-spacing:0.5px;">OFFLINE</span>'
+    )
+
+    report_html = _md_to_html(report)
+
+    return f'''
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+      <span style="font-size:18px;">{icon}</span>
+      <span style="font-size:11px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-mid);">{title}</span>
+      {status_badge}
+    </div>
+    <div style="background:var(--navy-card); border:1px solid var(--navy-border); border-radius:10px; padding:20px 24px; position:relative; overflow:hidden;">
+      <div style="position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(to right, var(--straw), transparent); opacity:0.5;"></div>
+      {report_html}
+    </div>'''
+
+
 def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     """
     Generate the complete newsletter HTML.
@@ -431,6 +525,16 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     crypto_rows = _generate_asset_table(data.get('crypto_prices', []), 'crypto', 'row')
     news_stories = _generate_news_stories(data.get('macro_news', {}))
     options_market = _generate_options_market(data.get('options_data', {}))
+
+    # AI Agent Reports
+    content_strategy_section = _generate_agent_section(
+        'İçerik Strateji Raporu', '🤖',
+        data.get('content_strategy_report')
+    )
+    design_improvement_section = _generate_agent_section(
+        'Tasarım Geliştirme Önerisi', '🎨',
+        data.get('design_improvement_report')
+    )
 
     # BTC 4-Hour Status with support/resistance
     cp = data.get('coinbase_premium', {})
@@ -1086,6 +1190,19 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
       {news_stories}
     </div>
   </div>
+
+  <!-- AI İÇERİK STRATEJİ RAPORU -->
+  <div class="section">
+    <div class="section-label">AI Content Editor — İçerik Strateji Raporu</div>
+    {content_strategy_section}
+  </div>
+
+  <!-- AI TASARIM GELİŞTİRME ÖNERİSİ -->
+  <div class="section">
+    <div class="section-label">AI Experience Designer — Tasarım Geliştirme Önerisi</div>
+    {design_improvement_section}
+  </div>
+
   <div class="footer">
     <div>
       <div class="footer-brand">Orkun Biçen · Daily Financial Bulletin</div>

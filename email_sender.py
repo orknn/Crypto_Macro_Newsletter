@@ -146,7 +146,8 @@ def send_newsletter_email(html_path="daily_bulletin.html",
 
     msg = MIMEMultipart("mixed")
     msg["From"] = email_from
-    msg["To"] = ", ".join(recipients)
+    msg["To"] = email_from  # Gönderici kendi adresini görür
+    msg["Bcc"] = ", ".join(recipients)  # Alıcılar birbirini görmez
     msg["Subject"] = subject
 
     # HTML body
