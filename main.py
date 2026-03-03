@@ -8,6 +8,7 @@ from data_fetcher import (
 )
 from agents import ContentEditorAgent, ExperienceDesignerAgent
 from html_generator import generate_newsletter_html
+from ai_report_generator import generate_ai_report
 from email_sender import send_newsletter_email
 
 
@@ -126,11 +127,17 @@ def generate_daily_newsletter():
     pdf_filename = 'daily_bulletin.pdf'
     html_to_pdf(html_filename, pdf_filename)
 
+    # ── Generate private AI report ──
+    print("\nAI raporları oluşturuluyor (sadece editör için)...")
+    ai_report_file = generate_ai_report(data)
+
     print(f"\n{'='*50}")
     print(f"  ✅ Bülten hazır!")
     print(f"  HTML: {os.path.abspath(html_filename)}")
     if os.path.exists(pdf_filename):
         print(f"  PDF:  {os.path.abspath(pdf_filename)}")
+    if ai_report_file:
+        print(f"  📋 AI Rapor: {os.path.abspath(ai_report_file)}")
     print(f"{'='*50}")
 
     # ── Send email (if configured) ──

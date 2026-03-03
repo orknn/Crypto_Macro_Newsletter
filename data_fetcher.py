@@ -162,9 +162,11 @@ def get_macro_indicators():
     """
     tickers = {
         'US 10-Year Treasury Yield': '^TNX',
+        'US 2-Year Treasury Yield': '^IRX',
         'VIX': '^VIX',
         'DXY': 'DX-Y.NYB',
-        'NASDAQ 100 Futures': 'NQ=F'
+        'NASDAQ 100 Futures': 'NQ=F',
+        'SMH (Semiconductor ETF)': 'SMH',
     }
     
     results = {}

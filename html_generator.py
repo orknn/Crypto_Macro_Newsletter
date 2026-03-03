@@ -350,7 +350,6 @@ def _generate_options_market(options_data):
     dvol_chg = options_data.get('dvol_change_24h', 0)
     pcr = options_data.get('put_call_ratio', 0)
     oi = options_data.get('open_interest_btc', 0)
-    max_pain = options_data.get('max_pain_price', 0)
     
     dvol_chg_text, dvol_chg_cls = _fmt_change(dvol_chg)
     
@@ -370,14 +369,10 @@ def _generate_options_market(options_data):
         <div class="kpi-label">Açık Pozisyon (OI)</div>
         <div class="kpi-value">{oi/1000:.1f}K BTC</div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Max Pain Fiyatı</div>
-        <div class="kpi-value">${max_pain:,.0f}</div>
-      </div>
     </div>
     <div style="margin-top:12px; font-size:11.5px; color:var(--text-dim); line-height:1.5;">
       💡 <strong style="color:var(--text-mid);">Opsiyon Piyasası Notu:</strong> 
-      DVOL endeksi piyasaların öngördüğü volatiliteti gösterir. Put/Call oranının 1'in altında olması call (alım) yönlü beklentinin ağırlıkta olduğuna işaret edebilir. Max pain, opsiyon satıcılarının en az zarar edeceği uzlaşma fiyatıdır.
+      DVOL endeksi piyasaların öngördüğü volatiliteti gösterir. Put/Call oranının 1'in altında olması call (alım) yönlü beklentinin ağırlıkta olduğuna işaret edebilir.
     </div>'''
 
 
@@ -491,6 +486,20 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     crypto_ov = data.get('crypto_market_overview', {})
     fng = data.get('fear_and_greed', {})
 
+    # Fear & Greed badge for header (Design Proposal #1)
+    fng_value = fng.get('value', 0)
+    fng_label = fng.get('classification', 'N/A')
+    if fng_value <= 25:
+        fng_color = '#ff4757'  # Extreme Fear
+    elif fng_value <= 45:
+        fng_color = '#ff6348'  # Fear
+    elif fng_value <= 55:
+        fng_color = '#ffa502'  # Neutral
+    elif fng_value <= 75:
+        fng_color = '#2ed573'  # Greed
+    else:
+        fng_color = '#00d084'  # Extreme Greed
+
     summary_text = (
         f"<strong>Makroekonomik göstergeler</strong>e bakıldığında, <strong>VIX</strong> endeksi "
         f"<span class='highlight'>{macro.get('VIX', 0):.1f}</span> seviyesinde, "
@@ -526,15 +535,44 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     news_stories = _generate_news_stories(data.get('macro_news', {}))
     options_market = _generate_options_market(data.get('options_data', {}))
 
-    # AI Agent Reports
-    content_strategy_section = _generate_agent_section(
-        'İçerik Strateji Raporu', '🤖',
-        data.get('content_strategy_report')
-    )
-    design_improvement_section = _generate_agent_section(
-        'Tasarım Geliştirme Önerisi', '🎨',
-        data.get('design_improvement_report')
-    )
+    # Extra indicators (Content Proposals #6, #7, #8)
+    macro = data.get('macro_indicators', {})
+    crypto_ov = data.get('crypto_market_overview', {})
+    yield_10y = macro.get('US 10-Year Treasury Yield', 0)
+    yield_2y = macro.get('US 2-Year Treasury Yield', 0)
+    yield_spread = yield_10y - yield_2y if yield_10y and yield_2y else 0
+    spread_status = 'Normal' if yield_spread > 0 else 'Inverted ⚠️'
+    spread_cls = 'up' if yield_spread > 0 else 'down'
+
+    smh_price = macro.get('SMH (Semiconductor ETF)', 0)
+    smh_chg = macro.get('SMH (Semiconductor ETF)_chg', 0)
+    smh_chg_text, smh_chg_cls = _fmt_change(smh_chg)
+
+    stablecoin_mcap = crypto_ov.get('total_market_cap', 0) * (crypto_ov.get('stablecoin_dominance', 0) / 100) if crypto_ov.get('stablecoin_dominance') else 0
+    stablecoin_dom = crypto_ov.get('stablecoin_dominance', 0)
+
+    extra_indicators = f'''
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">2Y-10Y Yield Spread</div>
+        <div class="kpi-value">{yield_spread:.2f}%</div>
+        <div class="kpi-change {spread_cls}">{spread_status}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Stablecoin Market Cap</div>
+        <div class="kpi-value">${stablecoin_mcap/1e9:.1f}B</div>
+        <div class="kpi-change">Dom: %{stablecoin_dom:.1f}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">SMH (Semiconductor ETF)</div>
+        <div class="kpi-value">${smh_price:,.2f}</div>
+        <div class="kpi-change {smh_chg_cls}">{smh_chg_text}</div>
+      </div>
+    </div>
+    <div style="margin-top:12px; font-size:11.5px; color:var(--text-dim); line-height:1.5;">
+      💡 <strong style="color:var(--text-mid);">Gösterge Notu:</strong>
+      2Y-10Y yield spread negatif olduğunda resesyon sinyali verir. Stablecoin market cap artışı crypto piyasasına giriş likiditesini gösterir. SMH, AI ve semiconductor sektörünün barometresidir.
+    </div>'''
 
     # BTC 4-Hour Status with support/resistance
     cp = data.get('coinbase_premium', {})
@@ -603,8 +641,8 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     --text-bright: #f0ead8;
     --text-mid:    #a8bcd4;
     --text-dim:    #5e7a9a;
-    --green:       #4ecb8d;
-    --red:         #e05c6b;
+    --green:       #00d084;
+    --red:         #ff4757;
     --white:       #ffffff;
   }}
 
@@ -734,6 +772,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
 
   /* ── SECTION ── */
   .section {{ padding: 22px 40px; border-bottom: 1px solid var(--navy-border); break-inside: avoid; page-break-inside: avoid; }}
+  .section-label {{ border-left: 4px solid var(--straw); padding-left: 10px; }}
   .summary-card, .kpi-card, .heatmap-table, .sparkline-wrap, .news-card {{ break-inside: avoid; page-break-inside: avoid; }}
   .heatmap-table tr {{ break-inside: avoid; page-break-inside: avoid; }}
   .kpi-grid {{ break-inside: avoid; page-break-inside: avoid; }}
@@ -791,6 +830,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     display: flex;
     flex-direction: column;
     justify-content: center;
+    box-shadow: 0 2px 8px rgba(232, 197, 71, 0.15);
   }}
   .kpi-card::after {{
     content: '';
@@ -813,9 +853,9 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   }}
   .kpi-value {{
     font-family: 'JetBrains Mono', monospace;
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 500;
-    color: var(--text-bright);
+    color: var(--white);
     margin-bottom: 4px;
   }}
   .kpi-change {{
@@ -891,7 +931,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   }}
   .heatmap-table td {{
     padding: 12px 16px;
-    font-size: 13px;
+    font-size: 14px;
     border-bottom: 1px solid #334155;
     vertical-align: middle;
     text-align: right;
@@ -913,7 +953,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     display: flex; align-items: center; gap: 8px;
   }}
   .asset-dot {{ width: 6px; height: 6px; border-radius: 50%; background: var(--straw); flex-shrink: 0; }}
-  .mono {{ font-family: 'JetBrains Mono', monospace; font-size: 12px; }}
+  .mono {{ font-family: 'JetBrains Mono', monospace; font-size: 14px; }}
   .cell-bar {{
     display: flex;
     align-items: center;
@@ -1065,7 +1105,13 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
       </div>
       <div class="date-badge">{date_str}</div>
     </div>
-    <div class="header-title">Daily <span>Financial</span><br>Bulletin</div>
+    <div style="display:flex; align-items:center; gap:16px; margin-bottom:8px;">
+      <div class="header-title" style="margin-bottom:0;">Daily <span>Financial</span><br>Bulletin</div>
+      <div style="background:{fng_color}; color:white; font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:700; padding:12px 18px; border-radius:12px; text-align:center; line-height:1.2; min-width:80px;">
+        {fng_value}
+        <div style="font-size:9px; font-weight:500; letter-spacing:1px; text-transform:uppercase; margin-top:2px; opacity:0.9;">{fng_label}</div>
+      </div>
+    </div>
     <div class="header-sub">Markets · Macro · Crypto · Key Stories</div>
   </div>
 
@@ -1137,6 +1183,12 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     {options_market}
   </div>
 
+  <!-- EK PİYASA GÖSTERGELERİ -->
+  <div class="section">
+    <div class="section-label">Ek Piyasa Göstergeleri</div>
+    {extra_indicators}
+  </div>
+
   <!-- VARLIK ÖZETİ — COMMODİTİES -->
   <div class="section">
     <div class="section-label">Asset Summary</div>
@@ -1189,18 +1241,6 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     <div class="story-list">
       {news_stories}
     </div>
-  </div>
-
-  <!-- AI İÇERİK STRATEJİ RAPORU -->
-  <div class="section">
-    <div class="section-label">AI Content Editor — İçerik Strateji Raporu</div>
-    {content_strategy_section}
-  </div>
-
-  <!-- AI TASARIM GELİŞTİRME ÖNERİSİ -->
-  <div class="section">
-    <div class="section-label">AI Experience Designer — Tasarım Geliştirme Önerisi</div>
-    {design_improvement_section}
   </div>
 
   <div class="footer">

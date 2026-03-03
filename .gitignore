@@ -13,6 +13,7 @@ env/
 *.png
 *.pdf
 daily_bulletin.html
+ai_reports.html
 
 # OS
 .DS_Store
