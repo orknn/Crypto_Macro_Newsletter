@@ -35,65 +35,54 @@ def _call_with_retry(client, system_prompt, user_prompt, max_retries=3):
 # PROMPTS
 # ═══════════════════════════════════════════
 
-CONTENT_EDITOR_SYSTEM_PROMPT = """Sen, küresel piyasa analizi ve dijital yayıncılık konusunda uzmanlaşmış bir Kıdemli Finansal İçerik Editörüsün. Amacın, günlük finans bülteninin değerini en üst düzeye çıkarmak için içerikleri optimize etmektir.
+CONTENT_EDITOR_SYSTEM_PROMPT = """Sen, küresel piyasa analizi ve dijital yayıncılık konusunda uzmanlaşmış bir Kıdemli Finansal İçerik Editörüsün.
 
-ÖNEMLİ: Bu bülten GERÇEK ve CANLI veri kaynakları kullanır. Mock data KULLANMIYORUZ.
-Mevcut gerçek veri kaynakları:
-- Crypto fiyatları ve market cap: CoinGecko API (gerçek zamanlı)
-- Fear & Greed Index: alternative.me API (gerçek zamanlı)
-- Funding Rates: Binance Futures API (gerçek zamanlı)
-- VIX, DXY, NASDAQ 100, US 10Y/2Y Yield, SMH ETF: yfinance (gerçek zamanlı)
-- Magnificent 7 hisseleri: yfinance (gerçek zamanlı)
-- Commodities (Gold, Copper, Cocoa, Coffee, Brent): yfinance (gerçek zamanlı)
-- Coinbase Premium: Coinbase vs Binance price diff (gerçek zamanlı)
-- Ekonomik Takvim: Forex Factory XML feed (gerçek zamanlı)
-- Stablecoin Market Cap: CoinGecko /global (gerçek zamanlı)
-- Opsiyon Piyasaları (DVOL, Put/Call, OI): Simüle (gerçek API yok henüz)
-- Macro Haberler: Simüle (gerçek API yok henüz)
+Görevin üçlü:
 
-Yeni veri kaynağı önerirken, ücretsiz ve API anahtarı gerektirmeyen kaynakları tercih et.
+A) GENEL DEĞERLENDİRME YAZIMI:
+- Günün piyasa verilerini analiz ederek profesyonel bir Türkçe "Genel Değerlendirme" paragrafı yaz.
+- Paragraf 4-6 cümle olsun. Okuyucuya günün piyasa resmini çizsin.
+- Makroekonomik göstergeler (VIX, DXY, 10Y Yield), kripto piyasası (Fear & Greed, BTC Dominance, Total Market Cap) ve varsa günün öne çıkan ekonomik verilerini (CPI, NFP gibi) kapsasın.
+- Finansal terimler İngilizce olsun (market cap, Fear & Greed Index, VIX, DXY, yield spread vb.).
+- Açıklamalar akıcı Türkçe olsun. Kuru veri listesi değil, analitik bir yorum olsun.
+- HTML tag kullanabilirsin: <strong> (vurgu), <span class='highlight'> (rakamsal vurgu).
 
-Temel Sorumluluklar:
+B) HABER YORUMLARI:
+- Her haber başlığı için 1-2 cümlelik kısa, keskin bir Türkçe yorum yaz.
+- Yorum, haberin piyasalar üzerindeki olası etkisini açıklasın.
+- Finansal terimler İngilizce, yorumlar Türkçe olsun.
 
-1. Mevcut İçerik Denetimi: Bültendeki bölümleri incele. Okuyucu için değer yaratmayan içerikleri çıkarmayı öner.
+C) İÇERİK STRATEJİ ÖNERİLERİ:
+- Bültendeki mevcut bölümleri değerlendir.
+- Çıkarılması gereken gereksiz bölümler varsa öner (type: "cikar").
+- Eklenmesi gereken yeni veri veya bölüm varsa öner (type: "ekle"). Ücretsiz API kaynağı da belirt.
+- Toplam 2-4 öneri yeterli.
 
-2. Piyasa Araştırması: Financial Times, Bloomberg, The Economist, Morning Brew, Sherwood gibi platformların gündemini takip et.
+ÖNEMLİ: Yanıtını MUTLAKA aşağıdaki JSON formatında ver, başka format kabul edilmez:
+{"genel_degerlendirme": "...", "news_commentaries": [{"headline": "...", "commentary": "..."}], "content_suggestions": [{"type": "ekle/cikar", "title": "...", "reason": "..."}]}"""
 
-3. Yeni İçerik Teklifleri: Gündemde yükselen ama bültende olmayan konuları öner. Veri kaynağını da belirt (hangi API'den alınabilir?).
+EXPERIENCE_DESIGNER_SYSTEM_PROMPT = """Sen, finans sektörüne özel dijital ürün tasarımında 10+ yıl deneyimli, kıdemli bir UX/UI Tasarımcısısın.
 
-4. Onay Mekanizması: "İçerik Strateji Raporu" sun.
+REFERANS BÜLTENLER (sadece İLHAM KAYNAĞI olarak kullan, KESİNLİKLE kopyalama):
+- Aposto (aposto.com): Minimalist, temiz layout, bol whitespace, net tipografi. Türk dijital medyanın en iyi bülteni.
+- Finimize: Finans verilerini 3 dakikada taranabilir yapan card-based layout.
+- Morning Brew: Conversational tone ile premium görsellik dengesi.
+- Sherwood / Robinhood Snacks: Data-driven, mobile-first tasarım.
 
-Not: Finansal terimler için İngilizce kullan (current asset, cash flow, market cap). Açıklamalar Türkçe olsun."""
+KRİTİK: Bu bültenin kendi özgün dark-navy kimliği var. Amacın bu kimliği koruyarak iyileştirmeler önermek.
+Hiçbir referans bülteni birebir kopyalama. Her önerinin bu bültenin mevcut tasarım diline uygun, ORİJİNAL bir çözüm olması gerekir.
 
-EXPERIENCE_DESIGNER_SYSTEM_PROMPT = """Sen, finans sektörüne özel dijital ürün tasarımında 10+ yıl deneyimli, kıdemli bir UX/UI Tasarımcısısın. Görevin, bülteni sektörün en iyi örneklerinden (Finimize, Morning Brew, Sherwood, The Hustle, Robinhood Snacks) biri haline getirmek.
+ANALİZ KATMANLARI (her seferinde 2-3 öneri yeterli, kalite > miktar):
+1. Layout & Spacing: padding, margin, whitespace dengesi
+2. Typography: font-size, weight, line-height, contrast
+3. Color & Contrast: arka plan, vurgu renkleri, data-ink ratio
+4. Component Design: KPI card, tablo, haber kartı tasarımı
+5. Data Visualization: grafik türleri, bar/sparkline iyileştirmeleri
 
-Sen basit font ve renk önerileri yapan bir junior değilsin. Sen derin mimari tasarım kararları veren bir senior'sün.
+ÖNEMLİ: Yanıtını MUTLAKA aşağıdaki JSON formatında ver:
+{"suggestions": [{"area": "...", "selector": "CSS selector veya eleman açıklaması", "current": "mevcut CSS değeri", "proposed": "önerilen CSS değeri", "reason": "neden bu değişiklik — referans bülten varsa belirt", "priority": "high/medium/low"}]}
 
-Analiz Derinliği — Aşağıdaki katmanların HER BİRİNE değin:
-
-1. Background & Atmosfer: Gradient yönleri, grain/noise texture, glassmorphism, frosted glass efektleri, section arka plan geçişleri. Dark mode'da derinlik hissi nasıl artırılır?
-
-2. Layout Grid & Spacing: Bölümler arası padding, card spacing, whitespace dengesi. Bilgi yoğunluğu ile nefes alma alanı arasındaki optimal denge nedir?
-
-3. Information Architecture: Bölüm sıralaması, visual flow (Z-pattern mi F-pattern mi?), ilk 5 saniyede hangi bilgi görülmeli? Kritik verilerin hierarchy'si doğru mu?
-
-4. Veri Görselleştirme: Bar chart, sparkline, heatmap, momentum bar — hangisi hangi veri için optimal? Yeni grafik türleri eklenebilir mi? (mini gauge, radial chart, bullet chart)
-
-5. Micro-interactions & Animation (CSS): Hover effects, transition timing, subtle animations. Print/PDF'de çalışmayacak olanları belirt.
-
-6. Typography System: Font pairing (serif + sans-serif + mono), heading hierarchy, text contrast ratio. WCAG AA uyumluluğu.
-
-7. Component Design: KPI card tasarımı, tablo row tasarımı, news card yapısı. Her bir component nasıl iyileştirilebilir?
-
-8. Color System: Sadece hex kod değil — renk psikolojisi, data-ink ratio, semantic renk kullanımı (kırmızı=düşüş sadece mı yoksa uyarı da mı?).
-
-Her önerinde:
-- Tam CSS kodu ver (property: value)
-- Hangi HTML elementine uygulanacağını belirt (CSS selector veya açıklama)
-- Neden bu değişikliği önerdiğini kısaca açıkla
-- Referans bülten varsa belirt (Ör: 'Finimize bunu şu şekilde yapıyor')
-
-Hedef: Bülteni 60 saniyenin altında taranabilir, premium hissiyat veren, market sentiment'in anında anlaşılabileceği bir yapıya kavuşturmak."""
+Maksimum 5 öneri ver. Her öneri UYGULANABİLİR ve SOMUT olmalı."""
 
 
 # ═══════════════════════════════════════════
@@ -199,43 +188,59 @@ def _prepare_data_summary(data):
 
 
 def _prepare_design_context():
-    """Provide key design parameters of the current template."""
+    """Provide the actual CSS template code for the designer agent."""
+    # Read the actual CSS from html_generator.py
+    css_summary = """
+:root {
+  --navy: #1c2e4a;
+  --navy-light: #253a5e;
+  --navy-card: #1f3350;
+  --navy-border: #2e4872;
+  --straw: #e8c547;
+  --text-bright: #f0ead8;
+  --text-mid: #a8bcd4;
+  --text-dim: #5e7a9a;
+  --green: #00d084;
+  --red: #ff4757;
+}
+
+body { background: var(--navy); font-family: 'Inter', sans-serif; color: var(--text-bright); }
+.bulletin { max-width: 680px; margin: 0 auto; }
+.header { background: linear-gradient(160deg, #243f66 0%, var(--navy) 60%); padding: 36px 40px 28px; }
+.header-title { font-family: 'Playfair Display', serif; font-size: 34px; font-weight: 700; }
+.section { padding: 22px 40px; border-bottom: 1px solid var(--navy-border); }
+.section-label { font-size: 10px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--straw); }
+.kpi-grid { display: flex; flex-wrap: nowrap; gap: 8px; }
+.kpi-card { background: var(--navy-card); border: 1px solid var(--navy-border); border-radius: 8px; padding: 14px 12px; }
+.kpi-label { font-size: 9px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-dim); }
+.kpi-value { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 500; color: white; }
+.summary-card { background: #f7f5c8; border: 1px solid #e8e49a; border-radius: 12px; padding: 20px 24px; }
+.summary-text { font-size: 14.5px; line-height: 1.75; color: #2a3a28; }
+.heatmap-table { width: 100%; border-collapse: collapse; }
+.heatmap-table th { font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-dim); padding: 12px 16px; }
+.heatmap-table td { padding: 12px 16px; font-size: 14px; border-bottom: 1px solid #334155; }
+.econ-calendar td { padding: 12px 16px; font-size: 12px; }
+.story-headline { font-family: 'Playfair Display', serif; font-size: 15px; font-weight: 600; }
+.story-body { font-size: 12.5px; color: var(--text-mid); line-height: 1.6; }
+"""
+
     return {
-        'color_palette': {
-            'navy': '#1c2e4a',
-            'navy_light': '#253a5e',
-            'navy_card': '#1f3350',
-            'straw (accent)': '#e8c547',
-            'text_bright': '#f0ead8',
-            'text_mid': '#a8bcd4',
-            'text_dim': '#5e7a9a',
-            'green': '#4ecb8d',
-            'red': '#e05c6b',
-        },
-        'fonts': {
-            'headings': 'Playfair Display (serif)',
-            'body': 'Inter (sans-serif)',
-            'monospace_data': 'JetBrains Mono',
-        },
-        'layout': {
-            'max_width': '680px',
-            'section_padding': '22px 40px',
-            'kpi_font_size': '16px',
-            'body_font_size': '13-14px',
-            'table_font_size': '12-13px',
-        },
-        'sections_count': 8,
-        'current_design_elements': [
-            'Top ticker bar with 6 indicators',
-            'Yellow summary card (Genel Değerlendirme)',
-            'Economic calendar table',
-            '6 KPI cards in horizontal layout',
-            'SVG bar chart for Coinbase Premium',
-            'BTC Support/Resistance card with border-left highlight',
-            'Options market KPI cards',
-            'Heatmap tables with momentum bars (Commodities, Mag7, Crypto)',
+        'actual_css': css_summary,
+        'fonts': 'Playfair Display (headings) + Inter (body) + JetBrains Mono (data)',
+        'theme': 'Dark navy (#1c2e4a) with straw/gold (#e8c547) accents',
+        'max_width': '680px',
+        'sections': [
+            'Header with Fear & Greed gauge',
+            'Ticker bar (6 indicators)',
+            'Genel Değerlendirme (AI-written summary in yellow card)',
+            'Haftalık Ekonomik Takvim (table)',
+            'KPI cards (6 horizontal)',
+            'Coinbase Premium SVG bar chart',
+            'BTC Support & Resistance card',
+            'Deribit Options KPI cards',
+            'Extra indicators (Yield Spread, Stablecoin, SMH)',
+            'Asset tables (Commodities, Magnificent 7, Crypto)',
             'News stories with AI Insight commentary',
-            'Dark navy theme with straw/gold accents',
         ]
     }
 
@@ -252,61 +257,78 @@ class ContentEditorAgent:
 
     def analyze(self, data):
         """
-        Analyze newsletter data and produce a content strategy report.
-        Returns a dict with 'report' (str) and 'success' (bool).
+        Analyze newsletter data and produce:
+        - genel_degerlendirme: AI-written Turkish market summary
+        - news_commentaries: AI commentary for each news headline
+        Returns a dict with structured output.
         """
         api_key = os.environ.get('ANTHROPIC_API_KEY', '')
         if not api_key:
             print("    ⚠️  ANTHROPIC_API_KEY tanımlı değil — İçerik Editörü atlanıyor.")
-            return {'success': False, 'report': self._fallback_report()}
+            return {'success': False, 'genel_degerlendirme': None, 'news_commentaries': None}
 
         try:
             from anthropic import Anthropic
             client = Anthropic(api_key=api_key)
 
             data_summary = _prepare_data_summary(data)
+            news_headlines = data.get('macro_news', {}).get('news', [])
 
-            user_prompt = f"""Aşağıda bugünkü finans bülteninin tüm verileri ve mevcut bölümleri yer almaktadır.
+            user_prompt = f"""Aşağıda bugünkü finans bülteninin tüm canlı piyasa verileri yer almaktadır.
 
-Bu verileri ve mevcut bölüm yapısını analiz ederek bir "İçerik Strateji Raporu" hazırla.
+Bu verileri analiz ederek aşağıdaki JSON formatında yanıt ver:
 
-Rapor formatı şu şekilde olmalı:
+1. "genel_degerlendirme": Bültenin "Genel Değerlendirme" bölümü için profesyonel bir Türkçe piyasa özeti paragrafı (4-6 cümle). HTML tag kullanabilirsin (<strong>, <span class='highlight'>).
 
-## 📋 Çıkarılması Önerilenler
-(Her öneriyi numaralandır. Ör: 1. ... 2. ... 3. ...)
-(Hangi içerik veya veri bültenden çıkarılmalı ve neden?)
+2. "news_commentaries": Aşağıdaki her haber başlığı için 1-2 cümlelik Türkçe yorum.
 
-## 📌 Eklenmesi Önerilenler
-(Her öneriyi numaralandır. Numaralamaya kaldığın yerden devam et.)
-(Gündemde hızla yükselen ama bültende yer almayan konu/haber/analiz önerileri)
+Haber Başlıkları:
+{json.dumps(news_headlines, ensure_ascii=False)}
 
-## 💡 Gerekçe
-(Bu değişikliklerin yatırımcı kararlarına — örneğin current asset yönetimi, risk management, portfolio allocation — katkısı nedir?)
-
-Finansal terimleri İngilizce kullan. Açıklamaları Türkçe yaz. Kısa ve öz ol.
-
-### Bugünkü Bülten Verileri:
+Piyasa Verileri:
 ```json
 {json.dumps(data_summary, ensure_ascii=False, indent=2, default=str)}
-```"""
+```
 
-            report = _call_with_retry(client, CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt)
-            print("    ✅ İçerik Strateji Raporu üretildi.")
-            return {'success': True, 'report': report}
+YANITINI SADECE JSON OLARAK VER, başka metin ekleme."""
+
+            raw_response = _call_with_retry(client, CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt)
+            
+            # Parse JSON from response
+            result = self._parse_response(raw_response)
+            print("    ✅ Genel Değerlendirme, Haber Yorumları ve İçerik Önerileri üretildi.")
+            return {
+                'success': True,
+                'genel_degerlendirme': result.get('genel_degerlendirme'),
+                'news_commentaries': result.get('news_commentaries', []),
+                'content_suggestions': result.get('content_suggestions', []),
+            }
 
         except Exception as e:
             print(f"    ⚠️  İçerik Editörü hatası: {e}")
-            return {'success': False, 'report': self._fallback_report()}
+            return {'success': False, 'genel_degerlendirme': None, 'news_commentaries': None, 'content_suggestions': None}
 
-    def _fallback_report(self):
-        return (
-            "## 📋 Çıkarılması Önerilenler\n"
-            "AI analizi şu an kullanılamıyor.\n\n"
-            "## 📌 Eklenmesi Önerilenler\n"
-            "AI analizi şu an kullanılamıyor.\n\n"
-            "## 💡 Gerekçe\n"
-            "ANTHROPIC_API_KEY yapılandırıldığında bu bölüm otomatik olarak güncellenecektir."
-        )
+    def _parse_response(self, raw):
+        """Extract JSON from the AI response, handling markdown code blocks."""
+        text = raw.strip()
+        # Remove markdown code fences if present
+        if text.startswith('```'):
+            lines = text.split('\n')
+            lines = [l for l in lines if not l.strip().startswith('```')]
+            text = '\n'.join(lines)
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            # Try to find JSON object in the text
+            start = text.find('{')
+            end = text.rfind('}') + 1
+            if start >= 0 and end > start:
+                try:
+                    return json.loads(text[start:end])
+                except json.JSONDecodeError:
+                    pass
+            print("    ⚠️  AI yanıtı JSON olarak parse edilemedi, fallback kullanılıyor.")
+            return {}
 
 
 class ExperienceDesignerAgent:
@@ -317,71 +339,85 @@ class ExperienceDesignerAgent:
 
     def analyze(self, data):
         """
-        Analyze newsletter design and produce a design improvement report.
-        Returns a dict with 'report' (str) and 'success' (bool).
+        Analyze newsletter design using actual CSS template.
+        Returns a dict with structured JSON suggestions.
         """
         api_key = os.environ.get('ANTHROPIC_API_KEY', '')
         if not api_key:
             print("    ⚠️  ANTHROPIC_API_KEY tanımlı değil — Deneyim Tasarımcısı atlanıyor.")
-            return {'success': False, 'report': self._fallback_report()}
+            return {'success': False, 'report': ''}
 
         try:
             from anthropic import Anthropic
             client = Anthropic(api_key=api_key)
 
             design_context = _prepare_design_context()
-            data_summary = _prepare_data_summary(data)
 
-            user_prompt = f"""Aşağıda bültenin mevcut tasarım detayları ve günün verileri yer almaktadır.
+            user_prompt = f"""Aşağıda bültenin GERÇEK CSS kodu ve mevcut bölüm yapısı yer almaktadır.
 
-Bu bilgileri analiz ederek bir "Tasarım Geliştirme Önerisi" hazırla.
+Bu CSS'i analiz ederek uygulanabilir tasarım önerileri ver.
 
-Rapor formatı şu şekilde olmalı:
+Referans olarak özellikle Aposto bülteninin minimalist ve temiz stilini düşün.
 
-## 🔍 Mevcut Durum
-(Tasarımdaki zayıf halka veya geliştirilmesi gereken alan nedir?)
+Yanıtını SADECE JSON olarak ver.
 
-## 🎨 Önerilen Değişiklikler
-(Her öneriyi numaralandır. Ör: 1. ... 2. ... 3. ...)
-(Şablonda, renklerde, fontlarda veya veri görselleştirmesinde yapılacak spesifik güncelleme. CSS property, hex code, px değeri gibi somut öneriler ver.)
-
-## 📈 Beklenen Etki
-(Bu değişiklikler okuyucunun bültende geçirdiği süreyi veya bilgiye ulaşma hızını nasıl artıracak?)
-
-Hedef: Bülteni 60 saniyenin altında taranabilir ve market sentiment'in anında anlaşılabileceği bir yapıya kavuşturmak.
-
-Kısa ve öz ol. Somut öneriler ver.
-
-### Mevcut Tasarım Parametreleri:
-```json
-{json.dumps(design_context, ensure_ascii=False, indent=2)}
+### Mevcut CSS Kodu:
+```css
+{design_context['actual_css']}
 ```
 
-### Günün Veri Özeti:
-```json
-{json.dumps({
-    'total_sections': len(data_summary.get('current_sections', [])),
-    'crypto_count': len(data.get('crypto_prices', [])),
-    'news_count': len(data.get('macro_news', {}).get('news', [])),
-    'calendar_events': len(data.get('economic_calendar', [])),
-    'fear_greed': data_summary.get('fear_greed', {}),
-}, ensure_ascii=False, indent=2)}
-```"""
+### Bülten Yapısı:
+- Tema: {design_context['theme']}
+- Font Stack: {design_context['fonts']}
+- Max Width: {design_context['max_width']}
+- Bölümler: {', '.join(design_context['sections'])}
 
-            report = _call_with_retry(client, EXPERIENCE_DESIGNER_SYSTEM_PROMPT, user_prompt)
-            print("    ✅ Tasarım Geliştirme Önerisi üretildi.")
+### Günün Veri Özeti:
+- Total sections: {len(design_context['sections'])}
+- Crypto watchlist: {len(data.get('crypto_prices', []))} coin
+- Haber sayısı: {len(data.get('macro_news', {}).get('news', []))}
+- Ekonomik takvim: {len(data.get('economic_calendar', []))} event
+"""
+
+            raw_response = _call_with_retry(client, EXPERIENCE_DESIGNER_SYSTEM_PROMPT, user_prompt)
+            
+            # Parse structured JSON
+            result = self._parse_response(raw_response)
+            suggestions = result.get('suggestions', [])
+            
+            # Format as readable report for ai_reports.html
+            report_lines = ["## 🎨 Tasarım Önerileri\n"]
+            for i, s in enumerate(suggestions, 1):
+                report_lines.append(f"**{i}. [{s.get('priority', 'medium').upper()}] {s.get('area', '')}**")
+                report_lines.append(f"Selector: `{s.get('selector', '')}`")
+                report_lines.append(f"Mevcut: `{s.get('current', '')}`")
+                report_lines.append(f"Önerilen: `{s.get('proposed', '')}`")
+                report_lines.append(f"Neden: {s.get('reason', '')}\n")
+            
+            report = '\n'.join(report_lines)
+            print(f"    ✅ Tasarım Önerisi üretildi ({len(suggestions)} öneri).")
             return {'success': True, 'report': report}
 
         except Exception as e:
             print(f"    ⚠️  Deneyim Tasarımcısı hatası: {e}")
-            return {'success': False, 'report': self._fallback_report()}
+            return {'success': False, 'report': ''}
 
-    def _fallback_report(self):
-        return (
-            "## 🔍 Mevcut Durum\n"
-            "AI analizi şu an kullanılamıyor.\n\n"
-            "## 🎨 Önerilen Değişiklik\n"
-            "AI analizi şu an kullanılamıyor.\n\n"
-            "## 📈 Beklenen Etki\n"
-            "ANTHROPIC_API_KEY yapılandırıldığında bu bölüm otomatik olarak güncellenecektir."
-        )
+    def _parse_response(self, raw):
+        """Extract JSON from the AI response."""
+        text = raw.strip()
+        if text.startswith('```'):
+            lines = text.split('\n')
+            lines = [l for l in lines if not l.strip().startswith('```')]
+            text = '\n'.join(lines)
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            start = text.find('{')
+            end = text.rfind('}') + 1
+            if start >= 0 and end > start:
+                try:
+                    return json.loads(text[start:end])
+                except json.JSONDecodeError:
+                    pass
+            print("    ⚠️  Tasarımcı yanıtı JSON olarak parse edilemedi.")
+            return {'suggestions': []}

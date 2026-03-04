@@ -4,11 +4,13 @@ from data_fetcher import (
     get_crypto_prices, get_macro_indicators, get_fear_and_greed_index,
     get_macro_news_mock,
     get_coinbase_premium_index, get_funding_rates, get_crypto_market_overview,
-    get_magnificent_7, get_commodities, get_economic_calendar, get_options_market_data
+    get_magnificent_7, get_commodities, get_economic_calendar, get_options_market_data,
+    get_global_liquidity_index
 )
 from agents import ContentEditorAgent, ExperienceDesignerAgent
 from html_generator import generate_newsletter_html
 from ai_report_generator import generate_ai_report
+from design_preview_generator import generate_design_preview
 from email_sender import send_newsletter_email
 
 
@@ -88,6 +90,9 @@ def generate_daily_newsletter():
     print("  → Opsiyon Piyasaları...")
     options_data = get_options_market_data()
 
+    print("  → Global Liquidity...")
+    global_liquidity = get_global_liquidity_index()
+
     data = {
         'crypto_prices': crypto_prices,
         'crypto_market_overview': crypto_market_overview,
@@ -100,22 +105,32 @@ def generate_daily_newsletter():
         'coinbase_premium': coinbase_premium,
         'macro_news': macro_news,
         'options_data': options_data,
+        'global_liquidity': global_liquidity,
     }
 
     # ── AI Agent Analysis ──
-    print("\n🤖 AI Agent'lar çalıştırılıyor...")
+    skip_agents = "--no-agents" in sys.argv
+    if skip_agents:
+        print("\n⏭️  AI Agent'lar atlanıyor (--no-agents)")
+        data['ai_summary'] = None
+        data['news_commentaries'] = None
+        data['design_improvement_report'] = None
+    else:
+        print("\n🤖 AI Agent'lar çalıştırılıyor...")
 
-    print("  → Finansal İçerik Editörü...")
-    content_report = ContentEditorAgent().analyze(data)
-    data['content_strategy_report'] = content_report
+        print("  → Finansal İçerik Editörü...")
+        editor_result = ContentEditorAgent().analyze(data)
+        data['ai_summary'] = editor_result.get('genel_degerlendirme')
+        data['news_commentaries'] = editor_result.get('news_commentaries')
+        data['content_suggestions'] = editor_result.get('content_suggestions')
 
-    # Kota aşımını önlemek için kısa bekleme
-    import time
-    time.sleep(5)
+        # Kota aşımını önlemek için kısa bekleme
+        import time
+        time.sleep(5)
 
-    print("  → Bülten Deneyim Tasarımcısı...")
-    design_report = ExperienceDesignerAgent().analyze(data)
-    data['design_improvement_report'] = design_report
+        print("  → Bülten Deneyim Tasarımcısı...")
+        design_report = ExperienceDesignerAgent().analyze(data)
+        data['design_improvement_report'] = design_report
 
     # ── Generate HTML ──
     print("\nHTML bülten oluşturuluyor...")
@@ -131,6 +146,12 @@ def generate_daily_newsletter():
     print("\nAI raporları oluşturuluyor (sadece editör için)...")
     ai_report_file = generate_ai_report(data)
 
+    # ── Generate design preview ──
+    design_report = data.get('design_improvement_report', {})
+    design_preview_file = None
+    if design_report and design_report.get('success') and design_report.get('report'):
+        design_preview_file = generate_design_preview(design_report['report'])
+
     print(f"\n{'='*50}")
     print(f"  ✅ Bülten hazır!")
     print(f"  HTML: {os.path.abspath(html_filename)}")
@@ -138,6 +159,8 @@ def generate_daily_newsletter():
         print(f"  PDF:  {os.path.abspath(pdf_filename)}")
     if ai_report_file:
         print(f"  📋 AI Rapor: {os.path.abspath(ai_report_file)}")
+    if design_preview_file:
+        print(f"  🎨 Tasarım Önizleme: {os.path.abspath(design_preview_file)}")
     print(f"{'='*50}")
 
     # ── Send email (if configured) ──

@@ -259,6 +259,7 @@ def get_commodities():
         'Gold': 'GC=F',
         'Silver': 'SI=F',
         'Copper': 'HG=F',
+        'Natural Gas': 'NG=F',
         'Cocoa': 'CC=F',
         'Coffee': 'KC=F',
         'Brent Oil': 'BZ=F',
@@ -311,63 +312,154 @@ def get_commodities():
 
 
 # ═══════════════════════════════════════════
-# ECONOMIC CALENDAR (Mock — will integrate real API later)
+# GLOBAL LIQUIDITY INDEX
+# ═══════════════════════════════════════════
+
+def get_global_liquidity_index():
+    """
+    Fetch Global Liquidity proxy using Fed Total Assets (WALCL) from FRED.
+    No API key needed for the public observation endpoint.
+    Returns dict with current value, weekly and monthly change.
+    """
+    try:
+        # FRED public endpoint for WALCL (Fed Total Assets, weekly)
+        url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=WALCL&cosd=2024-01-01"
+        import io
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        df = pd.read_csv(io.StringIO(resp.text))
+        df.columns = ['date', 'value']
+        df['value'] = pd.to_numeric(df['value'], errors='coerce')
+        df = df.dropna()
+        
+        if len(df) < 2:
+            return _fallback_liquidity()
+        
+        current = df['value'].iloc[-1]  # in millions
+        prev_week = df['value'].iloc[-2] if len(df) >= 2 else current
+        prev_month = df['value'].iloc[-5] if len(df) >= 5 else current
+        
+        current_t = current / 1_000_000  # Convert to trillions
+        weekly_change = ((current - prev_week) / prev_week) * 100
+        monthly_change = ((current - prev_month) / prev_month) * 100
+        
+        return {
+            'value': current_t,
+            'value_formatted': f"${current_t:.2f}T",
+            'weekly_change': round(weekly_change, 2),
+            'monthly_change': round(monthly_change, 2),
+            'source': 'FRED (WALCL)',
+            'label': 'Fed Balance Sheet',
+        }
+    except Exception as e:
+        print(f"  ⚠️  Global Liquidity fetch error: {e}")
+        return _fallback_liquidity()
+
+
+def _fallback_liquidity():
+    """Fallback with approximate data if FRED is unreachable."""
+    return {
+        'value': 6.8,
+        'value_formatted': '$6.80T',
+        'weekly_change': 0.0,
+        'monthly_change': 0.0,
+        'source': 'fallback',
+        'label': 'Fed Balance Sheet',
+    }
+
+
+# ═══════════════════════════════════════════
+# ECONOMIC CALENDAR (Investing.com via investpy)
 # ═══════════════════════════════════════════
 
 def get_economic_calendar():
     """
-    Fetch upcoming Economic Calendar events from Forex Factory XML feed.
+    Fetch upcoming Economic Calendar events from Investing.com via investpy.
+    Includes actual released values, forecast, and previous.
     Filters for USD and EUR, High impact only.
     """
     events = []
     try:
-        url = "https://nfs.faireconomy.media/ff_calendar_thisweek.xml"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=10)
+        import investpy
         
-        # Use BeautifulSoup to parse XML gracefully
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(response.content, 'xml')
+        today = datetime.now()
+        # Show from Monday of current week to Friday
+        weekday = today.weekday()  # 0=Mon
+        monday = today - timedelta(days=weekday)
+        friday = monday + timedelta(days=4)
         
-        for event in soup.find_all('event'):
-            country = event.find('country').text.strip() if event.find('country') else ''
-            impact_str = event.find('impact').text.strip() if event.find('impact') else ''
+        from_date = monday.strftime('%d/%m/%Y')
+        to_date = friday.strftime('%d/%m/%Y')
+        
+        df = investpy.economic_calendar(
+            from_date=from_date,
+            to_date=to_date,
+            countries=['united states', 'euro zone'],
+            importances=['high']
+        )
+        
+        # Map zone names to currency codes
+        zone_to_currency = {
+            'united states': 'USD',
+            'euro zone': 'EUR',
+        }
+        
+        # Exclude events that Investing.com marks as "high" but aren't true 3-star macro releases
+        exclude_keywords = [
+            'speaks', 'speech', 'press conference',
+            'crude oil inventories', 'natural gas',
+            'manufacturing prices', 'non-manufacturing prices',
+            'services prices',
+            'treasury currency', 'bond auction',
+            'fomc member',
+        ]
+        
+        for _, row in df.iterrows():
+            date_str = row.get('date', '')
+            time_str = row.get('time', '—')
+            zone = row.get('zone', '')
+            event_name = row.get('event', 'Unknown Event')
+            actual = row.get('actual', None)
+            forecast = row.get('forecast', None)
+            previous = row.get('previous', None)
             
-            if country in ['USD', 'EUR'] and impact_str == 'High':
-                title = event.find('title').text.strip() if event.find('title') else 'Unknown Event'
-                date_str = event.find('date').text.strip() if event.find('date') else ''
-                time_str = event.find('time').text.strip() if event.find('time') else ''
-                forecast = event.find('forecast').text.strip() if event.find('forecast') and event.find('forecast').text else '—'
-                previous = event.find('previous').text.strip() if event.find('previous') and event.find('previous').text else '—'
-                
-                # Forex Factory XML 'thisweek' usually doesn't output 'actual' fields reliably in the free feed,
-                # but we will check just in case.
-                actual = event.find('actual').text.strip() if event.find('actual') and event.find('actual').text else '—'
-                
-                importance_val = 3 if impact_str == 'High' else 2
-                
-                # Format Date (from MM-DD-YYYY to 'DD MMM')
-                try:
-                    dt = datetime.strptime(date_str, '%m-%d-%Y')
-                    formatted_date = dt.strftime('%d %b %a')
-                except:
-                    formatted_date = date_str
-                    
-                events.append({
-                    'date': formatted_date,
-                    'time': time_str,
-                    'country': country,
-                    'event': title,
-                    'importance': importance_val,
-                    'previous': previous,
-                    'forecast': forecast,
-                    'actual': actual
-                })
-
-        # Limit to top 15 events to keep UI clean
+            # Skip excluded events
+            event_lower = event_name.lower()
+            if any(kw in event_lower for kw in exclude_keywords):
+                continue
+            
+            # Format date from DD/MM/YYYY to 'DD MMM Day'
+            try:
+                dt = datetime.strptime(date_str, '%d/%m/%Y')
+                formatted_date = dt.strftime('%d %b %a')
+            except:
+                formatted_date = date_str
+            
+            # Clean values — replace None with '—'
+            actual = str(actual).strip() if actual and str(actual).strip() and str(actual) != 'None' else '—'
+            forecast = str(forecast).strip() if forecast and str(forecast).strip() and str(forecast) != 'None' else '—'
+            previous = str(previous).strip() if previous and str(previous).strip() and str(previous) != 'None' else '—'
+            
+            country = zone_to_currency.get(zone, zone.upper()[:3])
+            
+            events.append({
+                'date': formatted_date,
+                'time': time_str if time_str else '—',
+                'country': country,
+                'event': event_name.strip(),
+                'importance': 3,  # High impact
+                'previous': previous,
+                'forecast': forecast,
+                'actual': actual
+            })
+        
+        # Limit to top 15 events
         events = events[:15]
+        
     except Exception as e:
-        print(f"Error fetching economic calendar: {e}")
+        print(f"Error fetching economic calendar from Investing.com: {e}")
+        import traceback
+        traceback.print_exc()
         # Return a simple fallback if error occurs
         events = [{
             'date': datetime.now().strftime('%d %b %a'),
@@ -409,13 +501,13 @@ def get_coinbase_premium_index():
 
     base = btc_price if btc_price > 0 else 65000
     
-    # Generate realistic historical premium data points for the sparkline ending at premium_pct
+    # Generate realistic historical premium data points — 24 x 1-hour bars
     now = datetime.now()
     trend = []
     base_val = premium_pct - random.uniform(-0.05, 0.05)
-    for i in range(59):
-        t = now - timedelta(minutes=60-i)
-        base_val += random.uniform(-0.01, 0.01)
+    for i in range(23):
+        t = now - timedelta(hours=24-i)
+        base_val += random.uniform(-0.015, 0.015)
         trend.append({'time': t, 'value': base_val})
     trend.append({'time': now, 'value': premium_pct})
     

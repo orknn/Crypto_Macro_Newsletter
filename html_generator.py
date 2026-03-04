@@ -299,12 +299,18 @@ def _generate_asset_table(assets, columns, id_prefix="row"):
 
 
 
-def _generate_news_stories(news_data):
+def _generate_news_stories(news_data, ai_commentaries=None):
     """Generate the news stories section with AI insights."""
     news = news_data.get('news', [])
 
-    # AI commentary mapping — keyword-based market impact analysis
-    def _ai_commentary(headline):
+    # Build a lookup from AI commentaries if available
+    ai_lookup = {}
+    if ai_commentaries:
+        for item in ai_commentaries:
+            ai_lookup[item.get('headline', '')] = item.get('commentary', '')
+
+    # Keyword-based fallback commentary
+    def _fallback_commentary(headline):
         h = headline.lower()
         if 'fed' in h or 'merkez bankası' in h:
             if 'temkinli' in h or 'şahin' in h or 'sıkılaştır' in h:
@@ -314,8 +320,6 @@ def _generate_news_stories(news_data):
         if 'ecb' in h or 'avrupa' in h:
             if 'indirim' in h or 'gevşe' in h:
                 return 'Likidite artışı beklentisi — riskli varlıklar için pozitif bir gelişme.'
-            if 'yavaşlama' in h:
-                return 'Faiz indirim beklentilerinin yavaşlaması — EUR/USD paritesinde yukarı yönlü baskı gösterebilir.'
             return 'Avrupa para politikası gelişmesi — DXY ve EUR paritesini etkileyebilir.'
         if 'çin' in h or 'teşvik' in h:
             return 'Riskli varlıklar için pozitif bir gelişme — emtia ve kripto piyasalarında yukarı yönlü hareket desteklenebilir.'
@@ -324,19 +328,21 @@ def _generate_news_stories(news_data):
         if 'istihdam' in h or 'işsizlik' in h:
             return 'İstihdam verileri ekonomik sağlık göstergesi — tahvil getirileri ve DXY üzerinde etkili olabilir.'
         if 'iran' in h or 'savaş' in h or 'gerilim' in h or 'jeopolitik' in h:
-            return 'Jeopolitik risk düzeyini artıran gelişme — petrol, altın ve güvenli liman varlıklarında yükselişe, riskli varlıklarda ise volatility artışına neden olabilir.'
+            return 'Jeopolitik risk — petrol, altın ve güvenli liman varlıklarında yükselişe neden olabilir.'
         return 'Makroekonomik gelişme — piyasa katılımcıları tarafından yakından takip edilmeli.'
 
     items = []
     for i, headline in enumerate(news):
-        commentary = _ai_commentary(headline)
+        # Use AI commentary if available, otherwise fallback
+        commentary = ai_lookup.get(headline) or _fallback_commentary(headline)
+        ai_label = 'AI Insight' if ai_lookup.get(headline) else 'Analiz'
         items.append(f'''
       <div class="story-item">
         <div class="story-num">{i+1:02d}</div>
         <div class="story-content">
           <div class="story-tag">Makro</div>
           <div class="story-headline">{headline}</div>
-          <div style="margin-top:4px; font-size:11px; font-style:italic; color:var(--text-mid); line-height:1.5;">🤖 <strong style="color:var(--straw); font-style:normal;">AI Insight:</strong> {commentary}</div>
+          <div style="margin-top:4px; font-size:11px; font-style:italic; color:var(--text-mid); line-height:1.5;">🤖 <strong style="color:var(--straw); font-style:normal;">{ai_label}:</strong> {commentary}</div>
         </div>
       </div>''')
     return '\n'.join(items)
@@ -470,6 +476,152 @@ def _generate_agent_section(title, icon, report_data):
     </div>'''
 
 
+def _generate_fear_greed_gauge(data):
+    """Generate an SVG speedometer gauge for the Crypto Fear & Greed Index."""
+    import math
+
+    fng = data.get('fear_and_greed', {})
+    value = fng.get('value', 50)
+    label = fng.get('classification', 'Neutral')
+
+    # Gauge parameters
+    cx, cy = 200, 180  # center of the arc
+    radius = 140
+    inner_radius = 120
+    tick_outer = radius + 8
+    tick_inner = radius - 4
+    label_radius = radius + 28
+
+    # Arc goes from 180° (left) to 0° (right) — semi-circle
+    start_angle = 180
+    end_angle = 0
+
+    # Value mapped to angle (0=180°, 100=0°)
+    needle_angle = 180 - (value / 100) * 180
+
+    # Helper to get point on circle
+    def polar(angle_deg, r):
+        rad = math.radians(angle_deg)
+        return cx + r * math.cos(rad), cy - r * math.sin(rad)
+
+    # Create gradient arc segments
+    segments = [
+        (0, 25, '#22c55e', '#4ade80'),     # Extreme Fear (green)
+        (25, 45, '#4ade80', '#facc15'),     # Fear (green→yellow)
+        (45, 55, '#facc15', '#fbbf24'),     # Neutral (yellow)
+        (55, 75, '#fbbf24', '#f87171'),     # Greed (yellow→red)
+        (75, 100, '#f87171', '#ef4444'),    # Extreme Greed (red)
+    ]
+
+    arc_paths = []
+    for seg_start, seg_end, color1, color2 in segments:
+        a1 = 180 - (seg_start / 100) * 180
+        a2 = 180 - (seg_end / 100) * 180
+        x1, y1 = polar(a1, radius)
+        x2, y2 = polar(a2, radius)
+        x1i, y1i = polar(a1, inner_radius)
+        x2i, y2i = polar(a2, inner_radius)
+        large = 1 if abs(a1 - a2) > 180 else 0
+        arc_paths.append(
+            f'<path d="M {x1:.1f},{y1:.1f} A {radius},{radius} 0 {large},1 {x2:.1f},{y2:.1f} '
+            f'L {x2i:.1f},{y2i:.1f} A {inner_radius},{inner_radius} 0 {large},0 {x1i:.1f},{y1i:.1f} Z" '
+            f'fill="{color1}" opacity="0.85"/>'
+        )
+
+    # Tick marks
+    ticks_svg = []
+    for i in range(0, 101, 4):
+        angle = 180 - (i / 100) * 180
+        x1t, y1t = polar(angle, tick_inner)
+        x2t, y2t = polar(angle, tick_outer)
+        width = "2.5" if i % 25 == 0 else "1.2"
+        opacity = "0.9" if i % 25 == 0 else "0.4"
+        ticks_svg.append(
+            f'<line x1="{x1t:.1f}" y1="{y1t:.1f}" x2="{x2t:.1f}" y2="{y2t:.1f}" '
+            f'stroke="var(--text-mid)" stroke-width="{width}" opacity="{opacity}"/>'
+        )
+
+    # Zone labels
+    zone_labels = [
+        (12.5, 'Extreme', 'Fear'),
+        (35, 'Fear', ''),
+        (50, 'Neutral', ''),
+        (65, 'Greed', ''),
+        (87.5, 'Extreme', 'Greed'),
+    ]
+    labels_svg = []
+    for pos, line1, line2 in zone_labels:
+        angle = 180 - (pos / 100) * 180
+        lx, ly = polar(angle, label_radius)
+        # Rotate text to follow the arc
+        text_angle = -angle + 90
+        labels_svg.append(
+            f'<text x="{lx:.1f}" y="{ly:.1f}" text-anchor="middle" '
+            f'transform="rotate({text_angle:.1f},{lx:.1f},{ly:.1f})" '
+            f'fill="var(--text-dim)" font-size="10" font-weight="500" letter-spacing="0.5">'
+            f'{line1}</text>'
+        )
+        if line2:
+            ly2 = ly + 12
+            labels_svg.append(
+                f'<text x="{lx:.1f}" y="{ly2:.1f}" text-anchor="middle" '
+                f'transform="rotate({text_angle:.1f},{lx:.1f},{ly2:.1f})" '
+                f'fill="var(--text-dim)" font-size="10" font-weight="500" letter-spacing="0.5">'
+                f'{line2}</text>'
+            )
+
+    # Needle (triangle)
+    needle_rad = math.radians(needle_angle)
+    tip_x = cx + (inner_radius - 10) * math.cos(needle_rad)
+    tip_y = cy - (inner_radius - 10) * math.sin(needle_rad)
+    # Base of needle (perpendicular to needle direction)
+    base_offset = 8
+    perp_rad = needle_rad + math.pi / 2
+    b1x = cx + base_offset * math.cos(perp_rad)
+    b1y = cy - base_offset * math.sin(perp_rad)
+    b2x = cx - base_offset * math.cos(perp_rad)
+    b2y = cy + base_offset * math.sin(perp_rad)
+
+    # Needle color based on value
+    if value <= 25:
+        needle_color = '#22c55e'
+    elif value <= 45:
+        needle_color = '#4ade80'
+    elif value <= 55:
+        needle_color = '#facc15'
+    elif value <= 75:
+        needle_color = '#f87171'
+    else:
+        needle_color = '#ef4444'
+
+    needle_svg = (
+        f'<polygon points="{tip_x:.1f},{tip_y:.1f} {b1x:.1f},{b1y:.1f} {b2x:.1f},{b2y:.1f}" '
+        f'fill="{needle_color}" opacity="0.95"/>'
+        f'<circle cx="{cx}" cy="{cy}" r="6" fill="{needle_color}" opacity="0.9"/>'
+    )
+
+    svg = f'''
+    <div style="text-align:center;">
+      <svg viewBox="0 0 400 240" width="200" height="130" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+        <!-- Arc segments -->
+        {''.join(arc_paths)}
+        <!-- Tick marks -->
+        {''.join(ticks_svg)}
+        <!-- Zone labels -->
+        {''.join(labels_svg)}
+        <!-- Needle -->
+        {needle_svg}
+        <!-- Center value -->
+        <text x="{cx}" y="{cy - 20}" text-anchor="middle" fill="var(--text-bright)"
+              font-family="'JetBrains Mono', monospace" font-size="42" font-weight="700">{value}</text>
+        <text x="{cx}" y="{cy + 8}" text-anchor="middle" fill="var(--text-mid)"
+              font-size="14" font-weight="500" letter-spacing="1">{label}</text>
+      </svg>
+    </div>'''
+
+    return svg
+
+
 def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     """
     Generate the complete newsletter HTML.
@@ -500,25 +652,29 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     else:
         fng_color = '#00d084'  # Extreme Greed
 
-    summary_text = (
-        f"<strong>Makroekonomik göstergeler</strong>e bakıldığında, <strong>VIX</strong> endeksi "
-        f"<span class='highlight'>{macro.get('VIX', 0):.1f}</span> seviyesinde, "
-        f"<strong>DXY</strong> (Dolar Endeksi) {macro.get('DXY', 0):.2f} noktasında işlem görmektedir. "
-        f"<strong>ABD 10 Yıllık Tahvil Getirisi</strong> %{macro.get('US 10-Year Treasury Yield', 0):.2f} seviyesindedir. "
-        f"Kripto piyasalarında <strong>Crypto Fear &amp; Greed Index</strong> "
-        f"<span class='highlight'>{fng.get('value', 0)}</span> ({fng.get('classification', 'N/A')}) olarak kaydedildi. "
-        f"Toplam kripto <strong>market cap</strong> ${crypto_ov.get('total_market_cap', 0)/1e12:.2f} Trilyon, "
-        f"<strong>BTC Dominance</strong> %{crypto_ov.get('btc_dominance', 0):.1f} seviyesindedir."
-    )
-
-    # Inject actuals from economic calendar if available
-    for ev in data.get('economic_calendar', []):
-        actual = ev.get('actual', '—')
-        if actual != '—':
-            if 'CPI' in ev.get('event', '') or 'TÜFE' in ev.get('event', '') or 'PCE' in ev.get('event', ''):
-                summary_text += f" Öte yandan, piyasaların merakla beklediği <strong>{ev.get('event', '')}</strong> verisi <strong>{actual}</strong> seviyesinde gerçekleşti."
-            elif 'Non-Farm' in ev.get('event', '') or 'Tarım Dışı' in ev.get('event', ''):
-                summary_text += f" Ayrıca <strong>ABD Tarım Dışı İstihdam</strong> verisi son olarak <strong>{actual}</strong> olarak açıklandı."
+    # Use AI-generated summary if available, otherwise build template
+    ai_summary = data.get('ai_summary')
+    if ai_summary:
+        summary_text = ai_summary
+    else:
+        summary_text = (
+            f"<strong>Makroekonomik göstergeler</strong>e bakıldığında, <strong>VIX</strong> endeksi "
+            f"<span class='highlight'>{macro.get('VIX', 0):.1f}</span> seviyesinde, "
+            f"<strong>DXY</strong> (Dolar Endeksi) {macro.get('DXY', 0):.2f} noktasında işlem görmektedir. "
+            f"<strong>ABD 10 Yıllık Tahvil Getirisi</strong> %{macro.get('US 10-Year Treasury Yield', 0):.2f} seviyesindedir. "
+            f"Kripto piyasalarında <strong>Crypto Fear &amp; Greed Index</strong> "
+            f"<span class='highlight'>{fng.get('value', 0)}</span> ({fng.get('classification', 'N/A')}) olarak kaydedildi. "
+            f"Toplam kripto <strong>market cap</strong> ${crypto_ov.get('total_market_cap', 0)/1e12:.2f} Trilyon, "
+            f"<strong>BTC Dominance</strong> %{crypto_ov.get('btc_dominance', 0):.1f} seviyesindedir."
+        )
+        # Inject actuals from economic calendar if available
+        for ev in data.get('economic_calendar', []):
+            actual = ev.get('actual', '—')
+            if actual != '—':
+                if 'CPI' in ev.get('event', '') or 'TÜFE' in ev.get('event', '') or 'PCE' in ev.get('event', ''):
+                    summary_text += f" Öte yandan, piyasaların merakla beklediği <strong>{ev.get('event', '')}</strong> verisi <strong>{actual}</strong> seviyesinde gerçekleşti."
+                elif 'Non-Farm' in ev.get('event', '') or 'Tarım Dışı' in ev.get('event', ''):
+                    summary_text += f" Ayrıca <strong>ABD Tarım Dışı İstihdam</strong> verisi son olarak <strong>{actual}</strong> olarak açıklandı."
 
     # Build all sections
     ticker_bar = _generate_ticker_bar(data)
@@ -532,8 +688,9 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
         'mag7', 'row'
     )
     crypto_rows = _generate_asset_table(data.get('crypto_prices', []), 'crypto', 'row')
-    news_stories = _generate_news_stories(data.get('macro_news', {}))
+    news_stories = _generate_news_stories(data.get('macro_news', {}), data.get('news_commentaries'))
     options_market = _generate_options_market(data.get('options_data', {}))
+    fear_greed_gauge = _generate_fear_greed_gauge(data)
 
     # Extra indicators (Content Proposals #6, #7, #8)
     macro = data.get('macro_indicators', {})
@@ -551,12 +708,23 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     stablecoin_mcap = crypto_ov.get('total_market_cap', 0) * (crypto_ov.get('stablecoin_dominance', 0) / 100) if crypto_ov.get('stablecoin_dominance') else 0
     stablecoin_dom = crypto_ov.get('stablecoin_dominance', 0)
 
+    # Global Liquidity
+    gl = data.get('global_liquidity', {})
+    gl_value = gl.get('value_formatted', 'N/A')
+    gl_weekly = gl.get('weekly_change', 0)
+    gl_weekly_text, gl_weekly_cls = _fmt_change(gl_weekly)
+
     extra_indicators = f'''
     <div class="kpi-grid">
       <div class="kpi-card">
         <div class="kpi-label">2Y-10Y Yield Spread</div>
         <div class="kpi-value">{yield_spread:.2f}%</div>
         <div class="kpi-change {spread_cls}">{spread_status}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Fed Balance Sheet</div>
+        <div class="kpi-value">{gl_value}</div>
+        <div class="kpi-change {gl_weekly_cls}">W: {gl_weekly_text}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Stablecoin Market Cap</div>
@@ -571,7 +739,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     </div>
     <div style="margin-top:12px; font-size:11.5px; color:var(--text-dim); line-height:1.5;">
       💡 <strong style="color:var(--text-mid);">Gösterge Notu:</strong>
-      2Y-10Y yield spread negatif olduğunda resesyon sinyali verir. Stablecoin market cap artışı crypto piyasasına giriş likiditesini gösterir. SMH, AI ve semiconductor sektörünün barometresidir.
+      2Y-10Y yield spread negatif olduğunda resesyon sinyali verir. Fed Balance Sheet artışı global likiditeyi gösterir. SMH, AI ve semiconductor sektörünün barometresidir.
     </div>'''
 
     # BTC 4-Hour Status with support/resistance
@@ -771,7 +939,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   .down {{ color: var(--red); }}
 
   /* ── SECTION ── */
-  .section {{ padding: 22px 40px; border-bottom: 1px solid var(--navy-border); break-inside: avoid; page-break-inside: avoid; }}
+  .section {{ padding: 32px 40px; border-bottom: 1px solid var(--navy-border); break-inside: avoid; page-break-inside: avoid; }}
   .section-label {{ border-left: 4px solid var(--straw); padding-left: 10px; }}
   .summary-card, .kpi-card, .heatmap-table, .sparkline-wrap, .news-card {{ break-inside: avoid; page-break-inside: avoid; }}
   .heatmap-table tr {{ break-inside: avoid; page-break-inside: avoid; }}
@@ -815,7 +983,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   .kpi-grid {{
     display: flex;
     flex-wrap: nowrap;
-    gap: 8px;
+    gap: 12px;
     width: 100%;
   }}
   .kpi-card {{
@@ -930,8 +1098,9 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     text-align: left;
   }}
   .heatmap-table td {{
-    padding: 12px 16px;
-    font-size: 14px;
+    padding: 16px 20px;
+    font-size: 13px;
+    font-weight: 500;
     border-bottom: 1px solid #334155;
     vertical-align: middle;
     text-align: right;
@@ -1041,15 +1210,15 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   }}
   .story-headline {{
     font-family: 'Playfair Display', serif;
-    font-size: 15px;
-    font-weight: 600;
+    font-size: 17px;
+    font-weight: 700;
     color: var(--text-bright);
     margin-bottom: 5px;
     line-height: 1.4;
   }}
   .story-body {{
     font-size: 12.5px;
-    color: var(--text-mid);
+    color: #b8cde8;
     line-height: 1.6;
   }}
 
@@ -1105,11 +1274,10 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
       </div>
       <div class="date-badge">{date_str}</div>
     </div>
-    <div style="display:flex; align-items:center; gap:16px; margin-bottom:8px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
       <div class="header-title" style="margin-bottom:0;">Daily <span>Financial</span><br>Bulletin</div>
-      <div style="background:{fng_color}; color:white; font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:700; padding:12px 18px; border-radius:12px; text-align:center; line-height:1.2; min-width:80px;">
-        {fng_value}
-        <div style="font-size:9px; font-weight:500; letter-spacing:1px; text-transform:uppercase; margin-top:2px; opacity:0.9;">{fng_label}</div>
+      <div style="flex-shrink:0; margin-left:16px;">
+        {fear_greed_gauge}
       </div>
     </div>
     <div class="header-sub">Markets · Macro · Crypto · Key Stories</div>
@@ -1157,6 +1325,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     </table>
   </div>
 
+
   <!-- GÜNÜN ÖNE ÇIKAN VERİLERİ -->
   <div class="section">
     <div class="section-label">Günün Öne Çıkan Verileri</div>
@@ -1167,7 +1336,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
 
   <!-- COİNBASE PREMİUM INDEX -->
   <div class="section">
-    <div class="section-label">Coinbase Premium Index — 1 Saatlik</div>
+    <div class="section-label">Coinbase Premium Index — 24 Saatlik</div>
     {coinbase_premium}
   </div>
 

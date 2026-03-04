@@ -11,10 +11,12 @@ def generate_ai_report(data, output_filename="ai_reports.html"):
     Generate a separate HTML file with AI agent reports.
     This file is for the newsletter owner only, not sent to subscribers.
     """
-    content_report = data.get('content_strategy_report', {})
+    ai_summary = data.get('ai_summary')
+    news_commentaries = data.get('news_commentaries')
+    content_suggestions = data.get('content_suggestions')
     design_report = data.get('design_improvement_report', {})
 
-    if not content_report and not design_report:
+    if not ai_summary and not design_report:
         print("  ℹ️  AI raporu yok, ai_reports.html atlanıyor.")
         return None
 
@@ -79,6 +81,37 @@ def generate_ai_report(data, output_filename="ai_reports.html"):
 
         return '\n'.join(html_lines)
 
+    # Build editor section from AI summary and commentaries
+    content_section = ''
+    if ai_summary:
+        content_html = f'<h3 style="color:#e8c547; margin:20px 0 10px; font-size:16px;">📝 Genel Değerlendirme (AI)</h3>'
+        content_html += f'<p style="margin:6px 0; font-size:14px; color:#a8bcd4; line-height:1.7;">{ai_summary}</p>'
+        if news_commentaries:
+            content_html += f'<h3 style="color:#e8c547; margin:20px 0 10px; font-size:16px;">📰 Haber Yorumları (AI)</h3>'
+            for nc in news_commentaries:
+                content_html += f'<p style="margin:6px 0; font-size:13px; line-height:1.7;"><strong style="color:#f0ead8;">{nc.get("headline", "")}</strong><br><span style="color:#a8bcd4; font-style:italic;">→ {nc.get("commentary", "")}</span></p>'
+        if content_suggestions:
+            content_html += f'<h3 style="color:#e8c547; margin:20px 0 10px; font-size:16px;">💡 İçerik Önerileri</h3>'
+            for i, cs in enumerate(content_suggestions, 1):
+                cs_type = cs.get('type', 'ekle')
+                badge_color = '#10B981' if cs_type == 'ekle' else '#EF4444'
+                badge_text = '➕ EKLE' if cs_type == 'ekle' else '➖ ÇIKAR'
+                content_html += f'<div style="margin:10px 0; padding:10px 14px; background:rgba(255,255,255,0.03); border-left:3px solid {badge_color}; border-radius:0 6px 6px 0;">'
+                content_html += f'<span style="background:{badge_color}; color:white; font-size:9px; padding:2px 8px; border-radius:8px; font-weight:700; letter-spacing:0.5px;">{badge_text}</span> '
+                content_html += f'<strong style="color:#f0ead8; font-size:13px;">{cs.get("title", "")}</strong>'
+                content_html += f'<p style="margin:6px 0 0; font-size:12px; color:#a8bcd4; line-height:1.5;">{cs.get("reason", "")}</p></div>'
+        content_section = f'''
+    <div style="background:#1f3350; border-radius:10px; padding:24px; margin-bottom:24px; border:1px solid #2a4a6e;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+        <span style="font-size:24px;">🤖</span>
+        <h2 style="margin:0; color:#f0ead8; font-size:18px;">İçerik Editörü Çıktısı</h2>
+        <span style="background:#10B981; color:white; font-size:10px; padding:2px 8px; border-radius:10px; font-weight:600;">AI ACTIVE</span>
+      </div>
+      <div style="border-left:3px solid #e8c547; padding-left:16px;">
+        {content_html}
+      </div>
+    </div>'''
+
     def _render_section(title, icon, report_data):
         status = report_data.get('success', False)
         badge_color = '#10B981' if status else '#EF4444'
@@ -96,10 +129,6 @@ def generate_ai_report(data, output_filename="ai_reports.html"):
         {report_html}
       </div>
     </div>'''
-
-    content_section = _render_section(
-        'İçerik Strateji Raporu', '🤖', content_report
-    ) if content_report else ''
 
     design_section = _render_section(
         'Tasarım Geliştirme Önerisi', '🎨', design_report
