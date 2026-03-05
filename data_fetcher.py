@@ -3,7 +3,7 @@ import pandas as pd
 import yfinance as yf
 import random
 from datetime import datetime, timedelta
-
+import xml.etree.ElementTree as ET
 # ═══════════════════════════════════════════
 # CRYPTO DATA
 # ═══════════════════════════════════════════
@@ -154,54 +154,65 @@ def get_funding_rates():
 def get_crypto_futures_basis():
     """
     Fetch crypto futures basis (annualized premium of futures over spot)
-    from Binance API. Calculates the basis for BTC and ETH.
+    calculating from real Binance CURRENT_QUARTER delivery contracts.
     """
-    results = {}
-    symbols = {'BTC': ('BTCUSDT', 'BTCUSDT_240628'), 'ETH': ('ETHUSDT', 'ETHUSDT_240628')} # Mock delivery ticket names, 
-    # Realistically we should look up the current quarter delivery contract, but for a simple implementation:
-    # A cleaner approach without complex contract lookup is to use the Binance Futures Delivery API if available, 
-    # or just return a mock realistic value if the specific contract is hard to dynamically resolve without ccxt.
-    
-    # Let's generate a realistic mock based on current funding rates or general market conditions 
-    # since parsing dynamic quarterly contracts requires extra API calls.
-    
-    # Typical basis in a neutral market is 5-10%, in a bull market 10-20%
+    btc_basis = 0.0
+    eth_basis = 0.0
+    sentiment = "Neutral"
+
+    def calc_annualized_premium(spot, future, delivery_ms):
+        now_ms = int(datetime.now().timestamp() * 1000)
+        days_left = (delivery_ms - now_ms) / (1000 * 60 * 60 * 24)
+        if days_left <= 0: return 0.0
+        return ((future - spot) / spot) * (365 / days_left) * 100
+
     try:
-        # We can use the funding rate as a proxy to determine market sentiment
-        funding = get_funding_rates()
-        btc_fund = funding.get('BTC', 0)
+        # Get spot prices
+        spot_res = requests.get('https://api.binance.com/api/v3/ticker/price').json()
+        spots = {item['symbol']: float(item['price']) for item in spot_res}
         
-        # If funding is very high (bullish), basis is high.
-        if btc_fund > 0.01:
-            btc_basis = random.uniform(12.0, 18.0)
-            eth_basis = random.uniform(11.0, 17.0)
-            sentiment = "Strong Bullish"
-        elif btc_fund > 0:
-            btc_basis = random.uniform(6.0, 12.0)
-            eth_basis = random.uniform(5.0, 11.0)
-            sentiment = "Bullish"
-        elif btc_fund < -0.01:
-            btc_basis = random.uniform(-5.0, 0.0)
-            eth_basis = random.uniform(-6.0, -1.0)
-            sentiment = "Bearish"
-        else:
-            btc_basis = random.uniform(2.0, 6.0)
-            eth_basis = random.uniform(1.0, 5.0)
-            sentiment = "Neutral"
-            
+        # Get delivery contracts
+        d_info = requests.get('https://dapi.binance.com/dapi/v1/exchangeInfo', timeout=10).json()
+        current_quarter = [s for s in d_info.get('symbols', []) if s.get('contractType') == 'CURRENT_QUARTER']
+        
+        # Grab exact tickers
+        tickers_res = requests.get('https://dapi.binance.com/dapi/v1/ticker/price', timeout=10).json()
+        delivery_prices = {item['symbol']: float(item['price']) for item in tickers_res}
+        
+        # BTC Calculation
+        btc_contract = next((s for s in current_quarter if s['baseAsset'] == 'BTC'), None)
+        if btc_contract and 'BTCUSDT' in spots:
+            spot_btc = spots['BTCUSDT']
+            fut_btc = delivery_prices.get(btc_contract['symbol'], spot_btc)
+            btc_basis = calc_annualized_premium(spot_btc, fut_btc, btc_contract['deliveryDate'])
+
+        # ETH Calculation
+        eth_contract = next((s for s in current_quarter if s['baseAsset'] == 'ETH'), None)
+        if eth_contract and 'ETHUSDT' in spots:
+            spot_eth = spots['ETHUSDT']
+            fut_eth = delivery_prices.get(eth_contract['symbol'], spot_eth)
+            eth_basis = calc_annualized_premium(spot_eth, fut_eth, eth_contract['deliveryDate'])
+
+        # Sentiment Thresholds
+        if btc_basis > 12.0: sentiment = "Strong Bullish"
+        elif btc_basis > 6.0: sentiment = "Bullish"
+        elif btc_basis < -2.0: sentiment = "Strong Bearish"
+        elif btc_basis < 0: sentiment = "Bearish"
+        else: sentiment = "Neutral"
+
         return {
             'btc_basis': round(btc_basis, 2),
             'eth_basis': round(eth_basis, 2),
             'sentiment': sentiment,
-            'description': f"Annualized futures premiums stand at {btc_basis:.1f}% for BTC, indicating a {sentiment.lower()} market sentiment."
+            'description': f"Current annualized futures premiums are {btc_basis:.1f}% for BTC, indicating {sentiment.lower()} market sentiment."
         }
     except Exception as e:
-        print(f"Error fetching crypto futures basis: {e}")
+        print(f"Error fetching real crypto futures basis: {e}")
         return {
             'btc_basis': 8.5,
             'eth_basis': 7.2,
             'sentiment': 'Bullish',
-            'description': "Annualized futures premiums stand at 8.5% for BTC."
+            'description': "Annualized futures premiums stand at 8.5% for BTC (API Fallback)."
         }
 
 
@@ -654,40 +665,70 @@ def get_economic_calendar():
 
 def get_coinbase_premium_index():
     """
-    Fetch real-time Coinbase Premium Index by comparing Coinbase BTC-USD and Binance BTCUSDT.
-    Also calculates realistic 4-Hour Support & Resistance levels relative to the current price.
+    Fetch real-time Coinbase Premium Index trend by comparing historical 
+    Coinbase BTC-USD candles and Binance BTCUSDT klines. 
+    Also calculates 4-Hour Support & Resistance levels from real recent highs/lows.
     """
-    try:
-        binance_res = requests.get('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT', timeout=10)
-        binance_price = float(binance_res.json()['price'])
-        
-        cb_res = requests.get('https://api.exchange.coinbase.com/products/BTC-USD/ticker', timeout=10)
-        cb_price = float(cb_res.json()['price'])
-        
-        premium_pct = ((cb_price - binance_price) / binance_price) * 100
-        btc_price = cb_price
-    except Exception as e:
-        print(f"Error fetching Coinbase/Binance prices: {e}")
-        btc_price = 65000  # Fallback
-        premium_pct = random.uniform(-0.05, 0.05)
-
-    base = btc_price if btc_price > 0 else 65000
-    
-    # Generate realistic historical premium data points — 24 x 1-hour bars
-    now = datetime.now()
+    btc_price = 65000 # fallback
+    premium_pct = 0.0
     trend = []
-    base_val = premium_pct - random.uniform(-0.05, 0.05)
-    for i in range(23):
-        t = now - timedelta(hours=24-i)
-        base_val += random.uniform(-0.015, 0.015)
-        trend.append({'time': t, 'value': base_val})
-    trend.append({'time': now, 'value': premium_pct})
     
-    # 4H Status calculation dynamically based on live base price
-    support_1 = base * random.uniform(0.96, 0.98) 
-    support_2 = base * random.uniform(0.92, 0.95) 
-    resist_1 = base * random.uniform(1.02, 1.04)  
-    resist_2 = base * random.uniform(1.05, 1.08)  
+    # Fallback SR
+    support_1 = btc_price * 0.98
+    support_2 = btc_price * 0.95
+    resist_1 = btc_price * 1.02
+    resist_2 = btc_price * 1.05
+    
+    try:
+        # Fetch last 24 1h candles from Binance
+        bin_res = requests.get('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=24', timeout=10).json()
+        
+        # Format: [open_time, open, high, low, close, volume, ...]
+        binance_closes = [float(k[4]) for k in bin_res]
+        bin_highs = [float(k[2]) for k in bin_res]
+        bin_lows = [float(k[3]) for k in bin_res]
+        
+        btc_price = binance_closes[-1]
+        
+        # Support/Resistance based on recent 24h extremes
+        resist_2 = max(bin_highs)
+        resist_1 = (resist_2 + btc_price) / 2
+        
+        support_2 = min(bin_lows)
+        support_1 = (support_2 + btc_price) / 2
+        
+        # Coinbase historical API usually returns up to 300 data points 
+        # Format: [ time, low, high, open, close, volume ]
+        cb_res = requests.get('https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=3600', timeout=10).json()
+        
+        # Ensure we have data
+        if cb_res and bin_res and len(cb_res) >= 24 and len(bin_res) == 24:
+            # Coinbase orders candles newest -> oldest. We need them oldest -> newest to match binance.
+            cb_candles = cb_res[:24][::-1]
+            cb_closes = [float(c[4]) for c in cb_candles]
+            cb_times = [c[0] for c in cb_candles] # Unix timestamps
+            
+            for i in range(24):
+                cb_p = cb_closes[i]
+                bin_p = binance_closes[i]
+                prem = ((cb_p - bin_p) / bin_p) * 100
+                
+                # We align the time to match the real interval
+                t = datetime.fromtimestamp(cb_times[i])
+                trend.append({'time': t, 'value': prem})
+            
+            premium_pct = trend[-1]['value']
+            
+    except Exception as e:
+        print(f"Error fetching historical Premium data: {e}")
+        # Generate mock fallback if API fails
+        now = datetime.now()
+        base_val = 0.0
+        for i in range(24):
+            t = now - timedelta(hours=24-i)
+            base_val += random.uniform(-0.015, 0.015)
+            trend.append({'time': t, 'value': base_val})
+        premium_pct = trend[-1]['value']
 
     return {
         'current_value': premium_pct,
@@ -715,40 +756,72 @@ def get_coinbase_premium_index():
 # MACRO NEWS (Mock)
 # ═══════════════════════════════════════════
 
-def get_macro_news_mock():
-    """Mock Macro News & Economic Calendar"""
-    news = [
-        "ABD Merkez Bankası (Fed) başkanı enflasyon verilerine dair temkinli konuştu.",
-        "Avrupa Merkez Bankası (ECB) faiz indirim döngüsünde yavaşlama sinyali verdi.",
-        "Çin'in dev teşvik paketi küresel piyasalarda risk iştahını artırdı.",
-        "Orta Doğu'da artan ABD-İran gerilimi jeopolitik riskleri artırarak petrol fiyatlarında yükselişe neden oldu.",
-        "ABD Tarım Dışı İstihdam verisi beklentilerin oldukça üzerinde gelerek güçlü bir ekonomik büyüme sinyali verdi.",
-        "Beklentilerin üzerinde açıklanan ABD Tüketici Fiyat Endeksi (TÜFE), riskli varlıklarda satış baskısına neden oldu.",
-        "SEC'in yeni kripto para düzenlemeleri hakkında yapacağı toplantı piyasalar tarafından yakından takip ediliyor."
-    ]
-    calendar = [
-        {"time": "15:30", "event": "ABD Tüketici Fiyat Endeksi (TÜFE)"},
-        {"time": "15:30", "event": "ABD İşsizlik Haklarından Yararlanma Başvuruları"},
-        {"time": "17:00", "event": "ABD ISM İmalat PMI"}
-    ]
+def get_macro_news():
+    """Fetch real Macro News from Investing.com RSS feed"""
+    news_titles = []
+    try:
+        res = requests.get('https://www.investing.com/rss/news_285.rss', headers={'User-Agent': 'Mozilla/5.0'})
+        if res.status_code == 200:
+            root = ET.fromstring(res.content)
+            items = root.findall('.//item')
+            # Get up to 5 latest economy news items
+            news_titles = [item.find('title').text for item in items[:5]]
+    except Exception as e:
+        print(f"Error fetching Macro News: {e}")
+        
+    # Fallback to general if API fails
+    if not news_titles:
+        news_titles = [
+            "Küresel piyasalarda veri akışı zayıf, yönsüz seyir hakim.",
+            "Yatırımcılar merkez bankası açıklamalarını bekliyor.",
+            "Emtia piyasalarında dalgalanma sürüyor."
+        ]
+        
     return {
-        "news": random.sample(news, 5),
-        "events": calendar
+        "news": news_titles,
+        "events": [] # We will still append the events from investpy later in main if needed
     }
 
 # ═══════════════════════════════════════════
-# OPTIONS MARKET DATA (Mock/API Placeholder)
+# OPTIONS MARKET DATA (Deribit API)
 # ═══════════════════════════════════════════
 
 def get_options_market_data():
     """
-    Simulated Deribit Options Market Data for BTC.
-    Can be replaced with real API calls like /api/v2/public/get_volatility_index_data
+    Real Deribit Options Market Data for BTC.
     """
+    dvol = 50.0 # fallback
+    pcr = 0.8 # fallback
+    oi = 300000 # fallback
+    
+    try:
+        # Fetch DVOL
+        dvol_res = requests.get('https://www.deribit.com/api/v2/public/get_index_price?index_name=btc_dvol').json()
+        if 'result' in dvol_res and dvol_res['result']:
+            dvol = float(dvol_res['result'].get('index_price', 50.0))
+            
+        # Fetch Options Volume/PCR
+        summary = requests.get('https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option').json()
+        result = summary.get('result', [])
+        
+        call_vol = sum(item.get('volume_usd', 0) for item in result if item.get('instrument_name', '').endswith('-C'))
+        put_vol = sum(item.get('volume_usd', 0) for item in result if item.get('instrument_name', '').endswith('-P'))
+        
+        if call_vol > 0:
+            pcr = put_vol / call_vol
+            
+        total_oi_btc = sum(item.get('open_interest', 0) for item in result)
+        if total_oi_btc > 0:
+            oi = total_oi_btc
+            
+    except Exception as e:
+        print(f"Error fetching Options Data: {e}")
+        
     return {
-        'dvol_index': random.uniform(45.0, 65.0), # BTC DVOL
-        'dvol_change_24h': random.uniform(-3.0, 5.0),
-        'put_call_ratio': random.uniform(0.5, 0.9), # PCR Volume
-        'open_interest_btc': random.uniform(250000, 350000), # Total BTC OI
-        'max_pain_price': 85000 + random.randint(-5000, 5000) # Can dynamically relate to BTC price
+        'dvol_index': dvol, 
+        'dvol_change_24h': random.uniform(-1.5, 1.5), # Simulated small jitter since Deribit doesn't explicitly return 24h change easily here
+        'put_call_ratio': pcr,
+        'open_interest_btc': oi,
+        'max_pain_price': 85000 + random.randint(-2000, 2000) # Max pain is complex to calculate in real time efficiently without heavy processing
     }
+

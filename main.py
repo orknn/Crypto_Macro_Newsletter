@@ -2,7 +2,7 @@ import os
 import sys
 from data_fetcher import (
     get_crypto_prices, get_macro_indicators, get_fear_and_greed_index,
-    get_macro_news_mock,
+    get_macro_news,
     get_coinbase_premium_index, get_funding_rates, get_crypto_market_overview,
     get_magnificent_7, get_commodities, get_economic_calendar, get_options_market_data,
     get_global_liquidity_index, get_macro_scoreboard, get_sp500_sectors,
@@ -86,7 +86,7 @@ def generate_daily_newsletter():
     coinbase_premium = get_coinbase_premium_index()
 
     print("  → Macro haberler...")
-    macro_news = get_macro_news_mock()
+    macro_news = get_macro_news()
 
     print("  → Opsiyon Piyasaları...")
     options_data = get_options_market_data()
