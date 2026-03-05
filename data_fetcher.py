@@ -758,27 +758,38 @@ def get_coinbase_premium_index():
 
 def get_macro_news():
     """Fetch real Macro News from Investing.com RSS feed"""
-    news_titles = []
+    news_items = []
     try:
         res = requests.get('https://www.investing.com/rss/news_285.rss', headers={'User-Agent': 'Mozilla/5.0'})
         if res.status_code == 200:
             root = ET.fromstring(res.content)
             items = root.findall('.//item')
             # Get up to 5 latest economy news items
-            news_titles = [item.find('title').text for item in items[:5]]
+            for item in items[:5]:
+                title = item.find('title')
+                enclosure = item.find('enclosure')
+                
+                img_url = ""
+                if enclosure is not None and 'url' in enclosure.attrib:
+                    img_url = enclosure.attrib['url']
+                
+                news_items.append({
+                    "title": title.text if title is not None else "",
+                    "image_url": img_url
+                })
     except Exception as e:
         print(f"Error fetching Macro News: {e}")
         
     # Fallback to general if API fails
-    if not news_titles:
-        news_titles = [
-            "Küresel piyasalarda veri akışı zayıf, yönsüz seyir hakim.",
-            "Yatırımcılar merkez bankası açıklamalarını bekliyor.",
-            "Emtia piyasalarında dalgalanma sürüyor."
+    if not news_items:
+        news_items = [
+            {"title": "Küresel piyasalarda veri akışı zayıf, yönsüz seyir hakim.", "image_url": ""},
+            {"title": "Yatırımcılar merkez bankası açıklamalarını bekliyor.", "image_url": ""},
+            {"title": "Emtia piyasalarında dalgalanma sürüyor.", "image_url": ""}
         ]
         
     return {
-        "news": news_titles,
+        "news": news_items,
         "events": [] # We will still append the events from investpy later in main if needed
     }
 

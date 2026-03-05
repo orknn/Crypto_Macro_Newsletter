@@ -337,17 +337,36 @@ def _generate_news_stories(news_data, ai_commentaries=None):
         return 'Makroekonomik gelişme — piyasa katılımcıları tarafından yakından takip edilmeli.'
 
     items = []
-    for i, headline in enumerate(news):
+    for i, news_item in enumerate(news):
+        # Handle backward compatibility: if it's a string, convert to dict
+        if isinstance(news_item, str):
+            headline = news_item
+            img_url = ""
+        else:
+            headline = news_item.get('title', '')
+            img_url = news_item.get('image_url', '')
+
         # Use AI commentary if available, otherwise fallback
         commentary = ai_lookup.get(headline) or _fallback_commentary(headline)
         ai_label = 'AI Insight' if ai_lookup.get(headline) else 'Analiz'
+        
+        # Build image HTML if present
+        img_html = ""
+        if img_url:
+            img_html = f'''<div style="flex-shrink:0; margin-right:16px;">
+              <img src="{img_url}" alt="News Thumbnail" style="width:72px; height:72px; object-fit:cover; border-radius:8px; border:1px solid var(--navy-border);">
+            </div>'''
+            
         items.append(f'''
       <div class="story-item">
         <div class="story-num">{i+1:02d}</div>
-        <div class="story-content">
-          <div class="story-tag">Makro</div>
-          <div class="story-headline">{headline}</div>
-          <div style="margin-top:4px; font-size:11px; font-style:italic; color:var(--text-mid); line-height:1.5;">🤖 <strong style="color:var(--straw); font-style:normal;">{ai_label}:</strong> {commentary}</div>
+        <div class="story-content" style="display:flex; align-items:flex-start;">
+          {img_html}
+          <div style="flex:1;">
+            <div class="story-tag">Makro</div>
+            <div class="story-headline">{headline}</div>
+            <div style="margin-top:4px; font-size:11px; font-style:italic; color:var(--text-mid); line-height:1.5;">🤖 <strong style="color:var(--straw); font-style:normal;">{ai_label}:</strong> {commentary}</div>
+          </div>
         </div>
       </div>''')
     return '\n'.join(items)

@@ -278,7 +278,9 @@ class ContentEditorAgent:
             client = Anthropic(api_key=api_key)
 
             data_summary = _prepare_data_summary(data)
-            news_headlines = data.get('macro_news', {}).get('news', [])
+            raw_news = data.get('macro_news', {}).get('news', [])
+            # Extract just the titles so the AI doesn't get confused by image URLs
+            news_headlines = [n['title'] if isinstance(n, dict) else n for n in raw_news]
 
             user_prompt = f"""Aşağıda bugünkü finans bülteninin tüm canlı piyasa verileri yer almaktadır.
 
