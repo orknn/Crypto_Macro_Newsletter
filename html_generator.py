@@ -260,7 +260,12 @@ def _generate_asset_table(assets, columns, id_prefix="row"):
     for asset in assets:
         name = asset.get('Name', asset.get('Symbol', ''))
         symbol = asset.get('Symbol', asset.get('Ticker', ''))
-        display = f"{name} ({symbol})" if name != symbol else name
+        # Combine name and symbol on the same line if they're different
+        if name != symbol:
+            display = f"{name} <span style='color:var(--text-dim); font-size:11px; margin-left:6px;'>{symbol}</span>"
+        else:
+            display = name
+            
         price = asset.get('Price', asset.get('Current Price USD', 0))
         chg_1d = asset.get('Change %', asset.get('24h %', 0)) or 0
         chg_1w = asset.get('7d %', asset.get('Change %', 0)) or 0
@@ -676,6 +681,45 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
                 elif 'Non-Farm' in ev.get('event', '') or 'Tarım Dışı' in ev.get('event', ''):
                     summary_text += f" Ayrıca <strong>ABD Tarım Dışı İstihdam</strong> verisi son olarak <strong>{actual}</strong> olarak açıklandı."
 
+    korelasyon_notu = data.get('korelasyon_notu')
+    if korelasyon_notu:
+        summary_text += f"<br><br>💡 <strong style='color:var(--text-mid); font-weight:600;'>Gözlem:</strong> <span style='color:var(--text-bright); font-style:italic;'>{korelasyon_notu}</span>"
+
+    # ── Makro Scoreboard (Inline Bar) ──
+    ms = data.get('macro_scoreboard', {})
+    dxy = ms.get('DXY', 0)
+    dxy_chg = ms.get('DXY_chg', 0)
+    m2 = ms.get('M2', 0)
+    m2_chg = ms.get('M2_chg', 0)
+    pmi = ms.get('PMI', 0)
+    pmi_chg = ms.get('PMI_chg', 0)
+
+    dxy_chg_text, dxy_chg_cls = _fmt_change(dxy_chg)
+    m2_chg_text, m2_chg_cls = _fmt_change(m2_chg)
+    pmi_chg_text, pmi_chg_cls = _fmt_change(pmi_chg)
+
+    macro_scoreboard_html = f'''
+    <div style="display:flex; justify-content:space-between; align-items:center; background:var(--navy-light); border:1px solid var(--navy-border); border-radius:8px; padding:10px 16px; margin-top:16px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:10px; color:var(--text-dim); text-transform:uppercase; font-weight:600; letter-spacing:1px;">DXY</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--text-bright); font-weight:500;">{dxy:.2f}</span>
+        <span class="{dxy_chg_cls}" style="font-size:11px;">{dxy_chg_text}</span>
+      </div>
+      <div style="width:1px; height:16px; background:var(--navy-border);"></div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:10px; color:var(--text-dim); text-transform:uppercase; font-weight:600; letter-spacing:1px;">M2 Supply</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--text-bright); font-weight:500;">${m2:.1f}T</span>
+        <span class="{m2_chg_cls}" style="font-size:11px;">{m2_chg_text}</span>
+      </div>
+      <div style="width:1px; height:16px; background:var(--navy-border);"></div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:10px; color:var(--text-dim); text-transform:uppercase; font-weight:600; letter-spacing:1px;">US PMI</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--text-bright); font-weight:500;">{pmi:.1f}</span>
+        <span class="{pmi_chg_cls}" style="font-size:11px;">{pmi_chg_text}</span>
+      </div>
+    </div>
+    '''
+
     # Build all sections
     ticker_bar = _generate_ticker_bar(data)
     econ_calendar = _generate_economic_calendar(data.get('economic_calendar', []))
@@ -688,6 +732,35 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
         'mag7', 'row'
     )
     crypto_rows = _generate_asset_table(data.get('crypto_prices', []), 'crypto', 'row')
+    
+    sp500_sectors = data.get('sp500_sectors', [])
+    sp500_rows = ""
+    if sp500_sectors:
+        sp500_rows_list = []
+        for s in sp500_sectors:
+            sym = s.get('Symbol', '')
+            name = s.get('Name', '')
+            chg = s.get('Change %', 0)
+            chg_text, chg_cls = _fmt_change(chg)
+            # Create a simple colored tile for the heatmap
+            bg_color = 'rgba(16, 185, 129, 0.15)' if chg > 0 else ('rgba(239, 68, 68, 0.15)' if chg < 0 else 'rgba(255, 255, 255, 0.05)')
+            border_color = 'rgba(16, 185, 129, 0.4)' if chg > 0 else ('rgba(239, 68, 68, 0.4)' if chg < 0 else 'rgba(255, 255, 255, 0.1)')
+            sp500_rows_list.append(f'''
+            <div style="background:{bg_color}; border:1px solid {border_color}; border-radius:6px; padding:6px; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                <div style="font-size:9.5px; color:var(--text-dim); letter-spacing:0.5px; margin-bottom:2px; text-transform:uppercase;">{name}</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600; color:var(--text-bright);">{sym}</div>
+                <div class="{chg_cls}" style="font-family:'JetBrains Mono',monospace; font-size:10.5px; margin-top:2px;">{chg:.2f}%</div>
+            </div>''')
+        sp500_rows = f'''
+        <div style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">
+          <span style="font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); font-weight:600;">📊 S&P 500 Sectors</span>
+          <div style="flex:1; height:1px; background:var(--navy-border);"></div>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(105px, 1fr)); gap:8px; margin-bottom:16px;">
+          {''.join(sp500_rows_list)}
+        </div>
+        '''
+
     news_stories = _generate_news_stories(data.get('macro_news', {}), data.get('news_commentaries'))
     options_market = _generate_options_market(data.get('options_data', {}))
     fear_greed_gauge = _generate_fear_greed_gauge(data)
@@ -715,31 +788,31 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     gl_weekly_text, gl_weekly_cls = _fmt_change(gl_weekly)
 
     extra_indicators = f'''
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-label">2Y-10Y Yield Spread</div>
-        <div class="kpi-value">{yield_spread:.2f}%</div>
-        <div class="kpi-change {spread_cls}">{spread_status}</div>
+    <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; background:var(--navy-light); border:1px solid var(--navy-border); border-radius:8px; padding:16px;">
+      <div style="border-right:1px solid var(--navy-border); padding-right:12px;">
+        <div style="font-size:9px; letter-spacing:0.8px; text-transform:uppercase; color:var(--text-dim); margin-bottom:6px;">2Y-10Y Spread</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:500; color:white;">{yield_spread:.2f}%</div>
+        <div class="{spread_cls}" style="font-size:10px; margin-top:4px;">{spread_status}</div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Fed Balance Sheet</div>
-        <div class="kpi-value">{gl_value}</div>
-        <div class="kpi-change {gl_weekly_cls}">W: {gl_weekly_text}</div>
+      <div style="border-right:1px solid var(--navy-border); padding-right:12px; padding-left:4px;">
+        <div style="font-size:9px; letter-spacing:0.8px; text-transform:uppercase; color:var(--text-dim); margin-bottom:6px;">Fed Balance Sheet</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:500; color:white;">{gl_value}</div>
+        <div class="{gl_weekly_cls}" style="font-size:10px; margin-top:4px;">W: {gl_weekly_text}</div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Stablecoin Market Cap</div>
-        <div class="kpi-value">${stablecoin_mcap/1e9:.1f}B</div>
-        <div class="kpi-change">Dom: %{stablecoin_dom:.1f}</div>
+      <div style="border-right:1px solid var(--navy-border); padding-right:12px; padding-left:4px;">
+        <div style="font-size:9px; letter-spacing:0.8px; text-transform:uppercase; color:var(--text-dim); margin-bottom:6px;">Stablecoin Mcap</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:500; color:white;">${stablecoin_mcap/1e9:.1f}B</div>
+        <div style="font-size:10px; margin-top:4px; color:var(--text-dim);">Dom: %{stablecoin_dom:.1f}</div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">SMH (Semiconductor ETF)</div>
-        <div class="kpi-value">${smh_price:,.2f}</div>
-        <div class="kpi-change {smh_chg_cls}">{smh_chg_text}</div>
+      <div style="padding-left:4px;">
+        <div style="font-size:9px; letter-spacing:0.8px; text-transform:uppercase; color:var(--text-dim); margin-bottom:6px;">SMH (Semi ETF)</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:500; color:white;">${smh_price:,.2f}</div>
+        <div class="{smh_chg_cls}" style="font-size:10px; margin-top:4px;">{smh_chg_text}</div>
       </div>
     </div>
-    <div style="margin-top:12px; font-size:11.5px; color:var(--text-dim); line-height:1.5;">
+    <div style="margin-top:10px; font-size:11px; color:var(--text-dim); line-height:1.4;">
       💡 <strong style="color:var(--text-mid);">Gösterge Notu:</strong>
-      2Y-10Y yield spread negatif olduğunda resesyon sinyali verir. Fed Balance Sheet artışı global likiditeyi gösterir. SMH, AI ve semiconductor sektörünün barometresidir.
+      2Y-10Y spread negatifken resesyon sinyali verir. Fed Balance Sheet artışı global likiditeyi gösterir. SMH, AI ve semiconductor sektörünün barometresidir.
     </div>'''
 
     # BTC 4-Hour Status with support/resistance
@@ -939,9 +1012,9 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   .down {{ color: var(--red); }}
 
   /* ── SECTION ── */
-  .section {{ padding: 32px 40px; border-bottom: 1px solid var(--navy-border); break-inside: avoid; page-break-inside: avoid; }}
+  .section {{ padding: 16px 40px; border-bottom: 1px solid var(--navy-border); }}
   .section-label {{ border-left: 4px solid var(--straw); padding-left: 10px; }}
-  .summary-card, .kpi-card, .heatmap-table, .sparkline-wrap, .news-card {{ break-inside: avoid; page-break-inside: avoid; }}
+  .summary-card, .kpi-card, .sparkline-wrap, .news-card {{ break-inside: avoid; page-break-inside: avoid; }}
   .heatmap-table tr {{ break-inside: avoid; page-break-inside: avoid; }}
   .kpi-grid {{ break-inside: avoid; page-break-inside: avoid; }}
   .section-label {{ break-after: avoid; page-break-after: avoid; }}
@@ -968,11 +1041,11 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     background: #f7f5c8;
     border: 1px solid #e8e49a;
     border-radius: 12px;
-    padding: 20px 24px;
+    padding: 16px 20px;
   }}
   .summary-text {{
-    font-size: 14.5px;
-    line-height: 1.75;
+    font-size: 13.5px;
+    line-height: 1.65;
     color: #2a3a28;
     font-weight: 300;
   }}
@@ -990,7 +1063,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     background: var(--navy-card);
     border: 1px solid var(--navy-border);
     border-radius: 8px;
-    padding: 14px 12px;
+    padding: 10px 10px;
     position: relative;
     overflow: hidden;
     flex: 1 1 0;
@@ -1079,7 +1152,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     background: var(--navy-card);
     border: 1px solid var(--navy-border);
     border-radius: 12px;
-    padding: 20px 24px;
+    padding: 16px 20px;
   }}
 
   /* ── HEATMAP TABLE ── */
@@ -1089,7 +1162,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     letter-spacing: 1.2px;
     text-transform: uppercase;
     color: var(--text-dim);
-    padding: 12px 16px;
+    padding: 8px 12px;
     text-align: right;
     border-bottom: 2px solid var(--navy-border);
     font-weight: 600;
@@ -1098,8 +1171,8 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     text-align: left;
   }}
   .heatmap-table td {{
-    padding: 16px 20px;
-    font-size: 13px;
+    padding: 8px 12px;
+    font-size: 12.5px;
     font-weight: 500;
     border-bottom: 1px solid #334155;
     vertical-align: middle;
@@ -1119,10 +1192,10 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   .asset-name {{
     font-weight: 500;
     color: var(--text-bright);
-    display: flex; align-items: center; gap: 8px;
+    display: flex; align-items: center; gap: 6px;
   }}
-  .asset-dot {{ width: 6px; height: 6px; border-radius: 50%; background: var(--straw); flex-shrink: 0; }}
-  .mono {{ font-family: 'JetBrains Mono', monospace; font-size: 14px; }}
+  .asset-dot {{ width: 5px; height: 5px; border-radius: 50%; background: var(--straw); flex-shrink: 0; }}
+  .mono {{ font-family: 'JetBrains Mono', monospace; font-size: 13px; }}
   .cell-bar {{
     display: flex;
     align-items: center;
@@ -1147,11 +1220,11 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   /* ── ECONOMIC CALENDAR TABLE ── */
   .econ-calendar {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
   .econ-calendar th {{
-    font-size: 10px;
-    letter-spacing: 1.2px;
+    font-size: 9.5px;
+    letter-spacing: 1px;
     text-transform: uppercase;
     color: var(--text-dim);
-    padding: 12px 16px;
+    padding: 8px 10px;
     text-align: left;
     border-bottom: 2px solid var(--navy-border);
     font-weight: 600;
@@ -1169,8 +1242,8 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   .econ-calendar col:nth-child(6) {{ width: 11%; }}
   .econ-calendar col:nth-child(7) {{ width: 13%; }}
   .econ-calendar td {{
-    padding: 12px 16px;
-    font-size: 12px;
+    padding: 8px 10px;
+    font-size: 11.5px;
     border-bottom: 1px solid #334155;
     vertical-align: middle;
   }}
@@ -1189,7 +1262,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   .story-item {{
     display: flex;
     gap: 16px;
-    padding: 16px 0;
+    padding: 10px 0;
     border-bottom: 1px solid var(--navy-border);
   }}
   .story-item:last-child {{ border-bottom: none; padding-bottom: 0; }}
@@ -1210,11 +1283,11 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   }}
   .story-headline {{
     font-family: 'Playfair Display', serif;
-    font-size: 17px;
+    font-size: 15.5px;
     font-weight: 700;
     color: var(--text-bright);
-    margin-bottom: 5px;
-    line-height: 1.4;
+    margin-bottom: 4px;
+    line-height: 1.35;
   }}
   .story-body {{
     font-size: 12.5px;
@@ -1224,7 +1297,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
 
   /* ── FOOTER ── */
   .footer {{
-    padding: 24px 40px;
+    padding: 20px 40px;
     background: var(--navy-card);
     border-top: 1px solid var(--navy-border);
     display: flex;
@@ -1288,12 +1361,13 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     {ticker_bar}
   </div>
 
-  <!-- GENEL DEĞERLENDİRME -->
+  <!-- GENEL DEĞERLENDİRME & MAKRO SCOREBOARD -->
   <div class="section">
     <div class="section-label">Genel Değerlendirme</div>
     <div class="summary-card">
       <p class="summary-text">{summary_text}</p>
     </div>
+    {macro_scoreboard_html}
   </div>
 
   <!-- HAFTALIK EKONOMİK TAKVİM -->
@@ -1390,12 +1464,15 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
       <span style="font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); font-weight:600;">₿ Crypto Watchlist</span>
       <div style="flex:1; height:1px; background:var(--navy-border);"></div>
     </div>
-    <table class="heatmap-table">
+    <table class="heatmap-table" style="margin-bottom:20px;">
       <thead>
         <tr><th>Asset</th><th>Price</th><th>24h Chg.</th><th>7d</th><th>30D</th><th style="width:100px">Momentum</th></tr>
       </thead>
       <tbody>{crypto_rows}</tbody>
     </table>
+
+    {sp500_rows}
+
     <div style="margin-top:10px; font-size:10.5px; font-style:italic; color:var(--text-dim); letter-spacing:0.2px; line-height:1.5;">
       (Note: <strong style="font-style:normal;">Momentum &gt; 70</strong> indicates <em>overbought</em> conditions, <strong style="font-style:normal;">&lt; 30</strong> indicates <em>oversold</em>)
     </div>

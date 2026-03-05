@@ -5,7 +5,7 @@ from data_fetcher import (
     get_macro_news_mock,
     get_coinbase_premium_index, get_funding_rates, get_crypto_market_overview,
     get_magnificent_7, get_commodities, get_economic_calendar, get_options_market_data,
-    get_global_liquidity_index
+    get_global_liquidity_index, get_macro_scoreboard, get_sp500_sectors
 )
 from agents import ContentEditorAgent, ExperienceDesignerAgent
 from html_generator import generate_newsletter_html
@@ -92,6 +92,12 @@ def generate_daily_newsletter():
 
     print("  → Global Liquidity...")
     global_liquidity = get_global_liquidity_index()
+    
+    print("  → Makro Scoreboard...")
+    macro_scoreboard = get_macro_scoreboard()
+
+    print("  → S&P 500 Sektörleri...")
+    sp500_sectors = get_sp500_sectors()
 
     data = {
         'crypto_prices': crypto_prices,
@@ -106,6 +112,8 @@ def generate_daily_newsletter():
         'macro_news': macro_news,
         'options_data': options_data,
         'global_liquidity': global_liquidity,
+        'macro_scoreboard': macro_scoreboard,
+        'sp500_sectors': sp500_sectors,
     }
 
     # ── AI Agent Analysis ──
@@ -121,6 +129,7 @@ def generate_daily_newsletter():
         print("  → Finansal İçerik Editörü...")
         editor_result = ContentEditorAgent().analyze(data)
         data['ai_summary'] = editor_result.get('genel_degerlendirme')
+        data['korelasyon_notu'] = editor_result.get('korelasyon_notu')
         data['news_commentaries'] = editor_result.get('news_commentaries')
         data['content_suggestions'] = editor_result.get('content_suggestions')
 

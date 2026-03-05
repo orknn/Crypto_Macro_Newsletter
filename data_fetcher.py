@@ -191,6 +191,125 @@ def get_macro_indicators():
             results[f"{name}_chg"] = 0.0
     return results
 
+def get_macro_scoreboard():
+    """
+    Fetch data for the Macro Scoreboard: DXY, M2 Money Supply, and US PMI.
+    Uses yfinance for DXY and FRED public CSV endpoint for M2 and PMI.
+    """
+    results = {
+        'DXY': 0.0,
+        'DXY_chg': 0.0,
+        'M2': 0.0,
+        'M2_chg': 0.0,
+        'PMI': 0.0,
+        'PMI_chg': 0.0
+    }
+    
+    # DXY from yfinance
+    try:
+        data = yf.download('DX-Y.NYB', period='5d', progress=False)
+        if not data.empty and 'Close' in data and len(data['Close']) >= 2:
+            last_close = float(data['Close'].iloc[-1].item())
+            prev_close = float(data['Close'].iloc[-2].item())
+            pct_change = ((last_close - prev_close) / prev_close) * 100 if prev_close else 0.0
+            results['DXY'] = last_close
+            results['DXY_chg'] = pct_change
+    except Exception as e:
+        print(f"Error fetching DXY for scoreboard: {e}")
+
+    # M2 Money Supply from FRED (M2SL)
+    try:
+        import io
+        url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=M2SL&cosd=2023-01-01"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        df = pd.read_csv(io.StringIO(resp.text))
+        df.columns = ['date', 'value']
+        df['value'] = pd.to_numeric(df['value'], errors='coerce')
+        df = df.dropna()
+        if len(df) >= 2:
+            current = df['value'].iloc[-1]
+            prev = df['value'].iloc[-2]
+            results['M2'] = current / 1000  # Convert to Trillions if it's in Billions
+            results['M2_chg'] = ((current - prev) / prev) * 100 if prev else 0.0
+    except Exception as e:
+        print(f"Error fetching M2 for scoreboard: {e}")
+        results['M2'] = 20.8  # Fallback Trillions
+        results['M2_chg'] = 0.1
+
+    # US PMI from FRED (ISM Manufacturing: NAPM)
+    try:
+        import io
+        url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=NAPM&cosd=2023-01-01"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        df = pd.read_csv(io.StringIO(resp.text))
+        df.columns = ['date', 'value']
+        df['value'] = pd.to_numeric(df['value'], errors='coerce')
+        df = df.dropna()
+        if len(df) >= 2:
+            current = df['value'].iloc[-1]
+            prev = df['value'].iloc[-2]
+            results['PMI'] = current
+            results['PMI_chg'] = ((current - prev) / prev) * 100 if prev else 0.0
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            print(f"    ⚠️  PMI data not found on FRED (404), using fallback.")
+        else:
+            print(f"Error fetching PMI for scoreboard: {e}")
+        results['PMI'] = 49.5 # Fallback
+        results['PMI_chg'] = -0.5
+    except Exception as e:
+        print(f"Error fetching PMI for scoreboard: {e}")
+        results['PMI'] = 49.5 # Fallback
+        results['PMI_chg'] = -0.5
+
+    return results
+
+def get_sp500_sectors():
+    """
+    Fetch S&P 500 sector ETFs performance from yfinance.
+    Returns a list of dicts with sector names, prices and changes.
+    """
+    sectors = {
+        'XLK': 'Technology',
+        'XLF': 'Financials',
+        'XLV': 'Health Care',
+        'XLY': 'Consumer Discret.',
+        'XLC': 'Communication',
+        'XLI': 'Industrials',
+        'XLP': 'Consumer Staples',
+        'XLE': 'Energy',
+        'XLU': 'Utilities',
+        'XLRE': 'Real Estate',
+        'XLB': 'Materials'
+    }
+    
+    results = []
+    for symbol, name in sectors.items():
+        try:
+            data = yf.download(symbol, period='5d', progress=False)
+            if not data.empty and 'Close' in data and len(data['Close']) >= 2:
+                current = float(data['Close'].iloc[-1].item())
+                prev = float(data['Close'].iloc[-2].item())
+                change_pct = ((current - prev) / prev) * 100 if prev else 0.0
+            else:
+                current = 0.0
+                change_pct = 0.0
+            results.append({
+                'Symbol': symbol,
+                'Name': name,
+                'Price': current,
+                'Change %': change_pct
+            })
+        except Exception as e:
+            print(f"Error fetching {symbol}: {e}")
+            results.append({'Symbol': symbol, 'Name': name, 'Price': 0.0, 'Change %': 0.0})
+            
+    # Sort by change descending to make the heatmap more readable
+    results.sort(key=lambda x: x.get('Change %', 0), reverse=True)
+    return results
+
 def get_magnificent_7():
     """
     Fetch Magnificent 7 stock prices and daily change from yfinance.

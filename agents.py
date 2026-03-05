@@ -58,8 +58,12 @@ C) İÇERİK STRATEJİ ÖNERİLERİ:
 - Eklenmesi gereken yeni veri veya bölüm varsa öner (type: "ekle"). Ücretsiz API kaynağı da belirt.
 - Toplam 2-4 öneri yeterli.
 
+D) KORELASYON NOTU:
+- Günün verilerine bakarak (özellikle BTC, Altın, DXY, VIX, Nasdaq) piyasadaki risk algısı ve korelasyonlar hakkında 1-2 cümlelik kısa bir gözlem yaz.
+- Örneğin: "Bugün BTC ile altın pozitif korelasyonda, risk-off değil risk-on hareket" veya "DXY 104 seviyesine tutunurken risk varlıkları baskı altında".
+
 ÖNEMLİ: Yanıtını MUTLAKA aşağıdaki JSON formatında ver, başka format kabul edilmez:
-{"genel_degerlendirme": "...", "news_commentaries": [{"headline": "...", "commentary": "..."}], "content_suggestions": [{"type": "ekle/cikar", "title": "...", "reason": "..."}]}"""
+{"genel_degerlendirme": "...", "korelasyon_notu": "...", "news_commentaries": [{"headline": "...", "commentary": "..."}], "content_suggestions": [{"type": "ekle/cikar", "title": "...", "reason": "..."}]}"""
 
 EXPERIENCE_DESIGNER_SYSTEM_PROMPT = """Sen, finans sektörüne özel dijital ürün tasarımında 10+ yıl deneyimli, kıdemli bir UX/UI Tasarımcısısın.
 
@@ -265,7 +269,7 @@ class ContentEditorAgent:
         api_key = os.environ.get('ANTHROPIC_API_KEY', '')
         if not api_key:
             print("    ⚠️  ANTHROPIC_API_KEY tanımlı değil — İçerik Editörü atlanıyor.")
-            return {'success': False, 'genel_degerlendirme': None, 'news_commentaries': None}
+            return {'success': False, 'genel_degerlendirme': None, 'korelasyon_notu': None, 'news_commentaries': None}
 
         try:
             from anthropic import Anthropic
@@ -280,7 +284,9 @@ Bu verileri analiz ederek aşağıdaki JSON formatında yanıt ver:
 
 1. "genel_degerlendirme": Bültenin "Genel Değerlendirme" bölümü için profesyonel bir Türkçe piyasa özeti paragrafı (4-6 cümle). HTML tag kullanabilirsin (<strong>, <span class='highlight'>).
 
-2. "news_commentaries": Aşağıdaki her haber başlığı için 1-2 cümlelik Türkçe yorum.
+2. "korelasyon_notu": Güncel verilere bağlı kalarak varlık korelasyonları ve risk iştahı hakkında 1-2 cümlelik analitik bir söz/not (kısa ve vurucu).
+
+3. "news_commentaries": Aşağıdaki her haber başlığı için 1-2 cümlelik Türkçe yorum.
 
 Haber Başlıkları:
 {json.dumps(news_headlines, ensure_ascii=False)}
@@ -300,13 +306,14 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme."""
             return {
                 'success': True,
                 'genel_degerlendirme': result.get('genel_degerlendirme'),
+                'korelasyon_notu': result.get('korelasyon_notu'),
                 'news_commentaries': result.get('news_commentaries', []),
                 'content_suggestions': result.get('content_suggestions', []),
             }
 
         except Exception as e:
             print(f"    ⚠️  İçerik Editörü hatası: {e}")
-            return {'success': False, 'genel_degerlendirme': None, 'news_commentaries': None, 'content_suggestions': None}
+            return {'success': False, 'genel_degerlendirme': None, 'korelasyon_notu': None, 'news_commentaries': None, 'content_suggestions': None}
 
     def _parse_response(self, raw):
         """Extract JSON from the AI response, handling markdown code blocks."""
