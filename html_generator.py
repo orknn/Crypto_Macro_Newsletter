@@ -810,7 +810,6 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
         <div class="{smh_chg_cls}" style="font-size:10px; margin-top:4px;">{smh_chg_text}</div>
       </div>
     </div>
-    </div>
     <div style="margin-top:10px; font-size:11px; color:var(--text-dim); line-height:1.4;">
       💡 <strong style="color:var(--text-mid);">Gösterge Notu:</strong>
       {data.get('indicators_note', "2Y-10Y spread negatifken resesyon sinyali verir. Fed Balance Sheet artışı global likiditeyi gösterir. SMH, AI ve semiconductor sektörünün barometresidir.")}
