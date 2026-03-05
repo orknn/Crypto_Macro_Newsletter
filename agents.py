@@ -58,12 +58,14 @@ C) İÇERİK STRATEJİ ÖNERİLERİ:
 - Eklenmesi gereken yeni veri veya bölüm varsa öner (type: "ekle"). Ücretsiz API kaynağı da belirt.
 - Toplam 2-4 öneri yeterli.
 
-D) KORELASYON NOTU:
-- Günün verilerine bakarak (özellikle BTC, Altın, DXY, VIX, Nasdaq) piyasadaki risk algısı ve korelasyonlar hakkında 1-2 cümlelik kısa bir gözlem yaz.
-- Örneğin: "Bugün BTC ile altın pozitif korelasyonda, risk-off değil risk-on hareket" veya "DXY 104 seviyesine tutunurken risk varlıkları baskı altında".
+E) KPI BÖLÜM ANALİZLERİ (Yeni):
+Aşağıdaki 3 spesifik alan için, o anki verilere bakarak ziyaretçiyi eğiten, kısa ve analitik Türkçe birer "Gösterge Notu" yaz (1-2 cümle):
+- futures_note: Kripto Vadeli İşlem primleri (Basis) ne anlatıyor?
+- options_note: Deribit Opsiyon piyasasındaki Put/Call Ratio (PCR) ve DVOL (Zımni Volatilite) neye işaret ediyor?
+- indicators_note: Ek Piyasa Göstergelerindeki 2Y-10Y Spread, Stablecoin MCAP ve SMH tarafındaki değişimler makro risk iştahını nasıl etkiliyor?
 
 ÖNEMLİ: Yanıtını MUTLAKA aşağıdaki JSON formatında ver, başka format kabul edilmez:
-{"genel_degerlendirme": "...", "korelasyon_notu": "...", "news_commentaries": [{"headline": "...", "commentary": "..."}], "content_suggestions": [{"type": "ekle/cikar", "title": "...", "reason": "..."}]}"""
+{"genel_degerlendirme": "...", "korelasyon_notu": "...", "news_commentaries": [{"headline": "...", "commentary": "..."}], "content_suggestions": [{"type": "ekle/cikar", "title": "...", "reason": "..."}], "futures_note": "...", "options_note": "...", "indicators_note": "..."}"""
 
 EXPERIENCE_DESIGNER_SYSTEM_PROMPT = """Sen, finans sektörüne özel dijital ürün tasarımında 10+ yıl deneyimli, kıdemli bir UX/UI Tasarımcısısın.
 
@@ -288,6 +290,12 @@ Bu verileri analiz ederek aşağıdaki JSON formatında yanıt ver:
 
 3. "news_commentaries": Aşağıdaki her haber başlığı için 1-2 cümlelik Türkçe yorum.
 
+4. "futures_note": Crypto Futures Basis (Vadeli İşlem Primleri) anlık verisi üzerine eğitici analitik not (1-2 cümle).
+
+5. "options_note": Deribit Opsiyon verileri (PCR, DVOL) üzerine eğitici analitik not (1-2 cümle).
+
+6. "indicators_note": Ek Piyasa Göstergeleri (2Y-10Y Spread, Stablecoin, SMH) üzerine eğitici analitik not (1-2 cümle).
+
 Haber Başlıkları:
 {json.dumps(news_headlines, ensure_ascii=False)}
 
@@ -302,18 +310,25 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme."""
             
             # Parse JSON from response
             result = self._parse_response(raw_response)
-            print("    ✅ Genel Değerlendirme, Haber Yorumları ve İçerik Önerileri üretildi.")
+            print("    ✅ Genel Değerlendirme, Haber Yorumları ve Dinamik KPI Notları üretildi.")
             return {
                 'success': True,
                 'genel_degerlendirme': result.get('genel_degerlendirme'),
                 'korelasyon_notu': result.get('korelasyon_notu'),
                 'news_commentaries': result.get('news_commentaries', []),
                 'content_suggestions': result.get('content_suggestions', []),
+                'futures_note': result.get('futures_note'),
+                'options_note': result.get('options_note'),
+                'indicators_note': result.get('indicators_note'),
             }
 
         except Exception as e:
             print(f"    ⚠️  İçerik Editörü hatası: {e}")
-            return {'success': False, 'genel_degerlendirme': None, 'korelasyon_notu': None, 'news_commentaries': None, 'content_suggestions': None}
+            return {
+                'success': False, 'genel_degerlendirme': None, 'korelasyon_notu': None, 
+                'news_commentaries': None, 'content_suggestions': None,
+                'futures_note': None, 'options_note': None, 'indicators_note': None
+            }
 
     def _parse_response(self, raw):
         """Extract JSON from the AI response, handling markdown code blocks."""

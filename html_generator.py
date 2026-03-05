@@ -352,7 +352,7 @@ def _generate_news_stories(news_data, ai_commentaries=None):
       </div>''')
     return '\n'.join(items)
 
-def _generate_options_market(options_data):
+def _generate_options_market(options_data, options_note=None):
     """Generate the Options Market (Deribit) section."""
     if not options_data:
         return ""
@@ -383,7 +383,7 @@ def _generate_options_market(options_data):
     </div>
     <div style="margin-top:12px; font-size:11.5px; color:var(--text-dim); line-height:1.5;">
       💡 <strong style="color:var(--text-mid);">Opsiyon Piyasası Notu:</strong> 
-      DVOL endeksi piyasaların öngördüğü volatiliteti gösterir. Put/Call oranının 1'in altında olması call (alım) yönlü beklentinin ağırlıkta olduğuna işaret edebilir.
+      {options_note or "DVOL endeksi piyasaların öngördüğü volatiliteti gösterir. Put/Call oranının 1'in altında olması call (alım) yönlü beklentinin ağırlıkta olduğuna işaret edebilir."}
     </div>'''
 
 
@@ -810,9 +810,10 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
         <div class="{smh_chg_cls}" style="font-size:10px; margin-top:4px;">{smh_chg_text}</div>
       </div>
     </div>
+    </div>
     <div style="margin-top:10px; font-size:11px; color:var(--text-dim); line-height:1.4;">
       💡 <strong style="color:var(--text-mid);">Gösterge Notu:</strong>
-      2Y-10Y spread negatifken resesyon sinyali verir. Fed Balance Sheet artışı global likiditeyi gösterir. SMH, AI ve semiconductor sektörünün barometresidir.
+      {data.get('indicators_note', "2Y-10Y spread negatifken resesyon sinyali verir. Fed Balance Sheet artışı global likiditeyi gösterir. SMH, AI ve semiconductor sektörünün barometresidir.")}
     </div>'''
 
     # BTC 4-Hour Status with support/resistance
@@ -895,7 +896,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
         </div>
       </div>
       <div style="font-size:11.5px; color:var(--text-mid); line-height:1.5;">
-        🎯 {fb_desc}
+        🎯 {data.get('futures_note') or fb_desc}
       </div>
     </div>
     '''

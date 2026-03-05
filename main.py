@@ -128,6 +128,9 @@ def generate_daily_newsletter():
         data['ai_summary'] = None
         data['news_commentaries'] = None
         data['design_improvement_report'] = None
+        data['futures_note'] = None
+        data['options_note'] = None
+        data['indicators_note'] = None
     else:
         print("\n🤖 AI Agent'lar çalıştırılıyor...")
 
@@ -137,6 +140,9 @@ def generate_daily_newsletter():
         data['korelasyon_notu'] = editor_result.get('korelasyon_notu')
         data['news_commentaries'] = editor_result.get('news_commentaries')
         data['content_suggestions'] = editor_result.get('content_suggestions')
+        data['futures_note'] = editor_result.get('futures_note')
+        data['options_note'] = editor_result.get('options_note')
+        data['indicators_note'] = editor_result.get('indicators_note')
 
         # Kota aşımını önlemek için kısa bekleme
         import time
