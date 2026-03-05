@@ -882,20 +882,20 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     <div style="background:var(--navy-light); border:1px solid var(--navy-border); border-radius:8px; padding:16px;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
         <div style="font-size:12px; color:var(--text-bright); font-weight:500;">Annualized Futures Premium</div>
-        <div style="font-size:10px; padding:2px 8px; border-radius:12px; font-weight:600; text-transform:uppercase; {{fb_badge_style}}">{{fb_sen}}</div>
+        <div style="font-size:10px; padding:2px 8px; border-radius:12px; font-weight:600; text-transform:uppercase; {fb_badge_style}">{fb_sen}</div>
       </div>
       <div style="display:flex; gap:24px; margin-bottom:12px;">
         <div>
           <div style="font-size:9.5px; text-transform:uppercase; color:var(--text-dim); letter-spacing:1px; margin-bottom:4px;">BTC Basis</div>
-          <div style="font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:600; color:white;">{{fb_btc:.1f}}%</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:600; color:white;">{fb_btc:.1f}%</div>
         </div>
         <div>
           <div style="font-size:9.5px; text-transform:uppercase; color:var(--text-dim); letter-spacing:1px; margin-bottom:4px;">ETH Basis</div>
-          <div style="font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:600; color:white;">{{fb_eth:.1f}}%</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:600; color:white;">{fb_eth:.1f}%</div>
         </div>
       </div>
       <div style="font-size:11.5px; color:var(--text-mid); line-height:1.5;">
-        🎯 {{fb_desc}}
+        🎯 {fb_desc}
       </div>
     </div>
     '''
@@ -1457,12 +1457,6 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   <div class="section">
     <div class="section-label">BTC — Support & Resistance Analizi</div>
     {btc_status_html}
-  </div>
-
-  <!-- CRYPTO FUTURES BASIS -->
-  <div class="section">
-    <div class="section-label">Crypto Futures Basis Analizi</div>
-    {basis_html}
   </div>
 
   <!-- CRYPTO FUTURES BASIS -->
