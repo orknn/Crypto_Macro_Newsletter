@@ -758,6 +758,7 @@ def get_coinbase_premium_index():
 
 def get_macro_news():
     """Fetch real Macro News from Investing.com RSS feed"""
+    import base64
     news_items = []
     try:
         res = requests.get('https://www.investing.com/rss/news_285.rss', headers={'User-Agent': 'Mozilla/5.0'})
@@ -771,7 +772,14 @@ def get_macro_news():
                 
                 img_url = ""
                 if enclosure is not None and 'url' in enclosure.attrib:
-                    img_url = enclosure.attrib['url']
+                    raw_url = enclosure.attrib['url']
+                    try:
+                        img_res = requests.get(raw_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+                        if img_res.status_code == 200:
+                            encoded = base64.b64encode(img_res.content).decode('utf-8')
+                            img_url = f"data:image/jpeg;base64,{encoded}"
+                    except Exception as e:
+                        print(f"Error fetching image {raw_url}: {e}")
                 
                 news_items.append({
                     "title": title.text if title is not None else "",
