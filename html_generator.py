@@ -683,7 +683,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
 
     korelasyon_notu = data.get('korelasyon_notu')
     if korelasyon_notu:
-        summary_text += f"<br><br>💡 <strong style='color:var(--text-mid); font-weight:600;'>Gözlem:</strong> <span style='color:var(--text-bright); font-style:italic;'>{korelasyon_notu}</span>"
+        summary_text += f"<br><br>💡 <strong style='font-weight:600;'>Gözlem:</strong> <span style='font-style:italic;'>{korelasyon_notu}</span>"
 
     # ── Makro Scoreboard (Inline Bar) ──
     ms = data.get('macro_scoreboard', {})
