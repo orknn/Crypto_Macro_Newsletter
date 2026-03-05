@@ -861,6 +861,45 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     </div>
     '''
 
+    # Futures Basis Analysis
+    fb = data.get('crypto_futures_basis', {})
+    fb_btc = fb.get('btc_basis', 0)
+    fb_eth = fb.get('eth_basis', 0)
+    fb_sen = fb.get('sentiment', 'Neutral')
+    fb_desc = fb.get('description', '')
+    
+    # Sentiment Badge Color Map
+    fb_badges = {
+        'Strong Bullish': 'background:rgba(16,185,129,0.15); color:#10B981; border:1px solid rgba(16,185,129,0.4);',
+        'Bullish': 'background:rgba(16,185,129,0.1); color:#34d399; border:1px solid rgba(16,185,129,0.3);',
+        'Neutral': 'background:rgba(232,197,71,0.1); color:var(--straw); border:1px solid rgba(232,197,71,0.3);',
+        'Bearish': 'background:rgba(239,68,68,0.1); color:#fca5a5; border:1px solid rgba(239,68,68,0.3);',
+        'Strong Bearish': 'background:rgba(239,68,68,0.15); color:#EF4444; border:1px solid rgba(239,68,68,0.4);',
+    }
+    fb_badge_style = fb_badges.get(fb_sen, fb_badges['Neutral'])
+    
+    basis_html = f'''
+    <div style="background:var(--navy-light); border:1px solid var(--navy-border); border-radius:8px; padding:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+        <div style="font-size:12px; color:var(--text-bright); font-weight:500;">Annualized Futures Premium</div>
+        <div style="font-size:10px; padding:2px 8px; border-radius:12px; font-weight:600; text-transform:uppercase; {{fb_badge_style}}">{{fb_sen}}</div>
+      </div>
+      <div style="display:flex; gap:24px; margin-bottom:12px;">
+        <div>
+          <div style="font-size:9.5px; text-transform:uppercase; color:var(--text-dim); letter-spacing:1px; margin-bottom:4px;">BTC Basis</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:600; color:white;">{{fb_btc:.1f}}%</div>
+        </div>
+        <div>
+          <div style="font-size:9.5px; text-transform:uppercase; color:var(--text-dim); letter-spacing:1px; margin-bottom:4px;">ETH Basis</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:600; color:white;">{{fb_eth:.1f}}%</div>
+        </div>
+      </div>
+      <div style="font-size:11.5px; color:var(--text-mid); line-height:1.5;">
+        🎯 {{fb_desc}}
+      </div>
+    </div>
+    '''
+
     html = f'''<!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -1012,7 +1051,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   .down {{ color: var(--red); }}
 
   /* ── SECTION ── */
-  .section {{ padding: 16px 40px; border-bottom: 1px solid var(--navy-border); }}
+  .section {{ padding: 32px 40px; border-bottom: 1px solid var(--navy-border); }}
   .section-label {{ border-left: 4px solid var(--straw); padding-left: 10px; }}
   .summary-card, .kpi-card, .sparkline-wrap, .news-card {{ break-inside: avoid; page-break-inside: avoid; }}
   .heatmap-table tr {{ break-inside: avoid; page-break-inside: avoid; }}
@@ -1094,8 +1133,8 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   }}
   .kpi-value {{
     font-family: 'JetBrains Mono', monospace;
-    font-size: 18px;
-    font-weight: 500;
+    font-size: 20px;
+    font-weight: 600;
     color: var(--white);
     margin-bottom: 4px;
   }}
@@ -1174,7 +1213,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     padding: 8px 12px;
     font-size: 12.5px;
     font-weight: 500;
-    border-bottom: 1px solid #334155;
+    border-bottom: 1px solid var(--navy-border);
     vertical-align: middle;
     text-align: right;
   }}
@@ -1283,10 +1322,10 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   }}
   .story-headline {{
     font-family: 'Playfair Display', serif;
-    font-size: 15.5px;
+    font-size: 16px;
     font-weight: 700;
     color: var(--text-bright);
-    margin-bottom: 4px;
+    margin-bottom: 8px;
     line-height: 1.35;
   }}
   .story-body {{
@@ -1418,6 +1457,18 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   <div class="section">
     <div class="section-label">BTC — Support & Resistance Analizi</div>
     {btc_status_html}
+  </div>
+
+  <!-- CRYPTO FUTURES BASIS -->
+  <div class="section">
+    <div class="section-label">Crypto Futures Basis Analizi</div>
+    {basis_html}
+  </div>
+
+  <!-- CRYPTO FUTURES BASIS -->
+  <div class="section">
+    <div class="section-label">Crypto Futures Basis Analizi</div>
+    {basis_html}
   </div>
 
   <!-- OPSIYON PIYASALARI -->
