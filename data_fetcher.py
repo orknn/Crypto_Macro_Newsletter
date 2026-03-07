@@ -8,6 +8,51 @@ import xml.etree.ElementTree as ET
 # CRYPTO DATA
 # ═══════════════════════════════════════════
 
+def _fallback_crypto_prices_binance(watchlist):
+    """
+    Fallback method to fetch crypto prices from Binance API when CoinGecko rate limits.
+    """
+    results = []
+    try:
+        url = "https://api.binance.com/api/v3/ticker/24hr"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Build lookup by symbol
+        data_by_sym = {item['symbol']: item for item in data}
+        
+        for sym in watchlist:
+            if sym == 'HYPE':
+                # HYPE doesn't have a spot pair on Binance yet, return 0 or fetch from elsewhere if critical
+                results.append({
+                    'Symbol': sym, 'Current Price USD': 0.0,
+                    '1h %': 0.0, '24h %': 0.0, '7d %': 0.0, '30d %': 0.0,
+                })
+                continue
+                
+            binance_sym = f"{sym}USDT"
+            if binance_sym in data_by_sym:
+                item = data_by_sym[binance_sym]
+                results.append({
+                    'Symbol': sym,
+                    'Current Price USD': float(item.get('lastPrice', 0.0)),
+                    '1h %': 0.0,  # Binance doesn't provide 1h easily in 24hr ticker
+                    '24h %': float(item.get('priceChangePercent', 0.0)),
+                    '7d %': 0.0,  # Binance doesn't provide 7d easily
+                    '30d %': 0.0, # Binance doesn't provide 30d easily
+                })
+            else:
+                results.append({
+                    'Symbol': sym, 'Current Price USD': 0.0,
+                    '1h %': 0.0, '24h %': 0.0, '7d %': 0.0, '30d %': 0.0,
+                })
+        return results
+    except Exception as e:
+        print(f"Error fetching Binance fallback prices: {e}")
+        return [{'Symbol': sym, 'Current Price USD': 0.0, '1h %': 0.0, '24h %': 0.0, '7d %': 0.0, '30d %': 0.0} for sym in watchlist]
+
+
 def get_crypto_prices(watchlist):
     """
     Fetch prices, 1h change, 24h change, 7d change from CoinGecko.
@@ -68,8 +113,9 @@ def get_crypto_prices(watchlist):
                 })
         return results
     except Exception as e:
-        print(f"Error fetching crypto prices: {e}")
-        return []
+        print(f"Error fetching crypto prices from CoinGecko: {e}")
+        print("Falling back to Binance API...")
+        return _fallback_crypto_prices_binance(watchlist)
 
 def get_crypto_market_overview():
     """
@@ -757,20 +803,43 @@ def get_coinbase_premium_index():
 # ═══════════════════════════════════════════
 
 def get_macro_news():
-    """Fetch real Macro News from Investing.com RSS feed"""
+    """Fetch real Macro News from CoinTelegraph RSS feed"""
     import base64
+    import urllib.request
+    import xml.etree.ElementTree as ET
+    
     news_items = []
     try:
-        res = requests.get('https://www.investing.com/rss/news_285.rss', headers={'User-Agent': 'Mozilla/5.0'})
-        if res.status_code == 200:
-            root = ET.fromstring(res.content)
-            items = root.findall('.//item')
-            # Get up to 5 latest economy news items
-            for item in items[:5]:
-                title = item.find('title')
+        url = 'https://cointelegraph.com/rss'
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        response = urllib.request.urlopen(req, timeout=10)
+        data = response.read()
+        
+        root = ET.fromstring(data)
+        items = root.findall('.//item')
+        
+        # Get up to 5 latest crypto/macro news items
+        for item in items[:5]:
+            title_node = item.find('title')
+            # Look for media:content url for the image if available
+            # CoinTelegraph provides an image typically in <media:content>
+            namespace = {'media': 'http://search.yahoo.com/mrss/'}
+            media_content = item.find('media:content', namespace)
+            
+            img_url = ""
+            if media_content is not None and 'url' in media_content.attrib:
+                raw_url = media_content.attrib['url']
+                try:
+                    img_res = requests.get(raw_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+                    if img_res.status_code == 200:
+                        encoded = base64.b64encode(img_res.content).decode('utf-8')
+                        img_url = f"data:image/jpeg;base64,{encoded}"
+                except Exception as e:
+                    print(f"Error fetching image {raw_url}: {e}")
+            
+            # Use enclosure fallback if media:content not found
+            if not img_url:
                 enclosure = item.find('enclosure')
-                
-                img_url = ""
                 if enclosure is not None and 'url' in enclosure.attrib:
                     raw_url = enclosure.attrib['url']
                     try:
@@ -779,12 +848,12 @@ def get_macro_news():
                             encoded = base64.b64encode(img_res.content).decode('utf-8')
                             img_url = f"data:image/jpeg;base64,{encoded}"
                     except Exception as e:
-                        print(f"Error fetching image {raw_url}: {e}")
-                
-                news_items.append({
-                    "title": title.text if title is not None else "",
-                    "image_url": img_url
-                })
+                        pass
+            
+            news_items.append({
+                "title": title_node.text if title_node is not None else "",
+                "image_url": img_url
+            })
     except Exception as e:
         print(f"Error fetching Macro News: {e}")
         

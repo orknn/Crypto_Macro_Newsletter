@@ -46,6 +46,7 @@ A) GENEL DEĞERLENDİRME YAZIMI:
 - Finansal terimler İngilizce olsun (market cap, Fear & Greed Index, VIX, DXY, yield spread vb.).
 - Açıklamalar akıcı Türkçe olsun. Kuru veri listesi değil, analitik bir yorum olsun.
 - HTML tag kullanabilirsin: <strong> (vurgu), <span class='highlight'> (rakamsal vurgu).
+- DİKKAT: Sadece sana JSON içinde verilen verileri kullan. Eğer bir verinin değeri 0.0 veya eksik ise, fiyat veya veri uydurma (hallucination yapma!). O eksik verinin çekilemediğini belirt veya analizden çıkar.
 
 B) HABER YORUMLARI:
 - Her haber başlığı için 1-2 cümlelik kısa, keskin bir Türkçe yorum yaz.
