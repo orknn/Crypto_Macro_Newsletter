@@ -60,13 +60,14 @@ C) İÇERİK STRATEJİ ÖNERİLERİ:
 - Toplam 2-4 öneri yeterli.
 
 E) KPI BÖLÜM ANALİZLERİ (Yeni):
-Aşağıdaki 3 spesifik alan için, o anki verilere bakarak ziyaretçiyi eğiten, kısa ve analitik Türkçe birer "Gösterge Notu" yaz (1-2 cümle):
+Aşağıdaki 4 spesifik alan için, o anki verilere bakarak ziyaretçiyi eğiten, kısa ve analitik Türkçe birer "Gösterge Notu" yaz (1-2 cümle):
 - futures_note: Kripto Vadeli İşlem primleri (Basis) ne anlatıyor?
+- etf_note: Spot Bitcoin ETF akışları (özellikle IBIT ve FBTC) ve Kurumsal İlgi ne durumda?
 - options_note: Deribit Opsiyon piyasasındaki Put/Call Ratio (PCR) ve DVOL (Zımni Volatilite) neye işaret ediyor?
 - indicators_note: Ek Piyasa Göstergelerindeki 2Y-10Y Spread, Stablecoin MCAP ve SMH tarafındaki değişimler makro risk iştahını nasıl etkiliyor?
 
 ÖNEMLİ: Yanıtını MUTLAKA aşağıdaki JSON formatında ver, başka format kabul edilmez:
-{"genel_degerlendirme": "...", "korelasyon_notu": "...", "news_commentaries": [{"headline": "...", "commentary": "..."}], "content_suggestions": [{"type": "ekle/cikar", "title": "...", "reason": "..."}], "futures_note": "...", "options_note": "...", "indicators_note": "..."}"""
+{"genel_degerlendirme": "...", "korelasyon_notu": "...", "news_commentaries": [{"headline": "...", "commentary": "..."}], "content_suggestions": [{"type": "ekle/cikar", "title": "...", "reason": "..."}], "futures_note": "...", "etf_note": "...", "options_note": "...", "indicators_note": "..."}"""
 
 EXPERIENCE_DESIGNER_SYSTEM_PROMPT = """Sen, finans sektörüne özel dijital ürün tasarımında 10+ yıl deneyimli, kıdemli bir UX/UI Tasarımcısısın.
 
@@ -163,7 +164,8 @@ def _prepare_data_summary(data):
     # News
     news = data.get('macro_news', {})
     if news:
-        summary['news_headlines'] = news.get('news', [])
+        # Strip massive base64 image_urls before JSON dump to save tokens
+        summary['news_headlines'] = [{'title': n.get('title', '')} for n in news.get('news', [])]
 
     # Options data
     options = data.get('options_data', {})
@@ -178,6 +180,11 @@ def _prepare_data_summary(data):
              'forecast': e.get('forecast', '—'), 'actual': e.get('actual', '—')}
             for e in calendar[:5]
         ]
+        
+    # ETF Flows
+    etf = data.get('etf_flows', {})
+    if etf:
+        summary['etf_flows'] = etf
 
     # Current newsletter sections
     summary['current_sections'] = [
@@ -244,6 +251,7 @@ body { background: var(--navy); font-family: 'Inter', sans-serif; color: var(--t
             'KPI cards (6 horizontal)',
             'Coinbase Premium SVG bar chart',
             'BTC Support & Resistance card',
+            'Spot Bitcoin ETF Flows',
             'Deribit Options KPI cards',
             'Extra indicators (Yield Spread, Stablecoin, SMH)',
             'Asset tables (Commodities, Magnificent 7, Crypto)',
@@ -295,9 +303,11 @@ Bu verileri analiz ederek aşağıdaki JSON formatında yanıt ver:
 
 4. "futures_note": Crypto Futures Basis (Vadeli İşlem Primleri) anlık verisi üzerine eğitici analitik not (1-2 cümle).
 
-5. "options_note": Deribit Opsiyon verileri (PCR, DVOL) üzerine eğitici analitik not (1-2 cümle).
+5. "etf_note": Spot Bitcoin ETF Günlük Akış (Özellikle IBIT, FBTC) verisine ve kurumsal ilgiye dair eğitici analitik not (1-2 cümle).
 
-6. "indicators_note": Ek Piyasa Göstergeleri (2Y-10Y Spread, Stablecoin, SMH) üzerine eğitici analitik not (1-2 cümle).
+6. "options_note": Deribit Opsiyon verileri (PCR, DVOL) üzerine eğitici analitik not (1-2 cümle).
+
+7. "indicators_note": Ek Piyasa Göstergeleri (2Y-10Y Spread, Stablecoin, SMH) üzerine eğitici analitik not (1-2 cümle).
 
 Haber Başlıkları:
 {json.dumps(news_headlines, ensure_ascii=False)}
@@ -321,6 +331,7 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme."""
                 'news_commentaries': result.get('news_commentaries', []),
                 'content_suggestions': result.get('content_suggestions', []),
                 'futures_note': result.get('futures_note'),
+                'etf_note': result.get('etf_note'),
                 'options_note': result.get('options_note'),
                 'indicators_note': result.get('indicators_note'),
             }
@@ -330,28 +341,47 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme."""
             return {
                 'success': False, 'genel_degerlendirme': None, 'korelasyon_notu': None, 
                 'news_commentaries': None, 'content_suggestions': None,
-                'futures_note': None, 'options_note': None, 'indicators_note': None
+                'futures_note': None, 'etf_note': None, 'options_note': None, 'indicators_note': None
             }
 
     def _parse_response(self, raw):
         """Extract JSON from the AI response, handling markdown code blocks."""
         text = raw.strip()
-        # Remove markdown code fences if present
-        if text.startswith('```'):
-            lines = text.split('\n')
-            lines = [l for l in lines if not l.strip().startswith('```')]
-            text = '\n'.join(lines)
         try:
+            # Attempt to parse directly first
             return json.loads(text)
-        except json.JSONDecodeError:
-            # Try to find JSON object in the text
+        except json.JSONDecodeError as e:
+            # If direct parsing fails, try to extract from markdown code blocks
+            if text.startswith('```'):
+                if "```json" in raw:
+                    json_str = raw.split("```json")[1].split("```")[0].strip()
+                elif "```" in raw:
+                    # Fallback for generic code block
+                    json_str = raw.split("```")[1].split("```")[0].strip()
+                else:
+                    json_str = text # Should not happen if it starts with ```
+                
+                try:
+                    parsed = json.loads(json_str)
+                    return parsed
+                except json.JSONDecodeError as e_inner:
+                    print(f"JSON Parse Error (from markdown block): {e_inner}")
+                    print(f"RAW TEXT WAS: {raw}")
+                    return None
+            
+            # If not a markdown block and direct parse failed, try to find JSON object in the text
             start = text.find('{')
             end = text.rfind('}') + 1
             if start >= 0 and end > start:
                 try:
                     return json.loads(text[start:end])
-                except json.JSONDecodeError:
-                    pass
+                except json.JSONDecodeError as e_fallback:
+                    print(f"JSON Parse Error (fallback search): {e_fallback}")
+                    print(f"RAW TEXT WAS: {raw}")
+                    return None
+            
+            print(f"JSON Parse Error: {e}")
+            print(f"RAW TEXT WAS: {raw}")
             print("    ⚠️  AI yanıtı JSON olarak parse edilemedi, fallback kullanılıyor.")
             return {}
 

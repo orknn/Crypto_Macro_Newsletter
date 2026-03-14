@@ -919,49 +919,66 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     </div>
     '''
 
+def _generate_etf_flows(data):
+    """Generate the Spot Bitcoin ETF Flow section."""
+    etf = data.get('etf_flows')
+    if not etf:
+        return ""
+        
+    ibit = etf.get('IBIT_flow_m', 0)
+    fbtc = etf.get('FBTC_flow_m', 0)
+    total = etf.get('Total_flow_m', 0)
+    sentiment = etf.get('sentiment', 'Neutral')
+    note = data.get('etf_note', '')
+    
+    ibit_cls = "up" if ibit >= 0 else "down"
+    fbtc_cls = "up" if fbtc >= 0 else "down"
+    total_cls = "up" if total >= 0 else "down"
+    
+    ibit_sign = "+" if ibit > 0 else ""
+    fbtc_sign = "+" if fbtc > 0 else ""
+    total_sign = "+" if total > 0 else ""
+    
+    badge_style = 'background:rgba(232,197,71,0.1); color:var(--straw); border:1px solid rgba(232,197,71,0.3);'
+    if 'Inflow' in sentiment:
+        badge_style = 'background:rgba(16,185,129,0.15); color:#10B981; border:1px solid rgba(16,185,129,0.4);'
+    elif 'Outflow' in sentiment:
+        badge_style = 'background:rgba(239,68,68,0.15); color:#EF4444; border:1px solid rgba(239,68,68,0.4);'
+
+    return f'''
+    <div style="background:var(--navy-light); border:1px solid var(--navy-border); border-radius:8px; padding:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+        <div style="font-size:12px; color:var(--text-bright); font-weight:500;">Spot Bitcoin ETF Flows</div>
+        <div style="font-size:10px; padding:2px 8px; border-radius:12px; font-weight:600; text-transform:uppercase; {{badge_style}}">{sentiment}</div>
+      </div>
+      <div style="display:flex; gap:24px; margin-bottom:12px;">
+        <div>
+          <div style="font-size:9.5px; text-transform:uppercase; color:var(--text-dim); letter-spacing:1px; margin-bottom:4px;">Total Flow</div>
+          <div class="{total_cls}" style="font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:600;">{total_sign}${total:.1f}m</div>
+        </div>
+        <div>
+          <div style="font-size:9.5px; text-transform:uppercase; color:var(--text-dim); letter-spacing:1px; margin-bottom:4px;">IBIT (BlackRock)</div>
+          <div class="{ibit_cls}" style="font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:600;">{ibit_sign}${ibit:.1f}m</div>
+        </div>
+        <div>
+          <div style="font-size:9.5px; text-transform:uppercase; color:var(--text-dim); letter-spacing:1px; margin-bottom:4px;">FBTC (Fidelity)</div>
+          <div class="{fbtc_cls}" style="font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:600;">{fbtc_sign}${fbtc:.1f}m</div>
+        </div>
+      </div>
+      <div style="font-size:11.5px; color:var(--text-mid); line-height:1.5;">
+        🎯 {note}
+      </div>
+    </div>
+    '''
+
     html = f'''<!DOCTYPE html>
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Daily Financial Bulletin — Orkun Biçen</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
-  :root {{
-    --navy:        #1c2e4a;
-    --navy-light:  #253a5e;
-    --navy-card:   #1f3350;
-    --navy-border: #2e4872;
-    --navy-stripe: #243b58;
-    --straw:       #e8c547;
-    --straw-dim:   #c9a93a;
-    --straw-glow:  rgba(232,197,71,0.15);
-    --straw-faint: rgba(232,197,71,0.06);
-    --text-bright: #f0ead8;
-    --text-mid:    #a8bcd4;
-    --text-dim:    #5e7a9a;
-    --green:       #00d084;
-    --red:         #ff4757;
-    --white:       #ffffff;
-  }}
-
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-
-  body {{
-    background: var(--navy);
-    font-family: 'Inter', 'Helvetica Neue', 'Roboto', sans-serif;
-    color: var(--text-bright);
-    min-height: 100vh;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }}
-
-  .bulletin {{
-    max-width: 680px;
-    margin: 0 auto;
-    background: var(--navy);
-  }}
-
   /* ── HEADER ── */
   .header {{
     background: linear-gradient(160deg, #243f66 0%, var(--navy) 60%);
@@ -1472,10 +1489,13 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     {coinbase_premium}
   </div>
 
-  <!-- BTC 4-HOUR STATUS -->
+  <!-- BITCOIN ANALYSIS & ETF FLOWS -->
   <div class="section">
-    <div class="section-label">BTC — Support & Resistance Analizi</div>
+    <div class="section-label">BTC Analysis & ETF Flows</div>
     {btc_status_html}
+    <div style="margin-top:20px;">
+      {_generate_etf_flows(data)}
+    </div>
   </div>
 
   <!-- CRYPTO FUTURES BASIS -->

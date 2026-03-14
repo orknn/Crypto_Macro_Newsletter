@@ -6,7 +6,7 @@ from data_fetcher import (
     get_coinbase_premium_index, get_funding_rates, get_crypto_market_overview,
     get_magnificent_7, get_commodities, get_economic_calendar, get_options_market_data,
     get_global_liquidity_index, get_macro_scoreboard, get_sp500_sectors,
-    get_crypto_futures_basis
+    get_crypto_futures_basis, get_etf_flows
 )
 from agents import ContentEditorAgent, ExperienceDesignerAgent
 from html_generator import generate_newsletter_html
@@ -103,6 +103,9 @@ def generate_daily_newsletter():
     print("  → Crypto Futures Basis...")
     crypto_futures_basis = get_crypto_futures_basis()
 
+    print("  → Spot Bitcoin ETF Flows...")
+    etf_flows = get_etf_flows()
+
     data = {
         'crypto_prices': crypto_prices,
         'crypto_market_overview': crypto_market_overview,
@@ -119,6 +122,7 @@ def generate_daily_newsletter():
         'macro_scoreboard': macro_scoreboard,
         'sp500_sectors': sp500_sectors,
         'crypto_futures_basis': crypto_futures_basis,
+        'etf_flows': etf_flows,
     }
 
     # ── AI Agent Analysis ──
@@ -154,23 +158,23 @@ def generate_daily_newsletter():
 
     # ── Generate HTML ──
     print("\nHTML bülten oluşturuluyor...")
-    html_filename = 'daily_bulletin.html'
+    html_filename = 'daily_bulletin_yeni.html'
     generate_newsletter_html(data, html_filename)
 
     # ── Convert to PDF ──
     print("\nPDF'e dönüştürülüyor...")
-    pdf_filename = 'daily_bulletin.pdf'
+    pdf_filename = 'daily_bulletin_yeni.pdf'
     html_to_pdf(html_filename, pdf_filename)
 
     # ── Generate private AI report ──
     print("\nAI raporları oluşturuluyor (sadece editör için)...")
-    ai_report_file = generate_ai_report(data)
+    ai_report_file = generate_ai_report(data, output_filename="ai_reports_yeni.html")
 
     # ── Generate design preview ──
     design_report = data.get('design_improvement_report', {})
     design_preview_file = None
     if design_report and design_report.get('success') and design_report.get('report'):
-        design_preview_file = generate_design_preview(design_report['report'])
+        design_preview_file = generate_design_preview(design_report['report'], output_filename="design_preview_yeni.html")
 
     print(f"\n{'='*50}")
     print(f"  ✅ Bülten hazır!")
