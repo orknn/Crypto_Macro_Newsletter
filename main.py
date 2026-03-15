@@ -158,23 +158,23 @@ def generate_daily_newsletter():
 
     # ── Generate HTML ──
     print("\nHTML bülten oluşturuluyor...")
-    html_filename = 'daily_bulletin_yeni.html'
+    html_filename = 'daily_bulletin.html'
     generate_newsletter_html(data, html_filename)
 
     # ── Convert to PDF ──
     print("\nPDF'e dönüştürülüyor...")
-    pdf_filename = 'daily_bulletin_yeni.pdf'
+    pdf_filename = 'daily_bulletin.pdf'
     html_to_pdf(html_filename, pdf_filename)
 
     # ── Generate private AI report ──
     print("\nAI raporları oluşturuluyor (sadece editör için)...")
-    ai_report_file = generate_ai_report(data, output_filename="ai_reports_yeni.html")
+    ai_report_file = generate_ai_report(data, output_filename="ai_reports.html")
 
     # ── Generate design preview ──
     design_report = data.get('design_improvement_report', {})
     design_preview_file = None
     if design_report and design_report.get('success') and design_report.get('report'):
-        design_preview_file = generate_design_preview(design_report['report'], output_filename="design_preview_yeni.html")
+        design_preview_file = generate_design_preview(design_report['report'], output_filename="design_preview.html")
 
     print(f"\n{'='*50}")
     print(f"  ✅ Bülten hazır!")

@@ -367,7 +367,7 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme."""
                 except json.JSONDecodeError as e_inner:
                     print(f"JSON Parse Error (from markdown block): {e_inner}")
                     print(f"RAW TEXT WAS: {raw}")
-                    return None
+                    return {}
             
             # If not a markdown block and direct parse failed, try to find JSON object in the text
             start = text.find('{')
@@ -378,7 +378,7 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme."""
                 except json.JSONDecodeError as e_fallback:
                     print(f"JSON Parse Error (fallback search): {e_fallback}")
                     print(f"RAW TEXT WAS: {raw}")
-                    return None
+                    return {}
             
             print(f"JSON Parse Error: {e}")
             print(f"RAW TEXT WAS: {raw}")

@@ -649,10 +649,16 @@ def get_economic_calendar():
     """
     events = []
     try:
-        import cloudscraper
-        scraper = cloudscraper.create_scraper()
         url = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
-        response = scraper.get(url, timeout=15)
+        try:
+            import cloudscraper
+            scraper = cloudscraper.create_scraper()
+            response = scraper.get(url, timeout=15)
+        except ImportError:
+            import requests
+            headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'}
+            response = requests.get(url, headers=headers, timeout=15)
+            
         response.raise_for_status()
         
         data = response.json()

@@ -50,20 +50,8 @@ def send_newsletter_email(html_path="daily_bulletin.html",
       EMAIL_PASSWORD — Gmail App Password (NOT your regular password)
       EMAIL_TO       — recipient email(s), comma-separated for multiple
     """
-    email_from = os.environ.get("EMAIL_FROM")
-    email_password = os.environ.get("EMAIL_PASSWORD")
-    email_to = os.environ.get("EMAIL_TO")
 
-    if not all([email_from, email_password, email_to]):
-        print("❌ E-posta gönderimi için gerekli ortam değişkenleri eksik:")
-        if not email_from:
-            print("   - EMAIL_FROM ayarlanmamış")
-        if not email_password:
-            print("   - EMAIL_PASSWORD ayarlanmamış")
-        if not email_to:
-            print("   - EMAIL_TO ayarlanmamış")
-        return False
-
+    # ── Read or Build HTML content ──
     # ── Read or Build HTML content ──
     if data:
         # Build minimal HTML containing only Summary and News
@@ -91,7 +79,7 @@ def send_newsletter_email(html_path="daily_bulletin.html",
                     summary_text += f" Ayrıca <strong>ABD Tarım Dışı İstihdam</strong> verisi son olarak <strong>{actual}</strong> olarak açıklandı."
 
         news_list = data.get('macro_news', {}).get('news', [])
-        news_html = "".join([f"<li style='margin-bottom:12px; font-size:14px; color:#334155;'>{item}</li>" for item in news_list])
+        news_html = "".join([f"<li style='margin-bottom:12px; font-size:14px; color:#334155;'>{item.get('title') if isinstance(item, dict) else item}</li>" for item in news_list])
 
         html_content = f"""<!DOCTYPE html>
 <html>
@@ -137,6 +125,21 @@ def send_newsletter_email(html_path="daily_bulletin.html",
         # Inline images for email compatibility
         base_dir = os.path.dirname(os.path.abspath(html_path))
         html_content = _inline_images(html_content, base_dir)
+
+    # ── Preview feature ──
+    if os.environ.get("SAVE_EMAIL_PREVIEW") == "true":
+        with open("email_preview.html", "w", encoding="utf-8") as f:
+            f.write(html_content)
+        print(f"  📝 Email önizlemesi kaydedildi: {os.path.abspath('email_preview.html')}")
+
+    # ── Email Credentials Check ──
+    email_from = os.environ.get("EMAIL_FROM")
+    email_password = os.environ.get("EMAIL_PASSWORD")
+    email_to = os.environ.get("EMAIL_TO")
+
+    if not all([email_from, email_password, email_to]):
+        print("❌ E-posta gönderimi için gerekli ortam değişkenleri eksik. (Gönderim atlandı)")
+        return False
 
     # ── Build email ──
     today_str = datetime.now().strftime("%d %B %Y")
