@@ -188,20 +188,26 @@ def generate_daily_newsletter():
     print(f"{'='*50}")
 
     # ── Send email (if configured) ──
-    should_email = (
-        os.environ.get("SEND_EMAIL", "").lower() == "true"
-        or os.environ.get("CI", "").lower() == "true"
-        or "--send-email" in sys.argv
-    )
+    is_ci = os.environ.get("CI", "").lower() == "true"
+    env_send = os.environ.get("SEND_EMAIL", "").lower() == "true"
+    arg_send = "--send-email" in sys.argv
+
+    print(f"\nDebug E-posta Kontrolü:")
+    print(f"  - CI ortamı mı? {'Evet' if is_ci else 'Hayır'}")
+    print(f"  - SEND_EMAIL=true mu? {'Evet' if env_send else 'Hayır'}")
+    print(f"  - --send-email argümanı var mı? {'Evet' if arg_send else 'Hayır'}")
+
+    should_email = is_ci or env_send or arg_send
 
     if should_email:
         print("\n📧 E-posta gönderimi başlatılıyor...")
-        send_newsletter_email(html_filename, pdf_filename, data=data)
+        try:
+            send_newsletter_email(html_filename, pdf_filename, data=data)
+        except Exception as e:
+            print(f"  ❌ E-posta gönderimi sırasında beklenmedik hata: {e}")
     else:
-        print("\n💡 E-posta göndermek için:")
-        print("   • SEND_EMAIL=true python main.py")
-        print("   • python main.py --send-email")
-        print("   • GitHub Actions otomatik olarak gönderir")
+        print("\n💡 E-posta gönderimi atlandı (yapılandırma gereği).")
+        print("   Göndermek için: python main.py --send-email veya SEND_EMAIL=true set edin.")
 
 
 if __name__ == "__main__":

@@ -13,7 +13,21 @@ env/
 *.png
 *.pdf
 daily_bulletin.html
+daily_bulletin_*.html
 ai_reports.html
+ai_reports_*.html
+design_preview.html
+design_preview_*.html
+
+# Backup & temp files
+*_Bak.py
+*_Update.py
+*_old.py
+test_*.py
+update_script.py
+
+# Extra venvs
+.venv_new/
 
 # OS
 .DS_Store
