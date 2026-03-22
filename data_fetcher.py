@@ -956,3 +956,47 @@ def get_options_market_data():
         'max_pain_price': 85000 + random.randint(-2000, 2000) # Max pain is complex to calculate in real time efficiently without heavy processing
     }
 
+
+# ═══════════════════════════════════════════
+# BIST 100 & TRY/USD
+# ═══════════════════════════════════════════
+
+def get_bist_data():
+    """
+    Fetch BIST 100 and USD/TRY from yfinance.
+    XU100.IS = BIST 100
+    USDTRY=X = USD/TRY
+    Returns keys matching html_generator.py expectations:
+      bist100, bist100_chg, usd_try, try_chg
+    """
+    results = {
+        'bist100': 0.0,
+        'bist100_chg': 0.0,
+        'usd_try': 0.0,
+        'try_chg': 0.0,
+    }
+    try:
+        # BIST 100
+        bist = yf.download('XU100.IS', period='5d', progress=False)
+        if not bist.empty and 'Close' in bist and len(bist['Close']) >= 2:
+            current = float(bist['Close'].iloc[-1].item())
+            prev = float(bist['Close'].iloc[-2].item())
+            results['bist100'] = current
+            results['bist100_chg'] = ((current - prev) / prev) * 100
+            print(f"      ✅ BIST 100: {current:,.0f}")
+    except Exception as e:
+        print(f"      ⚠️  Error fetching BIST 100: {e}")
+
+    try:
+        # USD/TRY
+        fx = yf.download('USDTRY=X', period='5d', progress=False)
+        if not fx.empty and 'Close' in fx and len(fx['Close']) >= 2:
+            current = float(fx['Close'].iloc[-1].item())
+            prev = float(fx['Close'].iloc[-2].item())
+            results['usd_try'] = current
+            results['try_chg'] = ((current - prev) / prev) * 100
+            print(f"      ✅ USD/TRY: {current:.4f}")
+    except Exception as e:
+        print(f"      ⚠️  Error fetching USD/TRY: {e}")
+
+    return results

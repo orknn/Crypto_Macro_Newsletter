@@ -42,16 +42,17 @@ Görevin üçlü:
 A) GENEL DEĞERLENDİRME YAZIMI:
 - Günün piyasa verilerini analiz ederek profesyonel bir Türkçe "Genel Değerlendirme" paragrafı yaz.
 - Paragraf 4-6 cümle olsun. Okuyucuya günün piyasa resmini çizsin.
-- Makroekonomik göstergeler (VIX, DXY, 10Y Yield), kripto piyasası (Fear & Greed, BTC Dominance, Total Market Cap) ve varsa günün öne çıkan ekonomik verilerini (CPI, NFP gibi) kapsasın.
+- Makroekonomik göstergeler (VIX, DXY, 10Y Yield), kripto piyasası (Fear & Greed, BTC Dominance, Total Market Cap) ve varsa günün öne çıkan ekonomik verilerini kapsasın.
+- ÖNEMLİ KURAL: Eğer o hafta açıklanmış veya açıklanacak olan enflasyon (CPI, PPI, PCE) veya ABD Merkez Bankası (Fed / FOMC) faiz kararı verisi varsa, BUNU KESİNLİKLE genel değerlendirmenin içine dahil edip yorumla.
 - Finansal terimler İngilizce olsun (market cap, Fear & Greed Index, VIX, DXY, yield spread vb.).
 - Açıklamalar akıcı Türkçe olsun. Kuru veri listesi değil, analitik bir yorum olsun.
 - HTML tag kullanabilirsin: <strong> (vurgu), <span class='highlight'> (rakamsal vurgu).
 - DİKKAT: Sadece sana JSON içinde verilen verileri kullan. Eğer bir verinin değeri 0.0 veya eksik ise, fiyat veya veri uydurma (hallucination yapma!). O eksik verinin çekilemediğini belirt veya analizden çıkar.
 
-B) HABER YORUMLARI:
-- Her haber başlığı için 1-2 cümlelik kısa, keskin bir Türkçe yorum yaz.
-- Yorum, haberin piyasalar üzerindeki olası etkisini açıklasın.
-- Finansal terimler İngilizce, yorumlar Türkçe olsun.
+B) HABER YORUMLARI & MANŞET ÇEVİRİSİ:
+- Sana verilen İngilizce (veya karmaşık) haber başlıklarını (original_headline) al ve profesyonel, ciddi, premium bir ekonomi gazetesi (örn. Bloomberg, Aposto) diliyle Türkçe manşete (turkish_headline) çevir.
+- Çevrilen her haber başlığı için profesyonel ve analitik 1-2 cümlelik kısa bir Türkçe yorum (commentary) yaz. Yorum, haberin piyasalar üzerindeki olası etkisini açıklasın.
+- Finansal terimler İngilizce okunsun (örn. yield, market cap), geri kalan her şey Türkçe olsun.
 
 C) İÇERİK STRATEJİ ÖNERİLERİ:
 - Bültendeki mevcut bölümleri değerlendir.
@@ -67,7 +68,7 @@ Aşağıdaki 4 spesifik alan için, o anki verilere bakarak ziyaretçiyi eğiten
 - indicators_note: Ek Piyasa Göstergelerindeki 2Y-10Y Spread, Stablecoin MCAP ve SMH tarafındaki değişimler makro risk iştahını nasıl etkiliyor?
 
 ÖNEMLİ: Yanıtını MUTLAKA aşağıdaki JSON formatında ver, başka format kabul edilmez:
-{"genel_degerlendirme": "...", "korelasyon_notu": "...", "news_commentaries": [{"headline": "...", "commentary": "..."}], "content_suggestions": [{"type": "ekle/cikar", "title": "...", "reason": "..."}], "futures_note": "...", "etf_note": "...", "options_note": "...", "indicators_note": "..."}"""
+{"genel_degerlendirme": "...", "korelasyon_notu": "...", "news_commentaries": [{"original_headline": "...", "turkish_headline": "...", "commentary": "..."}], "content_suggestions": [{"type": "ekle/cikar", "title": "...", "reason": "..."}], "futures_note": "...", "etf_note": "...", "options_note": "...", "indicators_note": "..."}"""
 
 EXPERIENCE_DESIGNER_SYSTEM_PROMPT = """Sen, finans sektörüne özel dijital ürün tasarımında 10+ yıl deneyimli, kıdemli bir UX/UI Tasarımcısısın.
 
@@ -299,7 +300,7 @@ Bu verileri analiz ederek aşağıdaki JSON formatında yanıt ver:
 
 2. "korelasyon_notu": Güncel verilere bağlı kalarak varlık korelasyonları ve risk iştahı hakkında 1-2 cümlelik analitik bir söz/not (kısa ve vurucu).
 
-3. "news_commentaries": Aşağıdaki her haber başlığı için 1-2 cümlelik Türkçe yorum.
+3. "news_commentaries": Aşağıdaki her haber başlığı için JSON içerisinde "original_headline" (orijinal İngilizce başlık), "turkish_headline" (çevrilmiş profesyonel Türkçe manşet) ve "commentary" (1-2 cümlelik Türkçe analiz) alanlarını doldur.
 
 4. "futures_note": Crypto Futures Basis (Vadeli İşlem Primleri) anlık verisi üzerine eğitici analitik not (1-2 cümle).
 

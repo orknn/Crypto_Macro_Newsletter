@@ -107,13 +107,13 @@ def _generate_economic_calendar(events):
         actual = ev.get('actual', '—')
         rows.append(f'''
         <tr>
-          <td style="color:var(--mid); white-space:nowrap;">{ev.get('date', '')}</td>
+          <td style="color:#a1a1aa; white-space:nowrap;">{ev.get('date', '')}</td>
           <td class="mono">{ev.get('time', '')}</td>
           <td><div class="asset-name"><div class="asset-dot"></div>{ev.get('event', '')}</div></td>
-          <td style="color:var(--mid);">{ev.get('country', '')}</td>
-          <td class="mono" style="color:var(--mid);">{ev.get('previous', '—')}</td>
+          <td style="color:#a1a1aa;">{ev.get('country', '')}</td>
+          <td class="mono" style="color:#a1a1aa;">{ev.get('previous', '—')}</td>
           <td class="mono" style="color:var(--gold);">{ev.get('forecast', '—')}</td>
-          <td class="mono" style="font-weight:600; color:var(--ink);">{actual}</td>
+          <td class="mono" style="font-weight:600; color:#e6edf3;">{actual}</td>
         </tr>''')
     return '\n'.join(rows)
 
@@ -157,7 +157,7 @@ def _generate_coinbase_premium(data):
     current = cp.get('current_value', 0)
 
     if not trend:
-        return '<div style="color:var(--mid); text-align:center;">Veri bulunamadı</div>'
+        return '<div style="color:#a1a1aa; text-align:center;">Veri bulunamadı</div>'
 
     min_val = min(d['value'] for d in trend)
     max_val = max(d['value'] for d in trend)
@@ -231,13 +231,13 @@ def _generate_coinbase_premium(data):
     <div class="sparkline-wrap" style="padding:20px 24px;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
         <div>
-          <div style="font-size:12px; color:var(--mid); margin-bottom:4px;">BTC/USD · Coinbase vs Global Spread</div>
-          <div style="font-family:var(--mono); font-size:26px; color:var(--ink);">{current:+.4f}%</div>
+          <div style="font-size:12px; color:#a1a1aa; margin-bottom:4px;">BTC/USD · Coinbase vs Global Spread</div>
+          <div style="font-family:var(--mono); font-size:26px; color:#e6edf3;">{current:+.4f}%</div>
           <div style="font-size:11px; color:{signal_cls}; margin-top:2px;">{signal_text}</div>
         </div>
-        <div style="display:flex; gap:16px; font-size:11px; color:var(--mid);">
-          <div style="text-align:center;"><div style="font-family:var(--mono); color:var(--ink); font-size:13px;">{max_val:+.3f}%</div><div>24h High</div></div>
-          <div style="text-align:center;"><div style="font-family:var(--mono); color:var(--ink); font-size:13px;">{min_val:+.3f}%</div><div>24h Low</div></div>
+        <div style="display:flex; gap:16px; font-size:11px; color:#a1a1aa;">
+          <div style="text-align:center;"><div style="font-family:var(--mono); color:#e6edf3; font-size:13px;">{max_val:+.3f}%</div><div>24h High</div></div>
+          <div style="text-align:center;"><div style="font-family:var(--mono); color:#e6edf3; font-size:13px;">{min_val:+.3f}%</div><div>24h Low</div></div>
         </div>
       </div>
       <div style="position:relative;">
@@ -248,8 +248,8 @@ def _generate_coinbase_premium(data):
           {''.join(y_labels_svg)}
         </svg>
       </div>
-      <div style="margin-top:10px; padding:8px 12px; background:var(--cream2); border:1px solid rgba(232,197,71,0.15); border-radius:6px; font-size:11px; color:var(--mid); line-height:1.6;">
-        💡 <strong style="color:var(--mid);">Reading guide:</strong> Positive values indicate US institutional buying pressure. Sustained positive premium is a bullish signal for BTC.
+      <div style="margin-top:10px; padding:8px 12px; background:#161b22; border:1px solid rgba(232,197,71,0.15); border-radius:6px; font-size:11px; color:#a1a1aa; line-height:1.6;">
+        💡 <strong style="color:#a1a1aa;">Reading guide:</strong> Positive values indicate US institutional buying pressure. Sustained positive premium is a bullish signal for BTC.
       </div>
     </div>'''
 
@@ -262,7 +262,7 @@ def _generate_asset_table(assets, columns, id_prefix="row"):
         symbol = asset.get('Symbol', asset.get('Ticker', ''))
         # Combine name and symbol on the same line if they're different
         if name != symbol:
-            display = f"{name} <span style='color:var(--mid); font-size:11px; margin-left:6px;'>{symbol}</span>"
+            display = f"{name} <span style='color:#a1a1aa; font-size:11px; margin-left:6px;'>{symbol}</span>"
         else:
             display = name
             
@@ -312,7 +312,11 @@ def _generate_news_stories(news_data, ai_commentaries=None):
     ai_lookup = {}
     if ai_commentaries:
         for item in ai_commentaries:
-            ai_lookup[item.get('headline', '')] = item.get('commentary', '')
+            key_headline = item.get('original_headline') or item.get('headline', '')
+            ai_lookup[key_headline] = {
+                'turkish_headline': item.get('turkish_headline', ''),
+                'commentary': item.get('commentary', '')
+            }
 
     # Keyword-based fallback commentary
     def _fallback_commentary(headline):
@@ -346,15 +350,19 @@ def _generate_news_stories(news_data, ai_commentaries=None):
             headline = news_item.get('title', '')
             img_url = news_item.get('image_url', '')
 
-        # Use AI commentary if available, otherwise fallback
-        commentary = ai_lookup.get(headline) or _fallback_commentary(headline)
-        ai_label = 'AI Insight' if ai_lookup.get(headline) else 'Analiz'
+        # Use AI commentary and precise translated headline if available, otherwise fallback
+        ai_data = ai_lookup.get(headline, {})
+        turkish_headline = ai_data.get('turkish_headline', '')
+        display_headline = turkish_headline if turkish_headline else headline
+        
+        commentary = ai_data.get('commentary') or _fallback_commentary(headline)
+        ai_label = 'AI Insight' if ai_data else 'Analiz'
         
         # Build image HTML if present
         img_html = ""
         if img_url:
             img_html = f'''<div style="flex-shrink:0; margin-right:16px;">
-              <img src="{img_url}" alt="News Thumbnail" style="width:72px; height:72px; object-fit:cover; border-radius:8px; border:1px solid var(--border);">
+              <img src="{img_url}" alt="News Thumbnail" style="width:72px; height:72px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,255,255,.06);">
             </div>'''
             
         items.append(f'''
@@ -364,8 +372,8 @@ def _generate_news_stories(news_data, ai_commentaries=None):
           {img_html}
           <div style="flex:1;">
             <div class="story-tag">Makro</div>
-            <div class="story-headline">{headline}</div>
-            <div style="margin-top:4px; font-size:11px; font-style:italic; color:var(--mid); line-height:1.5;">🤖 <strong style="color:var(--gold); font-style:normal;">{ai_label}:</strong> {commentary}</div>
+            <div class="story-headline">{display_headline}</div>
+            <div style="margin-top:4px; font-size:11px; font-style:italic; color:#a1a1aa; line-height:1.5;">🤖 <strong style="color:var(--gold); font-style:normal;">{ai_label}:</strong> {commentary}</div>
           </div>
         </div>
       </div>''')
@@ -400,8 +408,8 @@ def _generate_options_market(options_data, options_note=None):
         <div class="kpi-value">{oi/1000:.1f}K BTC</div>
       </div>
     </div>
-    <div style="margin-top:12px; font-size:11.5px; color:var(--mid); line-height:1.5;">
-      💡 <strong style="color:var(--mid);">Opsiyon Piyasası Notu:</strong> 
+    <div style="margin-top:12px; font-size:11.5px; color:#a1a1aa; line-height:1.5;">
+      💡 <strong style="color:#a1a1aa;">Opsiyon Piyasası Notu:</strong> 
       {options_note or "DVOL endeksi piyasaların öngördüğü volatiliteti gösterir. Put/Call oranının 1'in altında olması call (alım) yönlü beklentinin ağırlıkta olduğuna işaret edebilir."}
     </div>'''
 
@@ -439,7 +447,7 @@ def _md_to_html(md_text):
                 in_list = False
             heading = stripped[4:]
             heading = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', heading)
-            html_lines.append(f'<h5 style="color:var(--mid); font-size:12px; font-weight:600; margin:12px 0 6px;">{heading}</h5>')
+            html_lines.append(f'<h5 style="color:#a1a1aa; font-size:12px; font-weight:600; margin:12px 0 6px;">{heading}</h5>')
             continue
 
         # List items
@@ -448,9 +456,9 @@ def _md_to_html(md_text):
                 html_lines.append('<ul style="margin:4px 0; padding-left:20px;">')
                 in_list = True
             item = stripped[2:]
-            item = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color:var(--ink);">\1</strong>', item)
+            item = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color:#e6edf3;">\1</strong>', item)
             item = re.sub(r'`(.*?)`', r'<code style="background:rgba(232,197,71,0.1); padding:1px 5px; border-radius:3px; font-size:11px; color:var(--gold);">\1</code>', item)
-            html_lines.append(f'<li style="margin-bottom:6px; font-size:12px; color:var(--mid); line-height:1.6;">{item}</li>')
+            html_lines.append(f'<li style="margin-bottom:6px; font-size:12px; color:#a1a1aa; line-height:1.6;">{item}</li>')
             continue
 
         # Regular paragraph - close list if open
@@ -460,9 +468,9 @@ def _md_to_html(md_text):
 
         # Bold + code + inline formatting
         p = stripped
-        p = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color:var(--ink);">\1</strong>', p)
+        p = re.sub(r'\*\*(.*?)\*\*', r'<strong style="color:#e6edf3;">\1</strong>', p)
         p = re.sub(r'`(.*?)`', r'<code style="background:rgba(232,197,71,0.1); padding:1px 5px; border-radius:3px; font-size:11px; color:var(--gold);">\1</code>', p)
-        html_lines.append(f'<p style="margin:4px 0; font-size:12px; color:var(--mid); line-height:1.65;">{p}</p>')
+        html_lines.append(f'<p style="margin:4px 0; font-size:12px; color:#a1a1aa; line-height:1.65;">{p}</p>')
 
     if in_list:
         html_lines.append('</ul>')
@@ -491,10 +499,10 @@ def _generate_agent_section(title, icon, report_data):
     return f'''
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
       <span style="font-size:18px;">{icon}</span>
-      <span style="font-size:11px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--mid);">{title}</span>
+      <span style="font-size:11px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:#a1a1aa;">{title}</span>
       {status_badge}
     </div>
-    <div style="background:var(--cream2); border:1px solid var(--border); border-radius:10px; padding:20px 24px; position:relative; overflow:hidden;">
+    <div style="background:#161b22; border:1px solid rgba(255,255,255,.06); border-radius:10px; padding:20px 24px; position:relative; overflow:hidden;">
       <div style="position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(to right, var(--gold), transparent); opacity:0.5;"></div>
       {report_html}
     </div>'''
@@ -673,27 +681,27 @@ def _generate_etf_flows(data):
         badge_style = 'background:rgba(239,68,68,0.15); color:#EF4444; border:1px solid rgba(239,68,68,0.4);'
 
     return f'''
-    <div style="background:var(--cream2); border:1px solid var(--border); border-radius:8px; padding:16px;">
+    <div style="background:#161b22; border:1px solid rgba(255,255,255,.06); padding:16px;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
-        <div style="font-size:12px; color:var(--ink); font-weight:500;">Spot Bitcoin ETF Flows</div>
+        <div style="font-size:12px; color:#e6edf3; font-weight:500;">Spot Bitcoin ETF Flows</div>
         <div style="font-size:10px; padding:2px 8px; border-radius:12px; font-weight:600; text-transform:uppercase; {badge_style}">{sentiment}</div>
       </div>
       <div style="display:flex; gap:24px; margin-bottom:12px;">
         <div>
-          <div style="font-size:9.5px; text-transform:uppercase; color:var(--mid); letter-spacing:1px; margin-bottom:4px;">Total Flow</div>
+          <div style="font-size:9.5px; text-transform:uppercase; color:#a1a1aa; letter-spacing:1px; margin-bottom:4px;">Total Flow</div>
           <div class="{total_cls}" style="font-family:var(--mono); font-size:16px; font-weight:600;">{total_sign}${total:.1f}m</div>
         </div>
         <div>
-          <div style="font-size:9.5px; text-transform:uppercase; color:var(--mid); letter-spacing:1px; margin-bottom:4px;">IBIT (BlackRock)</div>
+          <div style="font-size:9.5px; text-transform:uppercase; color:#a1a1aa; letter-spacing:1px; margin-bottom:4px;">IBIT (BlackRock)</div>
           <div class="{ibit_cls}" style="font-family:var(--mono); font-size:16px; font-weight:600;">{ibit_sign}${ibit:.1f}m</div>
         </div>
         <div>
-          <div style="font-size:9.5px; text-transform:uppercase; color:var(--mid); letter-spacing:1px; margin-bottom:4px;">FBTC (Fidelity)</div>
+          <div style="font-size:9.5px; text-transform:uppercase; color:#a1a1aa; letter-spacing:1px; margin-bottom:4px;">FBTC (Fidelity)</div>
           <div class="{fbtc_cls}" style="font-family:var(--mono); font-size:16px; font-weight:600;">{fbtc_sign}${fbtc:.1f}m</div>
         </div>
       </div>
-      <div style="font-size:11.5px; color:var(--mid); line-height:1.5;">
-        🎯 {note}
+      <div style="font-size:10px; color:#8b949e; font-style:italic; line-height:1.4;">
+        * {note}
       </div>
     </div>
     '''
@@ -747,11 +755,17 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
         # Inject actuals from economic calendar if available
         for ev in data.get('economic_calendar', []):
             actual = ev.get('actual', '—')
+            event_name = ev.get('event', '')
             if actual != '—':
-                if 'CPI' in ev.get('event', '') or 'TÜFE' in ev.get('event', '') or 'PCE' in ev.get('event', ''):
-                    summary_text += f" Öte yandan, piyasaların merakla beklediği <strong>{ev.get('event', '')}</strong> verisi <strong>{actual}</strong> seviyesinde gerçekleşti."
-                elif 'Non-Farm' in ev.get('event', '') or 'Tarım Dışı' in ev.get('event', ''):
+                if 'CPI' in event_name or 'TÜFE' in event_name or 'PCE' in event_name or 'PPI' in event_name or 'ÜFE' in event_name:
+                    summary_text += f" Öte yandan, piyasaların yakından takip ettiği <strong>{event_name}</strong> verisi <strong>{actual}</strong> seviyesinde gerçekleşti."
+                elif 'Non-Farm' in event_name or 'Tarım Dışı' in event_name:
                     summary_text += f" Ayrıca <strong>ABD Tarım Dışı İstihdam</strong> verisi son olarak <strong>{actual}</strong> olarak açıklandı."
+                elif 'Fed' in event_name or 'Interest Rate' in event_name or 'Funds Rate' in event_name:
+                    summary_text += f" <strong>{event_name}</strong> kararı beklentilere paralel/karşı olarak <strong>{actual}</strong> seviyesinde açıklandı."
+            else:
+                if 'CPI' in event_name or 'PPI' in event_name or 'PCE' in event_name or 'Fed' in event_name or 'Funds Rate' in event_name or 'Non-Farm' in event_name:
+                    summary_text += f" Bu hafta piyasaların odağında açıklanacak olan <strong>{event_name}</strong> verisi (beklenti: {ev.get('forecast', '—')}) bulunuyor."
 
     korelasyon_notu = data.get('korelasyon_notu')
     if korelasyon_notu:
@@ -771,22 +785,22 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     pmi_chg_text, pmi_chg_cls = _fmt_change(pmi_chg)
 
     macro_scoreboard_html = f'''
-    <div style="display:flex; justify-content:space-between; align-items:center; background:var(--cream2); border:1px solid var(--border); border-radius:8px; padding:10px 16px; margin-top:16px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; background:#161b22; border:1px solid rgba(255,255,255,.06); border-radius:8px; padding:10px 16px; margin-top:16px;">
       <div style="display:flex; align-items:center; gap:8px;">
-        <span style="font-size:10px; color:var(--mid); text-transform:uppercase; font-weight:600; letter-spacing:1px;">DXY</span>
-        <span style="font-family:var(--mono); font-size:13px; color:var(--ink); font-weight:500;">{dxy:.2f}</span>
+        <span style="font-size:10px; color:#a1a1aa; text-transform:uppercase; font-weight:600; letter-spacing:1px;">DXY</span>
+        <span style="font-family:var(--mono); font-size:13px; color:#e6edf3; font-weight:500;">{dxy:.2f}</span>
         <span class="{dxy_chg_cls}" style="font-size:11px;">{dxy_chg_text}</span>
       </div>
-      <div style="width:1px; height:16px; background:var(--navy-border);"></div>
+      <div style="width:1px; height:16px; background:rgba(255,255,255,.06);"></div>
       <div style="display:flex; align-items:center; gap:8px;">
-        <span style="font-size:10px; color:var(--mid); text-transform:uppercase; font-weight:600; letter-spacing:1px;">M2 Supply</span>
-        <span style="font-family:var(--mono); font-size:13px; color:var(--ink); font-weight:500;">${m2:.1f}T</span>
+        <span style="font-size:10px; color:#a1a1aa; text-transform:uppercase; font-weight:600; letter-spacing:1px;">M2 Supply</span>
+        <span style="font-family:var(--mono); font-size:13px; color:#e6edf3; font-weight:500;">${m2:.1f}T</span>
         <span class="{m2_chg_cls}" style="font-size:11px;">{m2_chg_text}</span>
       </div>
-      <div style="width:1px; height:16px; background:var(--navy-border);"></div>
+      <div style="width:1px; height:16px; background:rgba(255,255,255,.06);"></div>
       <div style="display:flex; align-items:center; gap:8px;">
-        <span style="font-size:10px; color:var(--mid); text-transform:uppercase; font-weight:600; letter-spacing:1px;">US PMI</span>
-        <span style="font-family:var(--mono); font-size:13px; color:var(--ink); font-weight:500;">{pmi:.1f}</span>
+        <span style="font-size:10px; color:#a1a1aa; text-transform:uppercase; font-weight:600; letter-spacing:1px;">US PMI</span>
+        <span style="font-family:var(--mono); font-size:13px; color:#e6edf3; font-weight:500;">{pmi:.1f}</span>
         <span class="{pmi_chg_cls}" style="font-size:11px;">{pmi_chg_text}</span>
       </div>
     </div>
@@ -815,20 +829,20 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
             chg = s.get('Change %', 0)
             chg_text, chg_cls = _fmt_change(chg)
             # Create a simple colored tile for the heatmap
-            bg_color = 'rgba(16, 185, 129, 0.15)' if chg > 0 else ('rgba(239, 68, 68, 0.15)' if chg < 0 else 'rgba(255, 255, 255, 0.05)')
-            border_color = 'rgba(16, 185, 129, 0.4)' if chg > 0 else ('rgba(239, 68, 68, 0.4)' if chg < 0 else 'rgba(255, 255, 255, 0.1)')
+            bg_color = 'rgba(63,185,80,.04)' if chg > 0 else ('rgba(248,81,73,.04)' if chg < 0 else 'rgba(255,255,255,.02)')
+            border_color = 'rgba(63,185,80,.2)' if chg > 0 else ('rgba(248,81,73,.2)' if chg < 0 else 'rgba(255,255,255,.06)')
             sp500_rows_list.append(f'''
-            <div style="background:{bg_color}; border:1px solid {border_color}; border-radius:6px; padding:6px; display:flex; flex-direction:column; align-items:center; justify-content:center;">
-                <div style="font-size:9.5px; color:var(--mid); letter-spacing:0.5px; margin-bottom:2px; text-transform:uppercase;">{name}</div>
-                <div style="font-family:var(--mono); font-size:12px; font-weight:600; color:var(--ink);">{sym}</div>
-                <div class="{chg_cls}" style="font-family:var(--mono); font-size:10.5px; margin-top:2px;">{chg:.2f}%</div>
+            <div style="background:{bg_color}; border:1px solid {border_color}; padding:7px 6px; text-align:center;">
+                <div style="font-size:7.5px; color:#a1a1aa; letter-spacing:0.5px; margin-bottom:2px; text-transform:uppercase;">{name}</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:500; color:#c9d1d9; margin-bottom:2px;">{sym}</div>
+                <div class="{chg_cls}" style="font-family:'JetBrains Mono',monospace; font-size:10px;">{chg:.2f}%</div>
             </div>''')
         sp500_rows = f'''
-        <div style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">
-          <span style="font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--mid); font-weight:600;">📊 S&P 500 Sectors</span>
-          <div style="flex:1; height:1px; background:var(--navy-border);"></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#a1a1aa">📊 S&P 500 Sectors</span>
+          <div style="flex:1;height:0.5px;background:rgba(255,255,255,.06)"></div>
         </div>
-        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(105px, 1fr)); gap:8px; margin-bottom:16px;">
+        <div class="sp500-grid" style="margin-bottom:16px">
           {''.join(sp500_rows_list)}
         </div>
         '''
@@ -860,32 +874,64 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     gl_weekly_text, gl_weekly_cls = _fmt_change(gl_weekly)
 
     extra_indicators = f'''
-    <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:1px; background:var(--border); border:1px solid var(--border);">
-      <div style="background:var(--cream); padding:14px 16px;">
-        <div style="font-family:var(--mono); font-size:8px; letter-spacing:1px; text-transform:uppercase; color:var(--mid); margin-bottom:6px;">2Y-10Y Spread</div>
-        <div style="font-family:var(--mono); font-size:16px; font-weight:500; color:var(--ink);">{yield_spread:.2f}%</div>
+    <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:1px; background:var(--border); border:1px solid rgba(255,255,255,.06);">
+      <div style="background:#161b22; padding:12px 14px;">
+        <div style="font-family:var(--mono); font-size:8px; letter-spacing:1px; text-transform:uppercase; color:#a1a1aa; margin-bottom:6px;">2Y-10Y Spread</div>
+        <div style="font-family:var(--mono); font-size:16px; font-weight:500; color:#e6edf3;">{yield_spread:.2f}%</div>
         <div class="{spread_cls}" style="font-family:var(--mono); font-size:10px; margin-top:4px;">{spread_status}</div>
       </div>
-      <div style="background:var(--cream); padding:14px 16px;">
-        <div style="font-family:var(--mono); font-size:8px; letter-spacing:1px; text-transform:uppercase; color:var(--mid); margin-bottom:6px;">Fed Balance Sheet</div>
-        <div style="font-family:var(--mono); font-size:16px; font-weight:500; color:var(--ink);">{gl_value}</div>
+      <div style="background:#161b22; padding:12px 14px;">
+        <div style="font-family:var(--mono); font-size:8px; letter-spacing:1px; text-transform:uppercase; color:#a1a1aa; margin-bottom:6px;">Fed Balance Sheet</div>
+        <div style="font-family:var(--mono); font-size:16px; font-weight:500; color:#e6edf3;">{gl_value}</div>
         <div class="{gl_weekly_cls}" style="font-family:var(--mono); font-size:10px; margin-top:4px;">W: {gl_weekly_text}</div>
       </div>
-      <div style="background:var(--cream); padding:14px 16px;">
-        <div style="font-family:var(--mono); font-size:8px; letter-spacing:1px; text-transform:uppercase; color:var(--mid); margin-bottom:6px;">Stablecoin Mcap</div>
-        <div style="font-family:var(--mono); font-size:16px; font-weight:500; color:var(--ink);">${stablecoin_mcap/1e9:.1f}B</div>
-        <div style="font-family:var(--mono); font-size:10px; margin-top:4px; color:var(--mid);">Dom: %{stablecoin_dom:.1f}</div>
+      <div style="background:#161b22; padding:12px 14px;">
+        <div style="font-family:var(--mono); font-size:8px; letter-spacing:1px; text-transform:uppercase; color:#a1a1aa; margin-bottom:6px;">Stablecoin Mcap</div>
+        <div style="font-family:var(--mono); font-size:16px; font-weight:500; color:#e6edf3;">${stablecoin_mcap/1e9:.1f}B</div>
+        <div style="font-family:var(--mono); font-size:10px; margin-top:4px; color:#a1a1aa;">Dom: %{stablecoin_dom:.1f}</div>
       </div>
-      <div style="background:var(--cream); padding:14px 16px;">
-        <div style="font-family:var(--mono); font-size:8px; letter-spacing:1px; text-transform:uppercase; color:var(--mid); margin-bottom:6px;">SMH (Semi ETF)</div>
-        <div style="font-family:var(--mono); font-size:16px; font-weight:500; color:var(--ink);">${smh_price:,.2f}</div>
+      <div style="background:#161b22; padding:12px 14px;">
+        <div style="font-family:var(--mono); font-size:8px; letter-spacing:1px; text-transform:uppercase; color:#a1a1aa; margin-bottom:6px;">SMH (Semi ETF)</div>
+        <div style="font-family:var(--mono); font-size:16px; font-weight:500; color:#e6edf3;">${smh_price:,.2f}</div>
         <div class="{smh_chg_cls}" style="font-family:var(--mono); font-size:10px; margin-top:4px;">{smh_chg_text}</div>
       </div>
     </div>
-    <div style="margin-top:10px; font-size:11px; color:var(--mid); line-height:1.4;">
-      💡 <strong style="color:var(--mid);">Gösterge Notu:</strong>
+    <div style="margin-top:10px; font-size:11px; color:#a1a1aa; line-height:1.4;">
+      💡 <strong style="color:#a1a1aa;">Gösterge Notu:</strong>
       {data.get('indicators_note', "2Y-10Y spread negatifken resesyon sinyali verir. Fed Balance Sheet artışı global likiditeyi gösterir. SMH, AI ve semiconductor sektörünün barometresidir.")}
     </div>'''
+
+    # ── BIST 100 & TRY/USD ──
+    bist_data = data.get('bist_try', {})
+    bist_val = f"{bist_data.get('bist100', 0):,.0f}" if bist_data.get('bist100', 0) else '—'
+    bist_chg = bist_data.get('bist100_chg', 0)
+    bist_chg_text, bist_cls = _fmt_change(bist_chg)
+    usd_try = bist_data.get('usd_try', 0)
+    usd_try_val = f"{usd_try:.2f}" if usd_try else '—'
+    try_chg = bist_data.get('try_chg', 0)
+    try_chg_text, try_cls = _fmt_change(try_chg)
+
+    # ── FUNDING RATES ──
+    fr = data.get('funding_rates', {})
+    def fmt_fr(val):
+        if val is None: return '—', 'neu'
+        s = f"{val:+.4f}%"
+        cls = 'up' if val > 0 else ('down' if val < 0 else 'neu')
+        return s, cls
+    btc_fr_str, btc_fr_cls = fmt_fr(fr.get('BTC'))
+    eth_fr_str, eth_fr_cls = fmt_fr(fr.get('ETH'))
+    sol_fr_str, sol_fr_cls = fmt_fr(fr.get('SOL'))
+
+    # ── OPEN INTEREST ──
+    oi = data.get('open_interest', {})
+    def fmt_oi(val, chg):
+        if not val: return '—', '—', 'neu'
+        v_str = f"{val/1000:.1f}K" if val < 1e6 else f"{val/1e6:.2f}M"
+        chg_str, cls = _fmt_change(chg)
+        return v_str, chg_str, cls
+    btc_oi_str, btc_oi_chg_str, btc_oi_chg_cls = fmt_oi(oi.get('BTC', {}).get('oi'), oi.get('BTC', {}).get('oi_chg_24h'))
+    eth_oi_str, eth_oi_chg_str, eth_oi_chg_cls = fmt_oi(oi.get('ETH', {}).get('oi'), oi.get('ETH', {}).get('oi_chg_24h'))
+    sol_oi_str, sol_oi_chg_str, sol_oi_chg_cls = fmt_oi(oi.get('SOL', {}).get('oi'), oi.get('SOL', {}).get('oi_chg_24h'))
 
     # BTC 4-Hour Status with support/resistance
     cp = data.get('coinbase_premium', {})
@@ -919,15 +965,15 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     <div class="sparkline-wrap" style="padding:18px 24px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
         <div style="display:flex; align-items:center; gap:12px;">
-          <div style="font-family:var(--mono); font-size:22px; font-weight:500; color:var(--ink);">${btc_price:,.0f}</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:500; color:#e6edf3;">${btc_price:,.0f}</div>
           <div class="{btc_chg_cls}" style="font-family:var(--mono); font-size:13px;">{btc_chg_text}</div>
         </div>
         <div style="display:flex; gap:20px; font-size:11px;">
-          <div style="text-align:center;"><div style="color:var(--mid); margin-bottom:2px;">Support Level</div><div style="font-family:var(--mono); color:#10B981; font-size:13px;">${btc_support:,.0f}</div></div>
-          <div style="text-align:center;"><div style="color:var(--mid); margin-bottom:2px;">Resistance Level</div><div style="font-family:var(--mono); color:#EF4444; font-size:13px;">${btc_resistance:,.0f}</div></div>
+          <div style="text-align:center;"><div style="color:#a1a1aa; margin-bottom:2px;">Support Level</div><div style="font-family:var(--mono); color:#10B981; font-size:13px;">${btc_support:,.0f}</div></div>
+          <div style="text-align:center;"><div style="color:#a1a1aa; margin-bottom:2px;">Resistance Level</div><div style="font-family:var(--mono); color:#EF4444; font-size:13px;">${btc_resistance:,.0f}</div></div>
         </div>
       </div>
-      <div style="padding:10px 14px; background:var(--cream2); border-left:3px solid {btc_status_color}; border-radius:0 6px 6px 0; font-size:12.5px; color:var(--mid); line-height:1.65;">
+      <div style="padding:10px 14px; background:#161b22; border-left:3px solid {btc_status_color}; border-radius:0 6px 6px 0; font-size:12.5px; color:#a1a1aa; line-height:1.65;">
         📈 {btc_analysis}
       </div>
     </div>
@@ -951,520 +997,207 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     fb_badge_style = fb_badges.get(fb_sen, fb_badges['Neutral'])
     
     basis_html = f'''
-    <div style="background:var(--cream2); border:1px solid var(--border); border-radius:8px; padding:16px;">
+    <div style="background:#161b22; border:1px solid rgba(255,255,255,.06); padding:16px;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
-        <div style="font-size:12px; color:var(--ink); font-weight:500;">Annualized Futures Premium</div>
+        <div style="font-size:12px; color:#e6edf3; font-weight:500;">Annualized Futures Premium</div>
         <div style="font-size:10px; padding:2px 8px; border-radius:12px; font-weight:600; text-transform:uppercase; {fb_badge_style}">{fb_sen}</div>
       </div>
       <div style="display:flex; gap:24px; margin-bottom:12px;">
         <div>
-          <div style="font-size:9.5px; text-transform:uppercase; color:var(--mid); letter-spacing:1px; margin-bottom:4px;">BTC Basis</div>
-          <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:var(--ink);">{fb_btc:.1f}%</div>
+          <div style="font-size:9.5px; text-transform:uppercase; color:#a1a1aa; letter-spacing:1px; margin-bottom:4px;">BTC Basis</div>
+          <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:#e6edf3;">{fb_btc:.1f}%</div>
         </div>
         <div>
-          <div style="font-size:9.5px; text-transform:uppercase; color:var(--mid); letter-spacing:1px; margin-bottom:4px;">ETH Basis</div>
-          <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:var(--ink);">{fb_eth:.1f}%</div>
+          <div style="font-size:9.5px; text-transform:uppercase; color:#a1a1aa; letter-spacing:1px; margin-bottom:4px;">ETH Basis</div>
+          <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:#e6edf3;">{fb_eth:.1f}%</div>
         </div>
       </div>
-      <div style="font-size:11.5px; color:var(--mid); line-height:1.5;">
+      <div style="font-size:11.5px; color:#a1a1aa; line-height:1.5;">
         🎯 {data.get('futures_note') or fb_desc}
       </div>
     </div>
     '''
+
+    # ================= CSS STYLES =================
+    css_styles = """
+:root{--bg:#0a0e14;--bg2:#0d1117;--bg3:#131920;--border:rgba(57,211,83,.12);--green:#39d353;--green2:#2ea043;--amber:#e3b341;--red:#f85149;--cyan:#58a6ff;--text:#c9d1d9;--dim:#a1a1aa;--faint:#21262d;--mono:'JetBrains Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);-webkit-font-smoothing:antialiased;font-size:12px;line-height:1.6}
+.bul{max-width:720px;margin:0 auto;background:var(--bg);border-left:1px solid var(--border);border-right:1px solid var(--border)}
+/* TERMINAL WINDOW HEADER */
+.hdr{background:var(--bg3);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;justify-content:space-between;align-items:center}
+.hdr-dots{display:flex;gap:6px;align-items:center}
+.hdr-dots::before{content:'● ● ●';color:var(--faint);font-size:10px;letter-spacing:4px}
+.hdr-logo{font-size:12px;font-weight:600;color:var(--green);letter-spacing:1px}
+.hdr-logo span{color:var(--red)}
+.hdr-date{font-size:10px;color:var(--dim);letter-spacing:.5px;text-align:right}
+.hdr-ed{font-size:9px;color:var(--faint);letter-spacing:1px;text-transform:uppercase;margin-top:2px}
+/* TICKER */
+.ticker{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 20px;display:flex;overflow-x:auto}
+.ticker::-webkit-scrollbar{display:none}
+.ti{padding:8px 14px 8px 0;margin-right:14px;border-right:1px solid var(--border);flex-shrink:0;display:flex;flex-direction:column;gap:1px}
+.ti:last-child{border-right:none}
+.ti-name{font-size:8px;color:var(--dim);letter-spacing:1.5px;text-transform:uppercase}
+.ti-val{font-size:12px;color:var(--text);font-weight:500}
+.ti-chg{font-size:9px}
+.up, .heatmap-table td.up{color:var(--green);font-weight:500}
+.down, .heatmap-table td.down{color:var(--red);font-weight:500}
+.neu, .heatmap-table td.neu{color:var(--dim)}
+/* SECTION */
+.section{padding:16px 20px;border-bottom:1px solid var(--border)}
+.section-label{font-size:10px;letter-spacing:1px;color:var(--green);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.section-label::before{content:'$';color:var(--green2);font-weight:700;font-size:12px}
+.section-label::after{content:'';flex:1;height:1px;background:var(--border)}
+/* SUMMARY */
+.summary-card{background:var(--bg2);border-left:2px solid var(--green);padding:12px 16px}
+.summary-text{font-size:11px;line-height:1.8;color:var(--dim);font-family:var(--mono)}
+.summary-text strong{color:var(--text)}
+.summary-text .highlight{color:var(--amber);font-weight:600}
+.obs{background:var(--bg2);border-left:2px solid var(--amber);padding:8px 14px;margin-top:8px;font-size:10px;color:var(--dim);line-height:1.7;font-family:var(--mono)}
+.obs-lbl{color:var(--amber);font-size:8px;letter-spacing:1px;font-weight:600;margin-right:6px}
+/* SCOREBOARD */
+.scores{display:flex;background:var(--bg2);border:1px solid var(--border);margin-top:10px}
+.score{flex:1;padding:8px 10px;border-right:1px solid var(--border);text-align:center}
+.score:last-child{border-right:none}
+.score-lbl{font-size:8px;letter-spacing:1px;color:var(--dim);text-transform:uppercase;margin-bottom:3px}
+.score-val{font-size:13px;color:var(--text);font-weight:500}
+.score-chg{font-size:9px;margin-top:2px}
+/* KPI */
+.kpi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--border)}
+.kpi-card{background:var(--bg2);padding:10px 12px}
+.kpi-label{font-size:8px;letter-spacing:1px;color:var(--dim);text-transform:uppercase;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi-value{font-size:18px;color:var(--green);font-weight:600;letter-spacing:-.5px}
+.kpi-change{font-size:9px;margin-top:2px}
+/* IND GRID */
+.ind-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--border)}
+.ind{background:var(--bg2);padding:10px 12px}
+.ind-lbl{font-size:8px;letter-spacing:1px;color:var(--dim);text-transform:uppercase;margin-bottom:4px}
+.ind-val{font-size:14px;color:var(--text);font-weight:500}
+.ind-chg{font-size:9px;margin-top:2px}
+/* BIST/TRY PANEL */
+.bist-panel{display:flex;background:var(--bg2);border:1px solid var(--border);margin-top:10px}
+.bist-item{flex:1;padding:10px 14px;border-right:1px solid var(--border);text-align:center}
+.bist-item:last-child{border-right:none}
+.bist-lbl{font-size:8px;letter-spacing:1px;color:var(--dim);text-transform:uppercase;margin-bottom:4px}
+.bist-val{font-size:16px;color:var(--text);font-weight:500}
+.bist-flag{font-size:9px;color:var(--dim);margin-top:2px;letter-spacing:.5px}
+/* FUNDING RATES */
+.funding-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--border);margin-top:8px}
+.funding-item{background:var(--bg2);padding:10px 12px;text-align:center}
+.funding-sym{font-size:8px;letter-spacing:1px;color:var(--dim);text-transform:uppercase;margin-bottom:4px}
+.funding-val{font-size:16px;font-weight:500}
+.funding-lbl{font-size:9px;color:var(--dim);margin-top:2px}
+/* OI TABLE */
+.oi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--border);margin-top:8px}
+.oi-item{background:var(--bg2);padding:10px 12px;text-align:center}
+.oi-sym{font-size:8px;letter-spacing:1px;color:var(--dim);text-transform:uppercase;margin-bottom:4px}
+.oi-val{font-size:13px;color:var(--text);font-weight:500}
+.oi-chg{font-size:9px;margin-top:2px}
+/* CALENDAR */
+.econ-calendar{width:100%;border-collapse:collapse;table-layout:fixed}
+.econ-calendar th{font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--green2);padding:6px 8px;text-align:left;border-bottom:1px solid var(--border);background:var(--bg2);font-weight:500}
+.econ-calendar th:nth-child(n+5){text-align:right}
+.econ-calendar td{padding:6px 8px;font-size:10px;border-bottom:1px solid rgba(57,211,83,.06);color:var(--dim);vertical-align:middle}
+.econ-calendar td:nth-child(n+5){text-align:right;font-size:10px}
+.econ-calendar tr:last-child td{border-bottom:none}
+.econ-calendar tbody tr:nth-child(even){background:rgba(57,211,83,.02)}
+.econ-calendar tbody tr:hover{background:rgba(57,211,83,.04)}
+/* HEATMAP TABLE */
+.heatmap-table{width:100%;border-collapse:collapse;table-layout:fixed}
+.heatmap-table th{font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--green2);padding:6px 8px;text-align:right;border-bottom:1px solid var(--border);background:var(--bg2);font-weight:500}
+.heatmap-table th:first-child{text-align:left}
+.heatmap-table td{padding:6px 8px;font-size:11px;border-bottom:1px solid rgba(57,211,83,.06);vertical-align:middle;text-align:right;color:var(--dim)}
+.heatmap-table td:first-child{text-align:left;color:var(--text);font-weight:500}
+.heatmap-table tr:last-child td{border-bottom:none}
+.heatmap-table tbody tr:nth-child(even){background:rgba(57,211,83,.02)}
+.heatmap-table tbody tr:hover{background:rgba(57,211,83,.05)}
+.asset-name{display:flex;align-items:center;gap:5px}
+.asset-dot{width:4px;height:4px;border-radius:0;background:var(--green);flex-shrink:0}
+.mono{font-family:var(--mono);font-size:11px}
+.cell-bar{display:flex;align-items:center;gap:5px;justify-content:flex-end}
+.cell-mini-bar{width:48px;height:3px;background:rgba(57,211,83,.1);overflow:hidden}
+.cell-mini-fill{height:100%}
+.cell-mini-fill.pos{background:var(--green)}
+.cell-mini-fill.neg{background:var(--red)}
+.cell-mini-fill.overbought{background:var(--green2)}
+/* SP500 GRID */
+.sp500-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(85px,1fr));gap:2px}
+.sp500-tile{background:var(--bg2);border:1px solid var(--border);padding:6px;text-align:center}
+.sp500-tile.pos{border-color:rgba(57,211,83,.25);background:rgba(57,211,83,.04)}
+.sp500-tile.neg{border-color:rgba(248,81,73,.25);background:rgba(248,81,73,.04)}
+.sp500-name{font-size:8px;color:var(--dim);letter-spacing:.5px;margin-bottom:2px}
+.sp500-sym{font-size:10px;font-weight:500;color:var(--text);margin-bottom:2px}
+/* COINBASE PREMIUM */
+.sparkline-wrap{background:var(--bg2);border:1px solid var(--border);padding:14px 18px}
+/* ETF / BASIS / OPTIONS */
+.data-box{background:var(--bg2);border:1px solid var(--border);padding:14px}
+.data-box-hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
+.data-box-title{font-size:11px;color:var(--text);font-weight:500;font-family:var(--mono)}
+.badge{font-size:9px;padding:2px 8px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.badge-green{background:rgba(57,211,83,.1);color:var(--green);border:1px solid rgba(57,211,83,.3)}
+.badge-red{background:rgba(248,81,73,.1);color:var(--red);border:1px solid rgba(248,81,73,.3)}
+.badge-amber{background:rgba(227,179,65,.1);color:var(--amber);border:1px solid rgba(227,179,65,.3)}
+.data-metrics{display:flex;gap:24px;margin-bottom:10px}
+.data-metric-lbl{font-size:9px;text-transform:uppercase;color:var(--dim);letter-spacing:1px;margin-bottom:4px}
+.data-metric-val{font-size:15px;font-weight:600;color:var(--text)}
+.data-note{font-size:10px;color:var(--dim);line-height:1.6;font-family:var(--mono)}
+/* STORIES */
+.story-list{display:flex;flex-direction:column;gap:0}
+.story-item{padding:12px 0;border-bottom:1px solid var(--border)}
+.story-item:last-child{border-bottom:none;padding-bottom:0}
+.story-inner{display:flex;gap:12px}
+.story-num{font-size:10px;color:var(--green2);width:18px;flex-shrink:0;padding-top:2px}
+.story-tag{font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--green);margin-bottom:4px}
+.story-headline{font-size:12px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:4px;font-family:var(--mono)}
+.story-insight{background:var(--bg);border-left:2px solid var(--green);padding:6px 10px;margin-top:4px;font-size:10px;color:var(--dim);line-height:1.6;font-family:var(--mono)}
+.ins-lbl{color:var(--green);font-size:8px;letter-spacing:1px;font-weight:600;margin-right:5px}
+/* FOOTER */
+.footer{background:var(--bg3);border-top:1px solid var(--border);padding:12px 20px;display:flex;justify-content:space-between;align-items:center}
+.footer-brand{font-size:10px;color:var(--green2);letter-spacing:1px}
+.footer-disc{background:var(--bg);border-top:1px solid var(--border);padding:10px 20px 14px;font-size:9px;color:var(--faint);text-align:center;line-height:1.6;letter-spacing:.3px}
+/* SUB HEADER */
+.sub-hd{display:flex;align-items:center;gap:8px;margin:12px 0 8px}
+.sub-hd-txt{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--green2)}
+.sub-hd-line{flex:1;height:1px;background:var(--border)}
+/* SCANLINE OVERLAY */
+.bul::after{content:'';position:fixed;top:0;left:0;width:100%;height:100%;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px);pointer-events:none;z-index:9999}
+@media(max-width:540px){
+  .hdr,.section,.footer{padding-left:14px;padding-right:14px}
+  .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ind-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .scores{flex-wrap:wrap}
+  .score{flex:1 1 45%}
+}
+    """
 
     html = f'''<!DOCTYPE html>
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="x-apple-disable-message-reformatting">
 <title>Daily Financial Bulletin — nocashflow.net</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,800;1,700&family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  /* ── RESET & BASE ── */
-  * {{ margin:0; padding:0; box-sizing:border-box; }}
-  body {{
-    background: #f0ebe0;
-    color: #1a1410;
-    font-family: 'Source Serif 4', Georgia, serif;
-    -webkit-font-smoothing: antialiased;
-    font-size: 15px;
-    line-height: 1.6;
-  }}
-
-  /* ── COLOUR SYSTEM ── */
-  :root {{
-    --cream:   #f0ebe0;
-    --cream2:  #e8e2d6;
-    --cream3:  #ddd7ca;
-    --ink:     #1a1410;
-    --ink2:    #2d2620;
-    --ink3:    #3d352a;
-    --mid:     #7a6e62;
-    --dim:     #a89e92;
-    --border:  rgba(26,20,16,.12);
-    --border2: rgba(26,20,16,.06);
-    --accent:  #b5292a;
-    --gold:    #8b6914;
-    --green:   #1a6b3a;
-    --red:     #b5292a;
-    --serif:   'Playfair Display', Georgia, serif;
-    --body:    'Source Serif 4', Georgia, serif;
-    --mono:    'DM Mono', monospace;
-  }}
-
-  /* ── WRAPPER ── */
-  .bulletin {{
-    max-width: 680px;
-    margin: 0 auto;
-    background: var(--cream);
-    border: 1px solid var(--border);
-  }}
-
-  /* ── HEADER ── */
-  .header {{
-    padding: 32px 40px 24px;
-    border-bottom: 3px solid var(--ink);
-    background: var(--cream);
-  }}
-  .header-top {{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-  }}
-  .logo-mark {{
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }}
-  .logo-icon {{
-    width: 32px; height: 32px;
-    background: var(--ink);
-    border-radius: 4px;
-    display: flex; align-items: center; justify-content: center;
-  }}
-  .logo-text {{
-    font-family: var(--mono);
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--mid);
-  }}
-  .date-badge {{
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--mid);
-    letter-spacing: 0.5px;
-    border-left: 2px solid var(--border);
-    padding-left: 12px;
-  }}
-  .header-title {{
-    font-family: var(--serif);
-    font-size: clamp(28px, 5vw, 40px);
-    font-weight: 800;
-    line-height: 1.05;
-    color: var(--ink);
-    letter-spacing: -1px;
-    margin-bottom: 6px;
-  }}
-  .header-title span {{ color: var(--accent); font-style: italic; }}
-  .header-sub {{
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--mid);
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-top: 4px;
-  }}
-
-  /* ── TICKER BAR ── */
-  .ticker-bar {{
-    background: var(--ink);
-    padding: 0 40px;
-    display: flex;
-    gap: 0;
-    overflow-x: auto;
-    border-bottom: 1px solid var(--ink);
-  }}
-  .ticker-bar::-webkit-scrollbar {{ display: none; }}
-  .ticker-item {{
-    padding: 10px 20px 10px 0;
-    margin-right: 20px;
-    border-right: 1px solid rgba(255,255,255,0.1);
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }}
-  .ticker-item:last-child {{ border-right: none; }}
-  .ticker-name {{
-    font-family: var(--mono);
-    font-size: 9px;
-    letter-spacing: 1.5px;
-    color: rgba(255,255,255,0.4);
-    text-transform: uppercase;
-  }}
-  .ticker-price {{
-    font-family: var(--mono);
-    font-size: 14px;
-    font-weight: 500;
-    color: rgba(255,255,255,0.9);
-  }}
-  .ticker-change {{ font-family: var(--mono); font-size: 10px; }}
-  .up   {{ color: #2d9e5f; }}
-  .down {{ color: var(--accent); }}
-
-  /* ── SECTION ── */
-  .section {{
-    padding: 32px 40px;
-    border-bottom: 1px solid var(--border);
-  }}
-  .section-label {{
-    font-family: var(--mono);
-    font-size: 9px;
-    letter-spacing: 2.5px;
-    text-transform: uppercase;
-    color: var(--mid);
-    margin-bottom: 18px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }}
-  .section-label::before {{
-    content: '';
-    width: 16px;
-    height: 2px;
-    background: var(--accent);
-    flex-shrink: 0;
-  }}
-  .section-label::after {{
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-  }}
-
-  /* ── SUMMARY CARD ── */
-  .summary-card {{
-    border-left: 3px solid var(--accent);
-    padding: 16px 20px;
-    background: var(--cream2);
-  }}
-  .summary-text {{
-    font-size: 14px;
-    line-height: 1.75;
-    color: var(--ink3);
-    font-weight: 300;
-  }}
-  .summary-text strong {{ color: var(--ink); font-weight: 600; }}
-  .summary-text .highlight {{
-    color: var(--accent);
-    font-weight: 600;
-  }}
-
-  /* ── KPI GRID ── */
-  .kpi-grid {{
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    background: transparent;
-    border: 1px solid var(--border);
-  }}
-  .kpi-card {{
-    background: var(--cream);
-    padding: 14px 16px;
-    flex: 1 1 28%;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }}
-  .kpi-label {{
-    font-family: var(--mono);
-    font-size: 8px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--mid);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }}
-  .kpi-value {{
-    font-family: var(--mono);
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--ink);
-    letter-spacing: -0.5px;
-  }}
-  .kpi-change {{
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--mid);
-  }}
-
-  /* ── HEATMAP TABLE ── */
-  .heatmap-table {{ width: 100%; border-collapse: collapse; }}
-  .heatmap-table th {{
-    font-family: var(--mono);
-    font-size: 8.5px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--mid);
-    padding: 8px 10px;
-    text-align: right;
-    border-bottom: 2px solid var(--ink);
-    font-weight: 500;
-    background: var(--cream2);
-  }}
-  .heatmap-table th:first-child {{ text-align: left; }}
-  .heatmap-table td {{
-    padding: 8px 10px;
-    font-size: 13px;
-    font-weight: 500;
-    border-bottom: 1px solid var(--border);
-    vertical-align: middle;
-    text-align: right;
-    color: var(--ink3);
-  }}
-  .heatmap-table td:first-child {{ text-align: left; }}
-  .heatmap-table tr:last-child td {{ border-bottom: none; }}
-  .heatmap-table tbody tr:nth-child(even) {{ background: var(--cream2); }}
-  .heatmap-table tbody tr:hover {{ background: var(--cream3); }}
-  .asset-name {{
-    font-weight: 500;
-    color: var(--ink);
-    display: flex; align-items: center; gap: 6px;
-    font-size: 13px;
-  }}
-  .asset-dot {{
-    width: 4px; height: 4px;
-    border-radius: 50%;
-    background: var(--accent);
-    flex-shrink: 0;
-  }}
-  .mono {{ font-family: var(--mono); font-size: 12.5px; }}
-  .cell-bar {{
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    justify-content: flex-end;
-  }}
-  .cell-mini-bar {{
-    flex: 1;
-    height: 3px;
-    background: var(--border);
-    border-radius: 2px;
-    overflow: hidden;
-    max-width: 60px;
-  }}
-  .cell-mini-fill {{ height: 100%; border-radius: 2px; background: var(--gold); }}
-  .cell-mini-fill.neg {{ background: var(--accent); }}
-
-  /* ── ECON CALENDAR ── */
-  .econ-calendar {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
-  .econ-calendar th {{
-    font-family: var(--mono);
-    font-size: 8.5px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--mid);
-    padding: 8px 8px;
-    text-align: left;
-    border-bottom: 2px solid var(--ink);
-    font-weight: 500;
-    background: var(--cream2);
-  }}
-  .econ-calendar th:nth-child(n+5) {{ text-align: right; }}
-  .econ-calendar td {{
-    padding: 8px 8px;
-    font-size: 11.5px;
-    border-bottom: 1px solid var(--border);
-    vertical-align: middle;
-    color: var(--ink3);
-  }}
-  .econ-calendar td:nth-child(n+5) {{ text-align: right; font-family: var(--mono); font-size: 11px; }}
-  .econ-calendar tr:last-child td {{ border-bottom: none; }}
-  .econ-calendar tbody tr:nth-child(even) {{ background: var(--cream2); }}
-
-  /* ── SPARKLINE WRAP ── */
-  .sparkline-wrap {{
-    background: var(--cream2);
-    border: 1px solid var(--border);
-    padding: 16px 20px;
-  }}
-
-  /* ── STORIES ── */
-  .story-list {{ display: flex; flex-direction: column; gap: 0; }}
-  .story-item {{
-    display: flex;
-    gap: 16px;
-    padding: 16px 0;
-    border-bottom: 1px solid var(--border);
-  }}
-  .story-item:last-child {{ border-bottom: none; padding-bottom: 0; }}
-  .story-num {{
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--dim);
-    width: 20px;
-    flex-shrink: 0;
-    padding-top: 3px;
-  }}
-  .story-tag {{
-    font-family: var(--mono);
-    font-size: 8px;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 5px;
-  }}
-  .story-headline {{
-    font-family: var(--serif);
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--ink);
-    margin-bottom: 6px;
-    line-height: 1.3;
-  }}
-  .story-body {{ font-size: 13px; color: var(--ink3); line-height: 1.65; }}
-
-  /* ── INSIGHT BOX ── */
-  .insight-box {{
-    background: var(--cream2);
-    border-left: 2px solid var(--gold);
-    padding: 10px 14px;
-    margin-top: 8px;
-    font-size: 12px;
-    color: var(--ink3);
-    line-height: 1.6;
-    font-style: italic;
-  }}
-  .insight-label {{
-    font-family: var(--mono);
-    font-size: 8px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--gold);
-    font-style: normal;
-    font-weight: 500;
-    margin-right: 6px;
-  }}
-
-  /* ── SCOREBOARD ── */
-  .scoreboard {{
-    display: flex;
-    border: 1px solid var(--border);
-    background: var(--cream2);
-    margin-top: 16px;
-    overflow: hidden;
-  }}
-  .scoreboard-item {{
-    flex: 1;
-    padding: 12px 16px;
-    border-right: 1px solid var(--border);
-    text-align: center;
-  }}
-  .scoreboard-item:last-child {{ border-right: none; }}
-  .scoreboard-lbl {{
-    font-family: var(--mono);
-    font-size: 8px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--mid);
-    margin-bottom: 4px;
-  }}
-  .scoreboard-val {{
-    font-family: var(--mono);
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--ink);
-  }}
-  .scoreboard-chg {{
-    font-family: var(--mono);
-    font-size: 10px;
-    margin-top: 2px;
-  }}
-
-  /* ── FOOTER ── */
-  .footer {{
-    padding: 20px 40px;
-    background: var(--ink);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-  }}
-  .footer-brand {{
-    font-family: var(--mono);
-    font-size: 11px;
-    color: rgba(255,255,255,0.6);
-    letter-spacing: 1px;
-  }}
-  .footer-link {{
-    font-family: var(--mono);
-    font-size: 10px;
-    color: rgba(255,255,255,0.4);
-    text-decoration: none;
-    letter-spacing: 0.5px;
-  }}
-  .footer-disc {{
-    font-size: 10px;
-    color: rgba(255,255,255,0.3);
-    line-height: 1.5;
-    padding: 16px 40px;
-    background: var(--ink);
-    text-align: center;
-    border-top: 1px solid rgba(255,255,255,0.08);
-    font-family: var(--mono);
-    letter-spacing: 0.3px;
-  }}
-
-  @media (max-width: 540px) {{
-    .header, .section, .footer {{ padding-left: 20px; padding-right: 20px; }}
-    .kpi-grid {{ flex-wrap: wrap; }}
-    .header-title {{ font-size: 26px; }}
-    .scoreboard {{ flex-wrap: wrap; }}
-    .scoreboard-item {{ flex: 1 1 45%; }}
-  }}
+{css_styles}
 </style>
 </head>
 <body>
-<div class="bulletin">
+<div class="bul">
 
   <!-- HEADER -->
-  <div class="header">
-    <div class="header-top">
-      <div class="logo-mark">
-        <div class="logo-icon">
-          <svg width="18" height="18" viewBox="0 0 22 22" fill="none">
-            <path d="M9 4C6.239 4 4 6.239 4 9C4 11.761 6.239 14 9 14C10.2 14 11.3 13.56 12.15 12.83" stroke="#f0ebe0" stroke-width="2.2" stroke-linecap="round"/>
-            <path d="M12.15 5.17C11.3 4.44 10.2 4 9 4" stroke="#f0ebe0" stroke-width="2.2" stroke-linecap="round"/>
-            <line x1="14" y1="4" x2="14" y2="18" stroke="#f0ebe0" stroke-width="2.2" stroke-linecap="round"/>
-            <path d="M14 4C14 4 18 4 18 7C18 10 14 10 14 10" stroke="#f0ebe0" stroke-width="2.2" stroke-linecap="round"/>
-            <path d="M14 10C14 10 18.5 10 18.5 13.5C18.5 17 14 18 14 18" stroke="#f0ebe0" stroke-width="2.2" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <div class="logo-text">nocashflow.net</div>
-      </div>
-      <div class="date-badge">{date_str}</div>
+  <div class="hdr">
+    <div style="display:flex;align-items:center;gap:14px">
+      <div class="hdr-dots"></div>
+      <div class="hdr-logo">nocashflow<span>.net</span></div>
     </div>
-    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;">
-      <div>
-        <div class="header-title">Daily <span>Financial</span><br>Bulletin</div>
-        <div class="header-sub">Markets · Macro · Crypto · Key Stories</div>
-      </div>
-      <div style="flex-shrink:0; margin-top:4px;">
-        {fear_greed_gauge}
-      </div>
+    <div>
+      <div class="hdr-date">{date_str} · {now.strftime('%H:%M')} CET</div>
+      <div class="hdr-ed">~ daily financial bulletin</div>
     </div>
   </div>
 
   <!-- TICKER BAR -->
-  <div class="ticker-bar">
+  <div class="ticker">
     {ticker_bar}
   </div>
 
@@ -1474,26 +1207,26 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     <div class="summary-card">
       <p class="summary-text">{summary_text}</p>
     </div>
-    <div class="scoreboard">
-      <div class="scoreboard-item">
-        <div class="scoreboard-lbl">DXY</div>
-        <div class="scoreboard-val">{dxy:.2f}</div>
-        <div class="scoreboard-chg {dxy_chg_cls}">{dxy_chg_text}</div>
+    {macro_scoreboard_html}
+  </div>
+
+  <!-- BIST 100 & TL/USD -->
+  <div class="section">
+    <div class="section-label">Türkiye Piyasaları</div>
+    <div class="bist-panel">
+      <div class="bist-item">
+        <div class="bist-lbl">BIST 100</div>
+        <div class="bist-val {bist_cls}">{bist_val}</div>
+        <div class="bist-flag {bist_cls}">{bist_chg_text}</div>
       </div>
-      <div class="scoreboard-item">
-        <div class="scoreboard-lbl">M2 Supply</div>
-        <div class="scoreboard-val">${m2:.1f}T</div>
-        <div class="scoreboard-chg {m2_chg_cls}">{m2_chg_text}</div>
+      <div class="bist-item">
+        <div class="bist-lbl">USD/TRY</div>
+        <div class="bist-val {try_cls}">{usd_try_val}</div>
+        <div class="bist-flag {try_cls}">{try_chg_text}</div>
       </div>
-      <div class="scoreboard-item">
-        <div class="scoreboard-lbl">US PMI</div>
-        <div class="scoreboard-val">{pmi:.1f}</div>
-        <div class="scoreboard-chg {pmi_chg_cls}">{pmi_chg_text}</div>
-      </div>
-      <div class="scoreboard-item">
-        <div class="scoreboard-lbl">2Y-10Y Spread</div>
-        <div class="scoreboard-val">{yield_spread:.2f}%</div>
-        <div class="scoreboard-chg {spread_cls}">{spread_status}</div>
+      <div class="bist-item">
+        <div class="bist-lbl">Açıklama</div>
+        <div style="font-size:11px;color:#8b949e;line-height:1.5;font-family:'Inter',sans-serif;margin-top:4px">Türk yatırımcılar için yerel piyasa göstergeleri</div>
       </div>
     </div>
   </div>
@@ -1501,19 +1234,14 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   <!-- EKONOMİK TAKVİM -->
   <div class="section">
     <div class="section-label">Haftalık Ekonomik Takvim</div>
-    <div style="margin-bottom:10px; font-size:11px; color:var(--mid); display:flex; align-items:center; gap:6px; font-family:var(--mono);">
-      <span style="background:var(--accent); color:var(--ink); padding:2px 8px; font-size:9px; letter-spacing:1px;">★★★ YÜKSEK ETKİLİ</span>
-    </div>
+    <div style="margin-bottom:10px"><span style="background:#f85149;color:#fff;font-size:8px;padding:3px 8px;letter-spacing:1px">★★★ YÜKSEK ETKİLİ</span></div>
     <table class="econ-calendar">
       <colgroup>
         <col style="width:13%"><col style="width:10%"><col style="width:32%">
         <col style="width:10%"><col style="width:11%"><col style="width:11%"><col style="width:13%">
       </colgroup>
       <thead>
-        <tr>
-          <th>Gün</th><th>Saat</th><th>Veri</th><th>Ülke</th>
-          <th>Önceki</th><th>Beklenti</th><th>Gerçekleşen</th>
-        </tr>
+        <tr><th>Gün</th><th>Saat</th><th>Veri</th><th>Ülke</th><th>Önceki</th><th>Beklenti</th><th>Gerçekleşen</th></tr>
       </thead>
       <tbody>{econ_calendar}</tbody>
     </table>
@@ -1531,17 +1259,58 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     {extra_indicators}
   </div>
 
+  <!-- FUNDING RATES -->
+  <div class="section">
+    <div class="section-label">Funding Rates &amp; Open Interest</div>
+    <div style="font-size:9px;color:#a1a1aa;margin-bottom:8px;letter-spacing:.5px">Binance Perpetual · Anlık</div>
+    <div class="funding-grid">
+      <div class="funding-item">
+        <div class="funding-sym">BTC</div>
+        <div class="funding-val {btc_fr_cls}">{btc_fr_str}</div>
+        <div class="funding-lbl">8h Funding</div>
+      </div>
+      <div class="funding-item">
+        <div class="funding-sym">ETH</div>
+        <div class="funding-val {eth_fr_cls}">{eth_fr_str}</div>
+        <div class="funding-lbl">8h Funding</div>
+      </div>
+      <div class="funding-item">
+        <div class="funding-sym">SOL</div>
+        <div class="funding-val {sol_fr_cls}">{sol_fr_str}</div>
+        <div class="funding-lbl">8h Funding</div>
+      </div>
+    </div>
+    <div class="oi-grid">
+      <div class="oi-item">
+        <div class="oi-sym">BTC OI</div>
+        <div class="oi-val">{btc_oi_str}</div>
+        <div class="oi-chg {btc_oi_chg_cls}">{btc_oi_chg_str}</div>
+      </div>
+      <div class="oi-item">
+        <div class="oi-sym">ETH OI</div>
+        <div class="oi-val">{eth_oi_str}</div>
+        <div class="oi-chg {eth_oi_chg_cls}">{eth_oi_chg_str}</div>
+      </div>
+      <div class="oi-item">
+        <div class="oi-sym">SOL OI</div>
+        <div class="oi-val">{sol_oi_str}</div>
+        <div class="oi-chg {sol_oi_chg_cls}">{sol_oi_chg_str}</div>
+      </div>
+    </div>
+    <div style="margin-top:8px;font-size:9px;color:#a1a1aa;font-style:italic">Pozitif funding = long ağırlıklı piyasa. Negatif funding = short ağırlıklı.</div>
+  </div>
+
   <!-- COİNBASE PREMİUM -->
   <div class="section">
     <div class="section-label">Coinbase Premium Index — 24 Saatlik</div>
     {coinbase_premium}
   </div>
 
-  <!-- BTC & ETF -->
+  <!-- BTC ANALİZİ & ETF AKIŞLARI -->
   <div class="section">
-    <div class="section-label">BTC Analizi & ETF Akışları</div>
+    <div class="section-label">BTC Analizi &amp; ETF Akışları</div>
     {btc_status_html}
-    <div style="margin-top:20px;">{_generate_etf_flows(data)}</div>
+    <div style="margin-top:16px">{_generate_etf_flows(data)}</div>
   </div>
 
   <!-- FUTURES BASIS -->
@@ -1560,38 +1329,27 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   <div class="section">
     <div class="section-label">Asset Summary</div>
 
-    <div style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">
-      <span style="font-family:var(--mono); font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--mid);">🪙 Commodities</span>
-      <div style="flex:1; height:1px; background:var(--border);"></div>
-    </div>
-    <table class="heatmap-table" style="margin-bottom:24px;">
-      <thead><tr><th>Asset</th><th>Price</th><th>1D</th><th>1W</th><th>30D</th><th style="width:90px">Momentum</th></tr></thead>
+    <div class="sub-hd"><div class="sub-hd-txt">🪙 Commodities</div><div class="sub-hd-line"></div></div>
+    <table class="heatmap-table" style="margin-bottom:16px">
+      <thead><tr><th>Asset</th><th>Price</th><th>1D</th><th>1W</th><th>30D</th><th style="width:80px">Momentum</th></tr></thead>
       <tbody>{commodity_rows}</tbody>
     </table>
 
-    <div style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">
-      <span style="font-family:var(--mono); font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--mid);">📊 Magnificent 7</span>
-      <div style="flex:1; height:1px; background:var(--border);"></div>
-    </div>
-    <table class="heatmap-table" style="margin-bottom:24px;">
-      <thead><tr><th>Asset</th><th>Price</th><th>1D</th><th>1W</th><th>30D</th><th style="width:90px">Momentum</th></tr></thead>
+    <div class="sub-hd"><div class="sub-hd-txt">📊 Magnificent 7</div><div class="sub-hd-line"></div></div>
+    <table class="heatmap-table" style="margin-bottom:16px">
+      <thead><tr><th>Asset</th><th>Price</th><th>1D</th><th>1W</th><th>30D</th><th style="width:80px">Momentum</th></tr></thead>
       <tbody>{mag7_rows}</tbody>
     </table>
 
-    <div style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">
-      <span style="font-family:var(--mono); font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--mid);">₿ Crypto Watchlist</span>
-      <div style="flex:1; height:1px; background:var(--border);"></div>
-    </div>
-    <table class="heatmap-table" style="margin-bottom:24px;">
-      <thead><tr><th>Asset</th><th>Price</th><th>24h</th><th>7d</th><th>30D</th><th style="width:90px">Momentum</th></tr></thead>
+    <div class="sub-hd"><div class="sub-hd-txt">₿ Crypto Watchlist</div><div class="sub-hd-line"></div></div>
+    <table class="heatmap-table" style="margin-bottom:16px">
+      <thead><tr><th>Asset</th><th>Price</th><th>24h</th><th>7D</th><th>30D</th><th style="width:80px">Momentum</th></tr></thead>
       <tbody>{crypto_rows}</tbody>
     </table>
 
     {sp500_rows}
 
-    <div style="margin-top:8px; font-family:var(--mono); font-size:9.5px; font-style:italic; color:var(--dim); line-height:1.5;">
-      Momentum &gt; 70: aşırı alım · Momentum &lt; 30: aşırı satım
-    </div>
+    <div style="margin-top:8px;font-size:9px;color:#a1a1aa;font-style:italic">Momentum &gt; 70: aşırı alım · Momentum &lt; 30: aşırı satım</div>
   </div>
 
   <!-- HABERLER -->
@@ -1602,20 +1360,82 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
 
   <!-- FOOTER -->
   <div class="footer">
-    <div class="footer-brand">nocashflow.net · Orkun Biçen</div>
-    <a href="https://nocashflow.net" class="footer-link">nocashflow.net</a>
+    <div class="footer-brand">$ nocashflow.net · orkun biçen</div>
+    <div style="font-size:9px;color:var(--faint)">exit 0</div>
   </div>
   <div class="footer-disc">
-    Bu bülten yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi niteliği taşımaz. Geçmiş performans gelecekteki sonuçların göstergesi değildir. © {now.year} Orkun Biçen. Tüm hakları saklıdır.
+    # Bu bülten yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi niteliği taşımaz. Geçmiş performans gelecekteki sonuçların göstergesi değildir. © {now.year} Orkun Biçen. Tüm hakları saklıdır.
   </div>
 
 </div>
 </body>
 </html>'''
 
-
     with open(output_filename, 'w', encoding='utf-8') as f:
         f.write(html)
 
     print(f"  ✅ HTML oluşturuldu: {os.path.abspath(output_filename)}")
     return output_filename
+
+
+if __name__ == "__main__":
+    # Test için mock data
+    mock_data = {
+        'crypto_prices': [
+            {'Name': 'Bitcoin', 'Symbol': 'BTC', 'Current Price USD': 68500.20, '24h %': 2.5, '7d %': 5.1, '30d %': 12.4},
+            {'Name': 'Ethereum', 'Symbol': 'ETH', 'Current Price USD': 3450.15, '24h %': -1.2, '7d %': 3.2, '30d %': 8.5},
+            {'Name': 'Solana', 'Symbol': 'SOL', 'Current Price USD': 145.50, '24h %': 4.3, '7d %': 15.2, '30d %': 25.1},
+        ],
+        'crypto_market_overview': {
+            'total_market_cap': 2.65e12,
+            'btc_dominance': 53.2,
+            'stablecoin_dominance': 6.5
+        },
+        'macro_indicators': {
+            'VIX': 14.2,
+            'VIX_chg': -2.1,
+            'DXY': 103.45,
+            'DXY_chg': 0.15,
+            'US 10-Year Treasury Yield': 4.12,
+            'US 10-Year Treasury Yield_chg': 0.02,
+            'US 2-Year Treasury Yield': 4.45,
+            'NASDAQ 100 Futures': 18245.50,
+            'NASDAQ 100 Futures_chg': 0.85,
+            'SMH (Semiconductor ETF)': 225.40,
+            'SMH (Semiconductor ETF)_chg': 1.25
+        },
+        'macro_scoreboard': {
+            'DXY': 103.45, 'DXY_chg': 0.15,
+            'M2': 21.0, 'M2_chg': 0.05,
+            'PMI': 50.2, 'PMI_chg': -0.3
+        },
+        'magnificent_7': [
+            {'Name': 'NVIDIA', 'Symbol': 'NVDA', 'Price': 875.20, 'Change %': 3.5},
+            {'Name': 'Apple', 'Symbol': 'AAPL', 'Price': 175.10, 'Change %': -0.5},
+        ],
+        'commodities': [
+            {'Name': 'Gold', 'Price': 2165.40, 'Change %': 0.45},
+            {'Name': 'Silver', 'Price': 24.50, 'Change %': 1.1},
+        ],
+        'fear_and_greed': {'value': 72, 'classification': 'Greed'},
+        'economic_calendar': [
+            {'date': '18 Mar', 'time': '15:30', 'event': 'US Core CPI', 'country': 'USA', 'previous': '3.1%', 'forecast': '3.0%', 'actual': '3.0%'},
+        ],
+        'macro_news': {
+            'news': [
+                {'title': 'Fed signals caution on interest rate cuts', 'image_url': ''},
+                {'title': 'Bitcoin reaches new heights amid ETF inflows', 'image_url': ''},
+            ]
+        },
+        'options_data': {
+            'dvol_index': 58.2, 'dvol_change_24h': 2.1,
+            'put_call_ratio': 0.85, 'open_interest_btc': 450000
+        },
+        'sp500_sectors': [
+            {'Name': 'Technology', 'Symbol': 'XLK', 'Change %': 1.2},
+            {'Name': 'Energy', 'Symbol': 'XLE', 'Change %': -0.8},
+        ]
+    }
+    
+    print("Standalone test mode: Generating 'design_preview_yeni.html'...")
+    generate_newsletter_html(mock_data, output_filename='/tmp/design_preview_yeni.html')

@@ -6,7 +6,7 @@ from data_fetcher import (
     get_coinbase_premium_index, get_funding_rates, get_crypto_market_overview,
     get_magnificent_7, get_commodities, get_economic_calendar, get_options_market_data,
     get_global_liquidity_index, get_macro_scoreboard, get_sp500_sectors,
-    get_crypto_futures_basis, get_etf_flows
+    get_crypto_futures_basis, get_etf_flows, get_bist_data
 )
 from agents import ContentEditorAgent, ExperienceDesignerAgent
 from html_generator import generate_newsletter_html
@@ -106,6 +106,9 @@ def generate_daily_newsletter():
     print("  → Spot Bitcoin ETF Flows...")
     etf_flows = get_etf_flows()
 
+    print("  → BIST 100 & USD/TRY...")
+    bist_try = get_bist_data()
+
     data = {
         'crypto_prices': crypto_prices,
         'crypto_market_overview': crypto_market_overview,
@@ -123,6 +126,7 @@ def generate_daily_newsletter():
         'sp500_sectors': sp500_sectors,
         'crypto_futures_basis': crypto_futures_basis,
         'etf_flows': etf_flows,
+        'bist_try': bist_try,
     }
 
     # ── AI Agent Analysis ──
@@ -158,7 +162,7 @@ def generate_daily_newsletter():
 
     # ── Generate HTML ──
     print("\nHTML bülten oluşturuluyor...")
-    html_filename = 'daily_bulletin.html'
+    html_filename = 'daily_bulletin_terminal.html'
     generate_newsletter_html(data, html_filename)
 
     # ── Convert to PDF ──
