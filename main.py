@@ -162,7 +162,7 @@ def generate_daily_newsletter():
 
     # ── Generate HTML ──
     print("\nHTML bülten oluşturuluyor...")
-    html_filename = 'daily_bulletin_terminal.html'
+    html_filename = 'daily_bulletin.html'
     generate_newsletter_html(data, html_filename)
 
     # ── Convert to PDF ──
