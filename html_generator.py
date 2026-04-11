@@ -409,7 +409,7 @@ def _generate_options_market(options_data, options_note=None):
       </div>
     </div>
     <div style="margin-top:12px; font-size:11.5px; color:#a1a1aa; line-height:1.5;">
-      💡 <strong style="color:#a1a1aa;">Opsiyon Piyasası Notu:</strong> 
+      💡 <strong style="color:#a1a1aa;">Options Market Note:</strong> 
       {options_note or "DVOL endeksi piyasaların öngördüğü volatiliteti gösterir. Put/Call oranının 1'in altında olması call (alım) yönlü beklentinin ağırlıkta olduğuna işaret edebilir."}
     </div>'''
 
@@ -747,9 +747,9 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
             f"<span class='highlight'>{macro.get('VIX', 0):.1f}</span> seviyesinde, "
             f"<strong>DXY</strong> (Dolar Endeksi) {macro.get('DXY', 0):.2f} noktasında işlem görmektedir. "
             f"<strong>ABD 10 Yıllık Tahvil Getirisi</strong> %{macro.get('US 10-Year Treasury Yield', 0):.2f} seviyesindedir. "
-            f"Kripto piyasalarında <strong>Crypto Fear &amp; Greed Index</strong> "
+            f"Crypto <strong>Fear &amp; Greed Index</strong> "
             f"<span class='highlight'>{fng.get('value', 0)}</span> ({fng.get('classification', 'N/A')}) olarak kaydedildi. "
-            f"Toplam kripto <strong>market cap</strong> ${crypto_ov.get('total_market_cap', 0)/1e12:.2f} Trilyon, "
+            f"Total crypto <strong>market cap</strong> ${crypto_ov.get('total_market_cap', 0)/1e12:.2f} Trilyon, "
             f"<strong>BTC Dominance</strong> %{crypto_ov.get('btc_dominance', 0):.1f} seviyesindedir."
         )
         # Inject actuals from economic calendar if available
@@ -1136,17 +1136,18 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);-webkit-font
 .econ-calendar tbody tr:hover{background:rgba(57,211,83,.05)}
 
 /* ── HEATMAP TABLE ── */
-.heatmap-table{width:100%;border-collapse:collapse;table-layout:fixed}
-.heatmap-table th{font-family:var(--mono);font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--green2);padding:8px 10px;text-align:right;border-bottom:1px solid var(--border);background:var(--bg2);font-weight:600}
+.heatmap-table{width:100%;border-collapse:collapse;table-layout:fixed;font-variant-numeric:tabular-nums}
+.heatmap-table th{font-family:var(--mono);font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--green2);padding:8px 10px;text-align:right;border-bottom:1px solid var(--border);background:var(--bg2);font-weight:600;white-space:nowrap}
 .heatmap-table th:first-child{text-align:left}
-.heatmap-table td{padding:7px 10px;font-family:var(--mono);font-size:11px;border-bottom:1px solid rgba(57,211,83,.05);vertical-align:middle;text-align:right;color:var(--dim)}
-.heatmap-table td:first-child{text-align:left;color:var(--text);font-weight:500}
+.heatmap-table td{padding:8px 10px;font-family:var(--mono);font-size:11px;border-bottom:1px solid rgba(57,211,83,.05);vertical-align:middle;text-align:right;color:var(--dim);white-space:nowrap}
+.heatmap-table td:first-child{text-align:left;color:var(--text);font-weight:600;font-family:var(--serif);font-size:14px}
+.heatmap-table td:nth-child(2){color:var(--text);font-weight:500}
 .heatmap-table tr:last-child td{border-bottom:none}
 .heatmap-table tbody tr:nth-child(even){background:rgba(57,211,83,.02)}
 .heatmap-table tbody tr:hover{background:rgba(57,211,83,.05)}
 .asset-name{display:flex;align-items:center;gap:6px}
 .asset-dot{width:5px;height:5px;border-radius:0;background:var(--green);flex-shrink:0}
-.mono{font-family:var(--mono);font-size:11px}
+.mono{font-family:var(--mono);font-size:11px;font-variant-numeric:tabular-nums}
 .cell-bar{display:flex;align-items:center;gap:5px;justify-content:flex-end}
 .cell-mini-bar{width:48px;height:3px;background:rgba(57,211,83,.08);overflow:hidden;border-radius:1px}
 .cell-mini-fill{height:100%;border-radius:1px}
@@ -1243,7 +1244,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);-webkit-font
 
   <!-- GENEL DEĞERLENDİRME -->
   <div class="section">
-    <div class="section-label">Genel Değerlendirme</div>
+    <div class="section-label">Market Overview</div>
     <div class="summary-card">
       <p class="summary-text">{summary_text}</p>
     </div>
@@ -1252,7 +1253,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);-webkit-font
 
   <!-- BIST 100 & TL/USD -->
   <div class="section">
-    <div class="section-label">Türkiye Piyasaları</div>
+    <div class="section-label">Turkey Markets</div>
     <div class="bist-panel">
       <div class="bist-item">
         <div class="bist-lbl">BIST 100</div>
@@ -1266,22 +1267,22 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);-webkit-font
       </div>
       <div class="bist-item">
         <div class="bist-lbl">Açıklama</div>
-        <div style="font-size:11px;color:#8b949e;line-height:1.5;font-family:'Inter',sans-serif;margin-top:4px">Türk yatırımcılar için yerel piyasa göstergeleri</div>
+        <div style="font-size:11px;color:#8b949e;line-height:1.5;font-family:'Inter',sans-serif;margin-top:4px">Local market indicators for Turkish investors</div>
       </div>
     </div>
   </div>
 
   <!-- EKONOMİK TAKVİM -->
   <div class="section">
-    <div class="section-label">Haftalık Ekonomik Takvim</div>
-    <div style="margin-bottom:10px"><span style="background:#f85149;color:#fff;font-size:8px;padding:3px 8px;letter-spacing:1px">★★★ YÜKSEK ETKİLİ</span></div>
+    <div class="section-label">Weekly Economic Calendar</div>
+    <div style="margin-bottom:10px"><span style="background:#f85149;color:#fff;font-size:8px;padding:3px 8px;letter-spacing:1px">★★★ HIGH IMPACT</span></div>
     <table class="econ-calendar">
       <colgroup>
         <col style="width:13%"><col style="width:10%"><col style="width:32%">
         <col style="width:10%"><col style="width:11%"><col style="width:11%"><col style="width:13%">
       </colgroup>
       <thead>
-        <tr><th>Gün</th><th>Saat</th><th>Veri</th><th>Ülke</th><th>Önceki</th><th>Beklenti</th><th>Gerçekleşen</th></tr>
+        <tr><th>Day</th><th>Time</th><th>Event</th><th>CCY</th><th>Prev.</th><th>Est.</th><th>Actual</th></tr>
       </thead>
       <tbody>{econ_calendar}</tbody>
     </table>
@@ -1289,19 +1290,19 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);-webkit-font
 
   <!-- GÜNÜN ÖNE ÇIKAN VERİLERİ -->
   <div class="section">
-    <div class="section-label">Günün Öne Çıkan Verileri</div>
+    <div class="section-label">Today's Key Data</div>
     <div class="kpi-grid">{kpi_cards}</div>
   </div>
 
   <!-- EK GÖSTERGELER -->
   <div class="section">
-    <div class="section-label">Ek Piyasa Göstergeleri</div>
+    <div class="section-label">Additional Indicators</div>
     {extra_indicators}
   </div>
 
   <!-- FUNDING RATES -->
   <div class="section">
-    <div class="section-label">Funding Rates &amp; Open Interest</div>
+    <div class="section-label">Funding Rates & Open Interest</div>
     <div style="font-size:9px;color:#a1a1aa;margin-bottom:8px;letter-spacing:.5px">Binance Perpetual · Anlık</div>
     <div class="funding-grid">
       <div class="funding-item">
@@ -1342,26 +1343,26 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);-webkit-font
 
   <!-- COİNBASE PREMİUM -->
   <div class="section">
-    <div class="section-label">Coinbase Premium Index — 24 Saatlik</div>
+    <div class="section-label">Coinbase Premium Index — 24H</div>
     {coinbase_premium}
   </div>
 
   <!-- BTC ANALİZİ & ETF AKIŞLARI -->
   <div class="section">
-    <div class="section-label">BTC Analizi &amp; ETF Akışları</div>
+    <div class="section-label">BTC Analysis & ETF Flows</div>
     {btc_status_html}
     <div style="margin-top:16px">{_generate_etf_flows(data)}</div>
   </div>
 
   <!-- FUTURES BASIS -->
   <div class="section">
-    <div class="section-label">Crypto Futures Basis Analizi</div>
+    <div class="section-label">Crypto Futures Basis</div>
     {basis_html}
   </div>
 
   <!-- OPSİYON PİYASALARI -->
   <div class="section">
-    <div class="section-label">Deribit Opsiyon Piyasaları</div>
+    <div class="section-label">Deribit Options Markets</div>
     {options_market}
   </div>
 
@@ -1394,17 +1395,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);-webkit-font
 
   <!-- HABERLER -->
   <div class="section">
-    <div class="section-label">Öne Çıkan Haberler</div>
+    <div class="section-label">Top Stories</div>
     <div class="story-list">{news_stories}</div>
   </div>
 
   <!-- FOOTER -->
   <div class="footer">
-    <div class="footer-brand">$ nocashflow.net · orkun biçen</div>
+    <div class="footer-brand">nocashflow.net · orkun biçen</div>
     <div style="font-size:9px;color:var(--faint)">exit 0</div>
   </div>
   <div class="footer-disc">
-    # Bu bülten yalnızca bilgilendirme amaçlıdır ve yatırım tavsiyesi niteliği taşımaz. Geçmiş performans gelecekteki sonuçların göstergesi değildir. © {now.year} Orkun Biçen. Tüm hakları saklıdır.
+    # This bulletin is for informational purposes only and does not constitute investment advice. Past performance is not indicative of future results. © {now.year} Orkun Biçen. All rights reserved.
   </div>
 
 </div>
