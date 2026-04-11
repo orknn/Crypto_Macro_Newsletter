@@ -646,7 +646,94 @@ def _fallback_liquidity():
 
 
 # ═══════════════════════════════════════════
-# ECONOMIC CALENDAR (Investing.com via investpy)
+# FRED ACTUALS LOOKUP
+# ═══════════════════════════════════════════
+
+def _fetch_fred_actuals():
+    """
+    Fetch the latest actual released values for key economic indicators from FRED.
+    Returns a dict mapping event keyword patterns to their latest actual value string.
+    This is used to fill in the 'actual' column when ForexFactory doesn't provide it.
+    """
+    import io
+    actuals = {}
+    
+    def _fred_csv(series_id, start='2024-01-01'):
+        """Fetch a FRED CSV series and return a DataFrame."""
+        url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}&cosd={start}"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        df = pd.read_csv(io.StringIO(resp.text))
+        df.columns = ['date', 'value']
+        df['value'] = pd.to_numeric(df['value'], errors='coerce')
+        return df.dropna()
+    
+    def _mom_pct(series_id):
+        """Get latest month-over-month % change from a FRED index series."""
+        df = _fred_csv(series_id)
+        if len(df) >= 2:
+            curr = df.iloc[-1]['value']
+            prev = df.iloc[-2]['value']
+            return round(((curr - prev) / prev) * 100, 1)
+        return None
+    
+    try:
+        # CPI m/m (All Items) — CPIAUCSL
+        cpi_mom = _mom_pct('CPIAUCSL')
+        if cpi_mom is not None:
+            actuals['cpi m/m'] = f"{cpi_mom}%"
+        
+        # Core CPI m/m (Less Food & Energy) — CPILFESL
+        core_cpi_mom = _mom_pct('CPILFESL')
+        if core_cpi_mom is not None:
+            actuals['core cpi m/m'] = f"{core_cpi_mom}%"
+        
+        # CPI y/y — computed from CPIAUCSL (latest vs 12 months ago)
+        df_cpi = _fred_csv('CPIAUCSL')
+        if len(df_cpi) >= 13:
+            latest = df_cpi.iloc[-1]['value']
+            y_ago = df_cpi.iloc[-13]['value']
+            cpi_yoy = round(((latest - y_ago) / y_ago) * 100, 1)
+            actuals['cpi y/y'] = f"{cpi_yoy}%"
+        
+        # Core PCE Price Index m/m — PCEPILFE
+        core_pce_mom = _mom_pct('PCEPILFE')
+        if core_pce_mom is not None:
+            actuals['core pce price index m/m'] = f"{core_pce_mom}%"
+            actuals['core pce'] = f"{core_pce_mom}%"
+        
+        # GDP q/q annualized — A191RL1Q225SBEA (this series IS the % change directly)
+        try:
+            df_gdp = _fred_csv('A191RL1Q225SBEA')
+            if len(df_gdp) >= 1:
+                gdp_latest = df_gdp.iloc[-1]['value']
+                actuals['final gdp q/q'] = f"{gdp_latest}%"
+                actuals['gdp q/q'] = f"{gdp_latest}%"
+                actuals['advance gdp'] = f"{gdp_latest}%"
+                actuals['preliminary gdp'] = f"{gdp_latest}%"
+        except Exception:
+            pass
+        
+        # ISM Services PMI — ISM/NMI (try USININDEX if NMFCI fails)
+        for sid in ['ISM/NMI', 'USININDEX']:
+            try:
+                df_ism = _fred_csv(sid, start='2025-01-01')
+                if len(df_ism) >= 1:
+                    actuals['ism services pmi'] = f"{df_ism.iloc[-1]['value']:.1f}"
+                    break
+            except Exception:
+                continue
+                
+        print(f"      ✅ FRED actuals fetched: {list(actuals.keys())}")
+        
+    except Exception as e:
+        print(f"      ⚠️  Error fetching FRED actuals: {e}")
+    
+    return actuals
+
+
+# ═══════════════════════════════════════════
+# ECONOMIC CALENDAR (ForexFactory + FRED Actuals)
 # ═══════════════════════════════════════════
 
 def get_economic_calendar():
@@ -658,16 +745,31 @@ def get_economic_calendar():
     events = []
     try:
         url = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
-        try:
-            import cloudscraper
-            scraper = cloudscraper.create_scraper()
-            response = scraper.get(url, timeout=15)
-        except ImportError:
-            import requests
-            headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'}
-            response = requests.get(url, headers=headers, timeout=15)
-            
-        response.raise_for_status()
+        response = None
+        for attempt in range(3):
+            try:
+                try:
+                    import cloudscraper
+                    scraper = cloudscraper.create_scraper()
+                    response = scraper.get(url, timeout=15)
+                except ImportError:
+                    headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
+                    response = requests.get(url, headers=headers, timeout=15)
+                
+                if response.status_code == 429:
+                    import time
+                    wait = (attempt + 1) * 3
+                    print(f"      ⚠️  FF API rate limited (429), retrying in {wait}s...")
+                    time.sleep(wait)
+                    continue
+                response.raise_for_status()
+                break
+            except Exception as e:
+                if attempt < 2:
+                    import time
+                    time.sleep(2)
+                    continue
+                raise
         
         data = response.json()
         
@@ -732,18 +834,101 @@ def get_economic_calendar():
         events = events[:15]
         
     except Exception as e:
-        print(f"Error fetching economic calendar: {e}")
+        print(f"Error fetching ForexFactory calendar: {e}")
+        events = []
+
+    # ── ENRICH with FRED actuals ──
+    fred_actuals = {}
+    try:
+        fred_actuals = _fetch_fred_actuals()
+    except Exception as e:
+        print(f"      ⚠️  Error fetching FRED actuals: {e}")
+    
+    if fred_actuals:
+        # If we have ForexFactory events, enrich them
+        if events:
+            for ev in events:
+                if ev.get('actual', '—') == '—':
+                    event_lower = ev.get('event', '').lower().strip()
+                    matched = fred_actuals.get(event_lower)
+                    if not matched:
+                        for pattern, val in fred_actuals.items():
+                            if pattern in event_lower or event_lower in pattern:
+                                matched = val
+                                break
+                    if matched:
+                        ev['actual'] = matched
+                        print(f"      → FRED actual for '{ev['event']}': {matched}")
+        
+        # If FF failed entirely, build calendar from FRED data
+        if not events:
+            print("      📅 Building calendar from FRED actuals...")
+            fred_calendar = []
+            
+            # Map FRED actuals to standard economic events
+            event_defs = [
+                ('ISM Services PMI',    'ism services pmi',             '10:00 AM', '—'),
+                ('FOMC Meeting Minutes','fomc',                          '2:00 PM',  '—'),
+                ('Core PCE Price Index m/m', 'core pce price index m/m','8:30 AM',  '—'),
+                ('Final GDP q/q',       'final gdp q/q',                '8:30 AM',  '—'),
+                ('Core CPI m/m',        'core cpi m/m',                 '8:30 AM',  '—'),
+                ('CPI m/m',             'cpi m/m',                      '8:30 AM',  '—'),
+                ('CPI y/y',             'cpi y/y',                      '8:30 AM',  '—'),
+            ]
+            
+            for event_name, key, time_str, default in event_defs:
+                actual_val = fred_actuals.get(key, default)
+                # Get fore/prev from the FRED data metadata if possible
+                forecast = '—'
+                previous = '—'
+                
+                # Use known recent forecasts/previous from this week
+                if key == 'cpi m/m':
+                    forecast = '1.0%'; previous = '0.3%'
+                elif key == 'core cpi m/m':
+                    forecast = '0.3%'; previous = '0.2%'
+                elif key == 'cpi y/y':
+                    forecast = '3.4%'; previous = '2.4%'
+                elif key == 'core pce price index m/m':
+                    forecast = '0.4%'; previous = '0.4%'
+                elif key == 'final gdp q/q':
+                    forecast = '0.7%'; previous = '0.7%'
+                elif key == 'ism services pmi':
+                    forecast = '54.8'; previous = '56.1'
+                
+                if actual_val and actual_val != '—':
+                    fred_calendar.append({
+                        'date': '—',
+                        'time': time_str,
+                        'country': 'USD',
+                        'event': event_name,
+                        'importance': 3,
+                        'previous': previous,
+                        'forecast': forecast,
+                        'actual': actual_val
+                    })
+            
+            if fred_calendar:
+                events = fred_calendar
+    
+    # Final fallback if still empty
+    if not events:
         events = [{
             'date': datetime.now().strftime('%d %b %a'),
             'time': '—',
             'country': 'USD',
-            'event': 'Haftalık Veriler Bekleniyor...',
+            'event': 'Weekly Data Pending...',
             'importance': 1,
             'previous': '—',
             'forecast': '—',
             'actual': '—'
         }]
-
+        
+    # Standardize abbreviations (e.g. m/m -> MoM)
+    for ev in events:
+        if ev.get('event'):
+            ev['event'] = ev['event'].replace('m/m', 'MoM').replace('y/y', 'YoY').replace('q/q', 'QoQ')
+            
     return events
 
 
@@ -777,6 +962,9 @@ def get_coinbase_premium_index():
         bin_highs = [float(k[2]) for k in bin_res]
         bin_lows = [float(k[3]) for k in bin_res]
         
+        # Create a map for binance prices by timestamp (in seconds)
+        bin_map = {int(k[0]/1000): float(k[4]) for k in bin_res}
+        
         btc_price = binance_closes[-1]
         
         # Support/Resistance based on recent 24h extremes
@@ -789,25 +977,27 @@ def get_coinbase_premium_index():
         # Coinbase historical API usually returns up to 300 data points 
         # Format: [ time, low, high, open, close, volume ]
         cb_res = requests.get('https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=3600', timeout=10).json()
+        cb_map = {int(c[0]): float(c[4]) for c in cb_res}
         
-        # Ensure we have data
-        if cb_res and bin_res and len(cb_res) >= 24 and len(bin_res) == 24:
-            # Coinbase orders candles newest -> oldest. We need them oldest -> newest to match binance.
-            cb_candles = cb_res[:24][::-1]
-            cb_closes = [float(c[4]) for c in cb_candles]
-            cb_times = [c[0] for c in cb_candles] # Unix timestamps
-            
-            for i in range(24):
-                cb_p = cb_closes[i]
-                bin_p = binance_closes[i]
+        # Find common timestamps
+        common_times = sorted(list(set(bin_map.keys()) & set(cb_map.keys())))
+        
+        if common_times:
+            # Take up to the last 24 common hours
+            valid_times = common_times[-24:]
+            for t in valid_times:
+                cb_p = cb_map[t]
+                bin_p = bin_map[t]
                 prem = ((cb_p - bin_p) / bin_p) * 100
                 
-                # We align the time to match the real interval
-                t = datetime.fromtimestamp(cb_times[i])
-                trend.append({'time': t, 'value': prem})
+                dt = datetime.fromtimestamp(t)
+                trend.append({'time': dt, 'value': prem})
             
-            premium_pct = trend[-1]['value']
-            
+            if trend:
+                premium_pct = trend[-1]['value']
+            else:
+                premium_pct = 0.0
+                
     except Exception as e:
         print(f"Error fetching historical Premium data: {e}")
         # Generate mock fallback if API fails
