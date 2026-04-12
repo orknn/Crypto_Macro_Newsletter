@@ -954,8 +954,8 @@ def get_coinbase_premium_index():
     resist_2 = btc_price * 1.05
     
     try:
-        # Fetch last 24 1h candles from Binance
-        bin_res = requests.get('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=24', timeout=10).json()
+        # Fetch last 168 1h candles from Binance
+        bin_res = requests.get('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=168', timeout=10).json()
         
         # Format: [open_time, open, high, low, close, volume, ...]
         binance_closes = [float(k[4]) for k in bin_res]
@@ -967,7 +967,7 @@ def get_coinbase_premium_index():
         
         btc_price = binance_closes[-1]
         
-        # Support/Resistance based on recent 24h extremes
+        # Support/Resistance based on recent 168h extremes
         resist_2 = max(bin_highs)
         resist_1 = (resist_2 + btc_price) / 2
         
@@ -983,8 +983,8 @@ def get_coinbase_premium_index():
         common_times = sorted(list(set(bin_map.keys()) & set(cb_map.keys())))
         
         if common_times:
-            # Take up to the last 24 common hours
-            valid_times = common_times[-24:]
+            # Take up to the last 168 common hours
+            valid_times = common_times[-168:]
             for t in valid_times:
                 cb_p = cb_map[t]
                 bin_p = bin_map[t]
@@ -1003,8 +1003,8 @@ def get_coinbase_premium_index():
         # Generate mock fallback if API fails
         now = datetime.now()
         base_val = 0.0
-        for i in range(24):
-            t = now - timedelta(hours=24-i)
+        for i in range(168):
+            t = now - timedelta(hours=168-i)
             base_val += random.uniform(-0.015, 0.015)
             trend.append({'time': t, 'value': base_val})
         premium_pct = trend[-1]['value']

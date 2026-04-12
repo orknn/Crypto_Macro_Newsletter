@@ -1078,8 +1078,8 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
   --sans:'Inter',system-ui,sans-serif;
 }
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;font-size:13px;line-height:1.6}
-.bul{max-width:720px;margin:0 auto;background:var(--bg);border-left:1px solid var(--border);border-right:1px solid var(--border)}
+body{background:#1c2026;color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;font-size:13px;line-height:1.6}
+.bul{max-width:720px;margin:0 auto;background:var(--bg);border-left:1px solid rgba(0,0,0,0.3);border-right:1px solid rgba(0,0,0,0.3);box-shadow:0 0 30px rgba(0,0,0,0.6)}
 
 /* ── HEADER ── */
 .hdr{background:var(--bg3);border-bottom:1px solid var(--border2);padding:20px 28px;display:flex;justify-content:space-between;align-items:center}
@@ -1365,7 +1365,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font
 
   <!-- COINBASE PREMIUM -->
   <div class="section">
-    <div class="section-label">Coinbase Premium Index — 24H</div>
+    <div class="section-label" style="text-transform: none;">COINBASE PREMIUM INDEX — 7D</div>
     {coinbase_premium}
   </div>
 
