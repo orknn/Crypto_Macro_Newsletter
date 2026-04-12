@@ -93,7 +93,7 @@ def _generate_ticker_bar(data):
          'custom_chg_text': fng.get('classification', ''), 'custom_chg_cls': 'up' if fng.get('value', 50) >= 50 else 'down'},
     ]
 
-    items = []
+    html = '<table class="ticker" cellpadding="0" cellspacing="0"><tr>\n'
     for t in tickers:
         if 'custom_chg_text' in t:
             chg_text = t['custom_chg_text']
@@ -101,14 +101,14 @@ def _generate_ticker_bar(data):
         else:
             chg_text, chg_cls = _fmt_change(t.get('chg_val', 0)) if t.get('chg_val', 0) != 0 else ("—", "")
             
-        items.append(f'''
-    <div class="ti">
+        html += f'''
+    <td class="ti">
       <div class="ti-name">{t['name']}</div>
       <div class="ti-val">{t['price']}</div>
       <div class="ti-chg {chg_cls}">{chg_text}</div>
-    </div>''')
-
-    return '\n'.join(items)
+    </td>'''
+    html += '\n</tr></table>'
+    return html
 
 
 def _generate_economic_calendar(events):
@@ -266,24 +266,30 @@ def _generate_coinbase_premium(data):
 
     return f'''
     <div class="sparkline-wrap" style="padding:20px 24px;">
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
-        <div>
-          <div style="font-size:12px; color:#a1a1aa; margin-bottom:4px;">BTC/USD · Coinbase vs Global Spread</div>
-          <div style="font-family:var(--mono); font-size:26px; color:#e6edf3;">{current:+.4f}%</div>
-          <div style="font-size:11px; color:{signal_cls}; margin-top:2px;">{signal_text}</div>
-        </div>
-        <div style="display:flex; gap:16px; font-size:11px; color:#a1a1aa;">
-          <div style="text-align:center;"><div style="font-family:var(--mono); color:#e6edf3; font-size:13px;">{max_val:+.3f}%</div><div>24h High</div></div>
-          <div style="text-align:center;"><div style="font-family:var(--mono); color:#e6edf3; font-size:13px;">{min_val:+.3f}%</div><div>24h Low</div></div>
-        </div>
-      </div>
-      <div style="position:relative;">
-        <svg width="100%" viewBox="0 0 {width} {height}" preserveAspectRatio="none" style="display:block; height:160px;">
+      <table style="width:100%; margin-bottom:16px;">
+        <tr>
+          <td style="vertical-align:top;">
+            <div style="font-size:12px; color:#a1a1aa; margin-bottom:4px;">BTC/USD · Coinbase vs Global Spread</div>
+            <div style="font-family:var(--mono); font-size:26px; color:#e6edf3;">{current:+.4f}%</div>
+            <div style="font-size:11px; color:{signal_cls}; margin-top:2px;">{signal_text}</div>
+          </td>
+          <td style="vertical-align:top; text-align:right;">
+            <table style="display:inline-block; font-size:11px; color:#a1a1aa;">
+              <tr>
+                <td style="padding-right:16px; text-align:center;"><div style="font-family:var(--mono); color:#e6edf3; font-size:13px;">{max_val:+.3f}%</div><div>24h High</div></td>
+                <td style="text-align:center;"><div style="font-family:var(--mono); color:#e6edf3; font-size:13px;">{min_val:+.3f}%</div><div>24h Low</div></td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+      <div style="position:relative; overflow:hidden;">
+        <!--[if !mso]><!-->
+        <svg width="100%" viewBox="0 0 {width} {height}" preserveAspectRatio="none" style="display:block; height:160px; min-width:100%;">
           <line x1="0" y1="{zero_y:.0f}" x2="{width}" y2="{zero_y:.0f}" stroke="rgba(255,255,255,0.12)" stroke-width="0.5"/>
           {''.join(bars_svg)}
-          {''.join(time_labels_svg)}
-          {''.join(y_labels_svg)}
         </svg>
+        <!--<![endif]-->
       </div>
       <div style="margin-top:12px; padding:10px 14px; background:var(--bg3); border:1px solid var(--border); border-radius:4px; font-family:var(--sans); font-size:11px; color:var(--dim); line-height:1.6;">
         <strong style="color:var(--gold2);">Reading guide:</strong> Positive values indicate US institutional buying pressure. Sustained positive premium is a bullish signal for BTC.
@@ -1011,16 +1017,24 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     btc_chg_text, btc_chg_cls = _fmt_change(btc_chg_24h)
     btc_status_html = f'''
     <div class="sparkline-wrap" style="padding:20px 24px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <div style="font-family:var(--mono); font-size:22px; font-weight:600; color:var(--text);">${btc_price:,.0f}</div>
-          <div class="{btc_chg_cls}" style="font-family:var(--mono); font-size:13px;">{btc_chg_text}</div>
-        </div>
-        <div style="display:flex; gap:24px; font-family:var(--sans); font-size:11px;">
-          <div style="text-align:center;"><div style="color:var(--dim); margin-bottom:3px;">Support Level</div><div style="font-family:var(--mono); color:var(--green); font-size:13px;">${btc_support:,.0f}</div></div>
-          <div style="text-align:center;"><div style="color:var(--dim); margin-bottom:3px;">Resistance Level</div><div style="font-family:var(--mono); color:var(--red); font-size:13px;">${btc_resistance:,.0f}</div></div>
-        </div>
-      </div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px;">
+        <tr>
+          <td valign="middle" style="vertical-align:middle;">
+            <table cellpadding="0" cellspacing="0"><tr>
+              <td style="font-family:var(--mono); font-size:22px; font-weight:600; color:var(--text); padding-right:12px;">${btc_price:,.0f}</td>
+              <td class="{btc_chg_cls}" style="font-family:var(--mono); font-size:13px;">{btc_chg_text}</td>
+            </tr></table>
+          </td>
+          <td valign="middle" style="vertical-align:middle; text-align:right;">
+            <table cellpadding="0" cellspacing="0" style="display:inline-block; font-family:var(--sans); font-size:11px;">
+              <tr>
+                <td style="padding-right:24px; text-align:center;"><div style="color:var(--dim); margin-bottom:3px;">Support Level</div><div style="font-family:var(--mono); color:var(--green); font-size:13px;">${btc_support:,.0f}</div></td>
+                <td style="text-align:center;"><div style="color:var(--dim); margin-bottom:3px;">Resistance Level</div><div style="font-family:var(--mono); color:var(--red); font-size:13px;">${btc_resistance:,.0f}</div></td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
       <div style="padding:10px 14px; background:var(--bg3); border-left:3px solid {btc_status_color}; border-radius:0 4px 4px 0; font-family:var(--sans); font-size:12px; color:var(--dim); line-height:1.65;">
         {btc_analysis}
       </div>
@@ -1081,12 +1095,11 @@ body{background:#1c2026;color:var(--text);font-family:var(--sans);-webkit-font-s
 .hdr-ed{font-family:var(--sans);font-size:9px;color:var(--gold2);letter-spacing:1.5px;text-transform:uppercase;margin-top:4px;font-weight:500}
 
 /* ── TICKER ── */
-.ticker{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 8px;display:flex;width:100%;}
-.ticker::-webkit-scrollbar{display:none}
-.ti{padding:10px 8px;border-right:1px solid var(--border);flex:1;display:flex;flex-direction:column;gap:2px;min-width:0;}
+.ticker{background:var(--bg2);border-bottom:1px solid var(--border);width:100%;border-collapse:collapse;table-layout:fixed}
+.ti{padding:10px 4px;border-right:1px solid var(--border);text-align:center;}
 .ti:last-child{border-right:none}
-.ti-name{font-family:var(--mono);font-size:8px;color:var(--dim);letter-spacing:1.5px;text-transform:uppercase}
-.ti-val{font-family:var(--mono);font-size:13px;color:var(--text);font-weight:500}
+.ti-name{font-family:var(--mono);font-size:8px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px;}
+.ti-val{font-family:var(--mono);font-size:12px;color:var(--text);font-weight:500}
 .ti-chg{font-family:var(--mono);font-size:9px}
 .up,.heatmap-table td.up{color:var(--green);font-weight:500}
 .down,.heatmap-table td.down{color:var(--red);font-weight:500}
@@ -1259,9 +1272,7 @@ body{background:#1c2026;color:var(--text);font-family:var(--sans);-webkit-font-s
   </div>
 
   <!-- TICKER BAR -->
-  <div class="ticker">
-    {ticker_bar}
-  </div>
+  {ticker_bar}
 
   <!-- GENEL DEĞERLENDİRME -->
   <div class="section">
