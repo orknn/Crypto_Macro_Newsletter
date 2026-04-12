@@ -54,6 +54,8 @@ def _generate_ticker_bar(data):
     macro = data.get('macro_indicators', {})
     crypto_prices = data.get('crypto_prices', [])
     commodities = data.get('commodities', [])
+    fng = data.get('fear_and_greed', {})
+    crypto_ov = data.get('crypto_market_overview', {})
 
     # Find BTC and Gold prices
     btc_price = 0
@@ -77,19 +79,28 @@ def _generate_ticker_bar(data):
          'chg': macro.get('NASDAQ 100 Futures_chg', 0), 'chg_val': macro.get('NASDAQ 100 Futures_chg', 0)},
         {'name': 'DXY', 'price': _fmt_price(macro.get('DXY', 0), 'fx4'),
          'chg': macro.get('DXY_chg', 0), 'chg_val': macro.get('DXY_chg', 0)},
-        {'name': 'BTC', 'price': _fmt_price(btc_price, 'crypto'),
-         'chg': btc_chg, 'chg_val': btc_chg},
-        {'name': 'Gold', 'price': _fmt_price(gold_price, 'price2'),
+        {'name': 'GOLD', 'price': _fmt_price(gold_price, 'price0'),
          'chg': gold_chg, 'chg_val': gold_chg},
         {'name': '10Y UST', 'price': _fmt_price(macro.get('US 10-Year Treasury Yield', 0), 'pct'),
          'chg': macro.get('US 10-Year Treasury Yield_chg', 0), 'chg_val': macro.get('US 10-Year Treasury Yield_chg', 0)},
         {'name': 'VIX', 'price': _fmt_price(macro.get('VIX', 0), 'price2'),
          'chg': macro.get('VIX_chg', 0), 'chg_val': macro.get('VIX_chg', 0)},
+        {'name': 'BTC', 'price': _fmt_price(btc_price, 'price0'),
+         'chg': btc_chg, 'chg_val': btc_chg},
+        {'name': 'BTC.D', 'price': f"{crypto_ov.get('btc_dominance', 0):.1f}%",
+         'custom_chg_text': '—', 'custom_chg_cls': ''},
+        {'name': 'F&G INDEX', 'price': str(fng.get('value', 0)),
+         'custom_chg_text': fng.get('classification', ''), 'custom_chg_cls': 'up' if fng.get('value', 50) >= 50 else 'down'},
     ]
 
     items = []
     for t in tickers:
-        chg_text, chg_cls = _fmt_change(t['chg_val']) if t['chg_val'] != 0 else ("—", "")
+        if 'custom_chg_text' in t:
+            chg_text = t['custom_chg_text']
+            chg_cls = t.get('custom_chg_cls', '')
+        else:
+            chg_text, chg_cls = _fmt_change(t.get('chg_val', 0)) if t.get('chg_val', 0) != 0 else ("—", "")
+            
         items.append(f'''
     <div class="ti">
       <div class="ti-name">{t['name']}</div>
@@ -1089,9 +1100,9 @@ body{background:#1c2026;color:var(--text);font-family:var(--sans);-webkit-font-s
 .hdr-ed{font-family:var(--sans);font-size:9px;color:var(--gold2);letter-spacing:1.5px;text-transform:uppercase;margin-top:4px;font-weight:500}
 
 /* ── TICKER ── */
-.ticker{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 28px;display:flex;overflow-x:auto}
+.ticker{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 8px;display:flex;width:100%;}
 .ticker::-webkit-scrollbar{display:none}
-.ti{padding:10px 18px 10px 0;margin-right:18px;border-right:1px solid var(--border);flex-shrink:0;display:flex;flex-direction:column;gap:2px}
+.ti{padding:10px 8px;border-right:1px solid var(--border);flex:1;display:flex;flex-direction:column;gap:2px;min-width:0;}
 .ti:last-child{border-right:none}
 .ti-name{font-family:var(--mono);font-size:8px;color:var(--dim);letter-spacing:1.5px;text-transform:uppercase}
 .ti-val{font-family:var(--mono);font-size:13px;color:var(--text);font-weight:500}
