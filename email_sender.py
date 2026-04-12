@@ -7,6 +7,7 @@ import json
 import urllib.request
 import urllib.error
 from datetime import datetime
+import base64
 
 
 SUBSCRIBERS = [
@@ -46,13 +47,27 @@ def send_newsletter_email(html_path="daily_bulletin.html", data=None):
 
     for recipient in SUBSCRIBERS:
         try:
-            payload = json.dumps({
+            email_payload = {
                 "from": "NoCashFlow Daily Bulletin <dailyfinancialbulletin@nocashflow.net>",
                 "to": [recipient],
                 "subject": subject,
                 "html": html_content,
                 "reply_to": "orkun@nocashflow.net",
-            }).encode("utf-8")
+            }
+            
+            # PDF ekle
+            pdf_path = "daily_bulletin.pdf"
+            if os.path.isfile(pdf_path):
+                with open(pdf_path, "rb") as pdf_file:
+                    pdf_b64 = base64.b64encode(pdf_file.read()).decode("utf-8")
+                email_payload["attachments"] = [
+                    {
+                        "filename": "daily_bulletin.pdf",
+                        "content": pdf_b64
+                    }
+                ]
+
+            payload = json.dumps(email_payload).encode("utf-8")
 
             req = urllib.request.Request(
                 "https://api.resend.com/emails",
