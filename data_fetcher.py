@@ -954,8 +954,9 @@ def get_coinbase_premium_index():
     resist_2 = btc_price * 1.05
     
     try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         # Fetch last 168 1h candles from Binance
-        bin_res = requests.get('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=168', timeout=10).json()
+        bin_res = requests.get('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=168', headers=headers, timeout=10).json()
         
         # Format: [open_time, open, high, low, close, volume, ...]
         binance_closes = [float(k[4]) for k in bin_res]
@@ -976,7 +977,7 @@ def get_coinbase_premium_index():
         
         # Coinbase historical API usually returns up to 300 data points 
         # Format: [ time, low, high, open, close, volume ]
-        cb_res = requests.get('https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=3600', timeout=10).json()
+        cb_res = requests.get('https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=3600', headers=headers, timeout=15).json()
         cb_map = {int(c[0]): float(c[4]) for c in cb_res}
         
         # Find common timestamps
