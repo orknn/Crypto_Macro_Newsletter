@@ -181,34 +181,43 @@ def get_fear_and_greed_index():
 
 def get_funding_rates():
     """
-    Fetch real-time funding rates and Open Interest from Bybit v5 public API.
-    Avoids Binance REST API which blocks US IPs on GitHub Actions.
+    Fetch real-time funding rates and Open Interest from Kraken Futures API.
+    Avoids Binance and Bybit REST APIs which block US IPs on GitHub Actions.
     """
-    symbols = {'BTC': 'BTCUSDT', 'ETH': 'ETHUSDT', 'SOL': 'SOLUSDT'}
+    symbols = {'BTC': 'PF_XBTUSD', 'ETH': 'PF_ETHUSD', 'SOL': 'PF_SOLUSD'}
     fr_results = {}
     oi_results = {}
     
-    for name, symbol in symbols.items():
-        try:
-            url = f"https://api.bybit.com/v5/market/tickers?category=linear&symbol={symbol}"
-            response = requests.get(url, timeout=10)
-            data = response.json()
-            if data.get('retCode') == 0 and len(data['result']['list']) > 0:
-                item = data['result']['list'][0]
-                fr_results[name] = float(item.get('fundingRate', 0)) * 100  # convert to %
+    try:
+        url = "https://futures.kraken.com/derivatives/api/v3/tickers"
+        response = requests.get(url, timeout=10)
+        data = response.json()
+        tickers = {t['symbol']: t for t in data.get('tickers', [])}
+        
+        for name, symbol in symbols.items():
+            if symbol in tickers:
+                item = tickers[symbol]
                 
-                # Bybit openInterestValue is already in USDT
-                oi_usd = float(item.get('openInterestValue', 0))
+                # Kraken returns funding rate prediction (hourly/4h depending on pair) 
+                # Raw decimal like 0.0001 -> 0.01%
+                fr = float(item.get('fundingRatePrediction', 0)) * 100 
+                fr_results[name] = fr
+                
+                # OI is in base currency, convert to quote (USD)
+                oi_base = float(item.get('openInterest', 0))
+                last_price = float(item.get('last', 0))
+                oi_usd = oi_base * last_price
                 
                 oi_results[name] = {
                     'oi': oi_usd,
-                    'oi_chg_24h': 0.0  # Bybit basic ticker doesn't provide 24h OI chg
+                    'oi_chg_24h': 0.0
                 }
             else:
                 fr_results[name] = 0.0
                 oi_results[name] = {}
-        except Exception as e:
-            print(f"Error fetching Bybit data for {name}: {e}")
+    except Exception as e:
+        print(f"Error fetching Kraken Futures data: {e}")
+        for name in symbols:
             fr_results[name] = 0.0
             oi_results[name] = {}
             
@@ -973,23 +982,22 @@ def get_coinbase_premium_index():
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         
-        # Fetch last 1-hour candles from Kraken instead of Binance (Binance blocks US-based GitHub Actions)
-        kraken_url = 'https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=60'
-        kraken_res = requests.get(kraken_url, headers=headers, timeout=10).json()
-        k_data = kraken_res['result']['XXBTZUSD']
+        # Fetch last 1-hour candles from Binance Vision (Official proxy, bypasses Geoblocks)
+        bin_url = 'https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=168'
+        bin_res = requests.get(bin_url, headers=headers, timeout=10).json()
         
-        # Format: [time, open, high, low, close, vwap, volume, count]
-        k_closes = [float(k[4]) for k in k_data[-168:]]
-        k_highs = [float(k[2]) for k in k_data[-168:]]
-        k_lows = [float(k[3]) for k in k_data[-168:]]
+        # Format: [open_time, open, high, low, close, volume, ...]
+        binance_closes = [float(k[4]) for k in bin_res]
+        bin_highs = [float(k[2]) for k in bin_res]
+        bin_lows = [float(k[3]) for k in bin_res]
         
         # Create a map for global prices by timestamp (in seconds)
-        bin_map = {int(k[0]): float(k[4]) for k in k_data[-300:]}
+        bin_map = {int(k[0]/1000): float(k[4]) for k in bin_res}
         
-        btc_price = k_closes[-1]
+        btc_price = binance_closes[-1]
         
         # Support/Resistance based on recent 168h extremes
-        resist_2 = max(k_highs)
+        resist_2 = max(bin_highs)
         resist_1 = (resist_2 + btc_price) / 2
         
         support_2 = min(bin_lows)
