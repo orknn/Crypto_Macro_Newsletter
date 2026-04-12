@@ -955,21 +955,24 @@ def get_coinbase_premium_index():
     
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        # Fetch last 168 1h candles from Binance
-        bin_res = requests.get('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=168', headers=headers, timeout=10).json()
         
-        # Format: [open_time, open, high, low, close, volume, ...]
-        binance_closes = [float(k[4]) for k in bin_res]
-        bin_highs = [float(k[2]) for k in bin_res]
-        bin_lows = [float(k[3]) for k in bin_res]
+        # Fetch last 1-hour candles from Kraken instead of Binance (Binance blocks US-based GitHub Actions)
+        kraken_url = 'https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=60'
+        kraken_res = requests.get(kraken_url, headers=headers, timeout=10).json()
+        k_data = kraken_res['result']['XXBTZUSD']
         
-        # Create a map for binance prices by timestamp (in seconds)
-        bin_map = {int(k[0]/1000): float(k[4]) for k in bin_res}
+        # Format: [time, open, high, low, close, vwap, volume, count]
+        k_closes = [float(k[4]) for k in k_data[-168:]]
+        k_highs = [float(k[2]) for k in k_data[-168:]]
+        k_lows = [float(k[3]) for k in k_data[-168:]]
         
-        btc_price = binance_closes[-1]
+        # Create a map for global prices by timestamp (in seconds)
+        bin_map = {int(k[0]): float(k[4]) for k in k_data[-300:]}
+        
+        btc_price = k_closes[-1]
         
         # Support/Resistance based on recent 168h extremes
-        resist_2 = max(bin_highs)
+        resist_2 = max(k_highs)
         resist_1 = (resist_2 + btc_price) / 2
         
         support_2 = min(bin_lows)
