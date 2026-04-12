@@ -1,0 +1,45 @@
+name: Daily Bulletin
+
+on:
+  schedule:
+    # 08:00 CET = 07:00 UTC (winter) / 06:00 UTC (summer)
+    # Using 06:00 UTC to cover both CET and CEST
+    - cron: '0 6 * * *'
+  workflow_dispatch:  # Manuel tetikleme — test için
+
+jobs:
+  generate-and-send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout newsletter repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Generate bulletin & send
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.WEBSITE_PUSH_TOKEN }}
+          SEND_EMAIL: "true"
+          CI: "true"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python main.py --send-email
+
+      - name: Upload bulletin as artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: daily-bulletin-${{ github.run_number }}
+          path: |
+            daily_bulletin.html
+          retention-days: 30

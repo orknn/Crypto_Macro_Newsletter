@@ -1,5 +1,9 @@
 import os
 import sys
+import json
+import base64
+import urllib.request
+import urllib.error
 from data_fetcher import (
     get_crypto_prices, get_macro_indicators, get_fear_and_greed_index,
     get_macro_news,
@@ -13,6 +17,73 @@ from html_generator import generate_newsletter_html
 from ai_report_generator import generate_ai_report
 from design_preview_generator import generate_design_preview
 from email_sender import send_newsletter_email
+
+
+
+def push_bulletin_to_website(html_path="daily_bulletin.html"):
+    """
+    Push the generated bulletin HTML to nocashflow.net repo
+    so the website automatically shows the latest bulletin.
+    Requires GITHUB_TOKEN env variable (set as GitHub Secret).
+    """
+    token = os.environ.get("GITHUB_TOKEN")
+    if not token:
+        print("⚠️  GITHUB_TOKEN not set — skipping website push.")
+        return False
+
+    if not os.path.isfile(html_path):
+        print(f"❌ HTML not found: {html_path}")
+        return False
+
+    with open(html_path, "rb") as f:
+        content_b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    # Get current file SHA (required for update)
+    api_url = "https://api.github.com/repos/orknn/nocashflow.net/contents/daily_bulletin.html"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "nocashflow-bulletin-bot",
+    }
+
+    try:
+        req = urllib.request.Request(api_url, headers=headers)
+        with urllib.request.urlopen(req) as resp:
+            file_info = json.loads(resp.read().decode("utf-8"))
+        sha = file_info.get("sha")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            sha = None  # File doesn't exist yet
+        else:
+            print(f"❌ GitHub API error getting SHA: {e.code}")
+            return False
+
+    # Commit message with today's date
+    from datetime import datetime
+    today = datetime.now().strftime("%Y-%m-%d")
+    payload = {
+        "message": f"bulletin: auto-update {today}",
+        "content": content_b64,
+        "branch": "main",
+    }
+    if sha:
+        payload["sha"] = sha
+
+    try:
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            api_url, data=data, headers={**headers, "Content-Type": "application/json"},
+            method="PUT"
+        )
+        with urllib.request.urlopen(req) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+            commit_url = result.get("commit", {}).get("html_url", "")
+            print(f"  ✅ Website updated: {commit_url}")
+            return True
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8")
+        print(f"  ❌ GitHub push failed: {e.code} — {body}")
+        return False
 
 
 def html_to_pdf(html_path, pdf_path):
@@ -165,6 +236,10 @@ def generate_daily_newsletter():
     html_filename = 'daily_bulletin.html'
     generate_newsletter_html(data, html_filename)
 
+    # ── Push to nocashflow.net website ──
+    print("\nWebsite güncelleniyor...")
+    push_bulletin_to_website(html_filename)
+
     # ── Convert to PDF ──
     print("\nPDF'e dönüştürülüyor...")
     pdf_filename = 'daily_bulletin.pdf'
@@ -196,17 +271,14 @@ def generate_daily_newsletter():
     env_send = os.environ.get("SEND_EMAIL", "").lower() == "true"
     arg_send = "--send-email" in sys.argv
 
-    print(f"\nDebug E-posta Kontrolü:")
-    print(f"  - CI ortamı mı? {'Evet' if is_ci else 'Hayır'}")
-    print(f"  - SEND_EMAIL=true mu? {'Evet' if env_send else 'Hayır'}")
-    print(f"  - --send-email argümanı var mı? {'Evet' if arg_send else 'Hayır'}")
+    print(f"\nEmail config: CI={is_ci}, SEND_EMAIL={env_send}, --send-email={arg_send}")
 
     should_email = is_ci or env_send or arg_send
 
     if should_email:
         print("\n📧 E-posta gönderimi başlatılıyor...")
         try:
-            send_newsletter_email(html_filename, pdf_filename, data=data)
+            send_newsletter_email(html_filename, data=data)
         except Exception as e:
             print(f"  ❌ E-posta gönderimi sırasında beklenmedik hata: {e}")
     else:
