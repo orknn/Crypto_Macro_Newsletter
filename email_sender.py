@@ -10,10 +10,10 @@ from datetime import datetime
 
 
 SUBSCRIBERS = [
-    "arzucesur00@gmail.com",
-    "bicenhalil17@gmail.com",
-    "mbalbay23@gmail.com",
-    "Cuneyt_y@yahoo.com",
+    # "arzucesur00@gmail.com",
+    # "bicenhalil17@gmail.com",
+    # "mbalbay23@gmail.com",
+    # "Cuneyt_y@yahoo.com",
     "bicenorkun@gmail.com",
 ]
 
@@ -37,7 +37,7 @@ def send_newsletter_email(html_path="daily_bulletin.html", data=None):
         html_content = f.read()
 
     today_str = datetime.now().strftime("%B %d, %Y")
-    subject = f"NoCashFlow Daily Bulletin — {today_str}"
+    subject = f"Daily Financial Bulletin - {today_str}"
 
     print(f"\n📧 Sending bulletin to {len(SUBSCRIBERS)} subscribers via Resend...")
 
