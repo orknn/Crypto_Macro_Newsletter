@@ -47,7 +47,7 @@ def send_newsletter_email(html_path="daily_bulletin.html", data=None):
     for recipient in SUBSCRIBERS:
         try:
             payload = json.dumps({
-                "from": "NoCashFlow <bulletin@nocashflow.net>",
+                "from": "NoCashFlow Daily Bulletin <dailyfinancialbulletin@nocashflow.net>",
                 "to": [recipient],
                 "subject": subject,
                 "html": html_content,
