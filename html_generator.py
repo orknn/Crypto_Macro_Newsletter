@@ -1067,27 +1067,8 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     '''
 
     # ================= CSS STYLES =================
+    # CSS Variables are replaced manually at the end for email client compatibility
     css_styles = """
-:root{
-  --bg:#0f1114;
-  --bg2:#161a1e;
-  --bg3:#1c2127;
-  --bg4:#22272e;
-  --border:rgba(255,255,255,.07);
-  --border2:rgba(255,255,255,.12);
-  --gold:#c9a96e;
-  --gold2:#a08550;
-  --green:#4aba7a;
-  --red:#cd5c5c;
-  --amber:#d4a853;
-  --cyan:#7aafcf;
-  --text:#e8e4df;
-  --dim:#9a9590;
-  --faint:#2a2d31;
-  --mono:'JetBrains Mono',monospace;
-  --serif:'DM Serif Display',Georgia,serif;
-  --sans:'Inter',system-ui,sans-serif;
-}
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#1c2026;color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;font-size:13px;line-height:1.6}
 .bul{max-width:720px;margin:0 auto;background:var(--bg);border-left:1px solid rgba(0,0,0,0.3);border-right:1px solid rgba(0,0,0,0.3);box-shadow:0 0 30px rgba(0,0,0,0.6)}
@@ -1444,6 +1425,34 @@ body{background:#1c2026;color:var(--text);font-family:var(--sans);-webkit-font-s
 </body>
 </html>'''
 
+    with open(output_filename, 'w', encoding='utf-8') as f:
+        f.write(html)
+        
+    html_color_map = {
+        'var(--bg)': '#0f1114',
+        'var(--bg2)': '#161a1e',
+        'var(--bg3)': '#1c2127',
+        'var(--bg4)': '#22272e',
+        'var(--border)': 'rgba(255,255,255,.07)',
+        'var(--border2)': 'rgba(255,255,255,.12)',
+        'var(--gold)': '#c9a96e',
+        'var(--gold2)': '#a08550',
+        'var(--green)': '#4aba7a',
+        'var(--red)': '#cd5c5c',
+        'var(--amber)': '#d4a853',
+        'var(--cyan)': '#7aafcf',
+        'var(--text)': '#e8e4df',
+        'var(--dim)': '#9a9590',
+        'var(--mid)': '#6a6f7a',
+        'var(--faint)': '#2a2d31', 
+        'var(--ink)': '#111317',
+        'var(--mono)': "'JetBrains Mono', monospace",
+        'var(--serif)': "'DM Serif Display', Georgia, serif",
+        'var(--sans)': "'Inter', system-ui, sans-serif",
+    }
+    for old, new in html_color_map.items():
+        html = html.replace(old, new)
+        
     with open(output_filename, 'w', encoding='utf-8') as f:
         f.write(html)
 
