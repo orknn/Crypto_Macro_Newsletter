@@ -12,10 +12,10 @@ import re
 
 
 SUBSCRIBERS = [
-    # "arzucesur00@gmail.com",
-    # "bicenhalil17@gmail.com",
-    # "mbalbay23@gmail.com",
-    # "Cuneyt_y@yahoo.com",
+    "arzucesur00@gmail.com",
+    "bicenhalil17@gmail.com",
+    "mbalbay23@gmail.com",
+    "Cuneyt_y@yahoo.com",
     "bicenorkun@gmail.com",
 ]
 
