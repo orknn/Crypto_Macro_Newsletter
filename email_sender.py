@@ -8,6 +8,7 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 import base64
+import re
 
 
 SUBSCRIBERS = [
@@ -35,7 +36,38 @@ def send_newsletter_email(html_path="daily_bulletin.html", data=None):
         return False
 
     with open(html_path, "r", encoding="utf-8") as f:
-        html_content = f.read()
+        full_html = f.read()
+
+    # Extract Market Overview
+    match = re.search(r'<p class="summary-text">(.*?)</p>', full_html, re.DOTALL)
+    market_overview = match.group(1) if match else "Please refer to the attached PDF for today's market overview and full data."
+
+    # Build minimalist Email UI
+    html_content = f"""
+    <html>
+    <body style="background-color: #0b0d10; color: #e8e4df; font-family: 'Inter', Helvetica, sans-serif; padding: 40px 20px; line-height: 1.6; margin: 0;">
+        <div style="max-width: 600px; margin: 0 auto; background: #121418; padding: 30px; border-top: 3px solid #d4a853; border-radius: 6px;">
+            
+            <h2 style="color: #d4a853; font-size: 14px; letter-spacing: 2px; text-transform: uppercase; margin-top: 0; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 10px;">Market Overview</h2>
+            
+            <p style="font-size: 14px; color: #9aa0a6; line-height: 1.8; margin-bottom: 30px;">
+                {market_overview}
+            </p>
+            
+            <div style="margin-top: 30px; padding: 20px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; text-align: center;">
+                <p style="font-size: 16px; font-weight: 600; color: #e8e4df; margin: 0; line-height: 1.5;">
+                    📄 For comprehensive insights, detailed charts, and full financial market data, please review the attached PDF Bulletin.
+                </p>
+            </div>
+            
+            <div style="margin-top: 40px; font-size: 11px; color: #6b7280; text-align: center;">
+                <p>© {datetime.now().year} nocashflow.net · Orkun Biçen</p>
+            </div>
+            
+        </div>
+    </body>
+    </html>
+    """
 
     today_str = datetime.now().strftime("%B %d, %Y")
     subject = f"Daily Financial Bulletin - {today_str}"
