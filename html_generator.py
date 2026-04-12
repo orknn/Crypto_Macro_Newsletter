@@ -265,8 +265,8 @@ def _generate_coinbase_premium(data):
         signal_cls = '#cd5c5c'
 
     return f'''
-    <div class="sparkline-wrap" style="padding:20px 24px;">
-      <table style="width:100%; margin-bottom:16px;">
+    <div class="sparkline-wrap" style="padding:20px 24px; page-break-inside: avoid; break-inside: avoid;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
         <tr>
           <td style="vertical-align:top;">
             <div style="font-size:12px; color:#a1a1aa; margin-bottom:4px;">BTC/USD · Coinbase vs Global Spread</div>
@@ -1016,7 +1016,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
 
     btc_chg_text, btc_chg_cls = _fmt_change(btc_chg_24h)
     btc_status_html = f'''
-    <div class="sparkline-wrap" style="padding:20px 24px;">
+    <div class="sparkline-wrap" style="padding:20px 24px; page-break-inside: avoid; break-inside: avoid;">
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px;">
         <tr>
           <td valign="middle" style="vertical-align:middle;">
@@ -1106,7 +1106,7 @@ body{background:#1c2026;color:var(--text);font-family:var(--sans);-webkit-font-s
 .neu,.heatmap-table td.neu{color:var(--dim)}
 
 /* ── SECTION ── */
-.section{padding:22px 28px;border-bottom:1px solid var(--border)}
+.section{padding:22px 28px;border-bottom:1px solid var(--border); page-break-inside: avoid; break-inside: avoid;}
 .section-label{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:1.8px;color:var(--gold);text-transform:uppercase;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid rgba(201,169,110,.15);display:block}
 
 /* ── SUMMARY ── */
