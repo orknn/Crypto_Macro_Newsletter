@@ -60,6 +60,7 @@ def send_newsletter_email(html_path="daily_bulletin.html", data=None):
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
+                    "User-Agent": "NoCashFlow-Bulletin/1.0",
                 },
                 method="POST"
             )
