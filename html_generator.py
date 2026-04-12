@@ -1386,12 +1386,6 @@ body{background:#1c2026;color:var(--text);font-family:var(--sans);-webkit-font-s
     {basis_html}
   </div>
 
-  <!-- OPTIONS MARKETS -->
-  <div class="section">
-    <div class="section-label">Deribit Options Markets</div>
-    {options_market}
-  </div>
-
   <!-- ASSET SUMMARY -->
   <div class="section">
     <div class="section-label">Asset Summary</div>
@@ -1415,6 +1409,12 @@ body{background:#1c2026;color:var(--text);font-family:var(--sans);-webkit-font-s
     </table>
 
     <div style="margin-top:8px;font-family:var(--sans);font-size:9px;color:var(--dim);font-style:italic">Momentum &gt; 70: overbought · Momentum &lt; 30: oversold</div>
+  </div>
+
+  <!-- OPTIONS MARKETS -->
+  <div class="section">
+    <div class="section-label">Deribit Options Markets</div>
+    {options_market}
   </div>
 
   <!-- TOP STORIES -->

@@ -4,6 +4,7 @@ import json
 import base64
 import urllib.request
 import urllib.error
+from datetime import datetime
 from data_fetcher import (
     get_crypto_prices, get_macro_indicators, get_fear_and_greed_index,
     get_macro_news,
@@ -20,10 +21,9 @@ from email_sender import send_newsletter_email
 
 
 
-def push_bulletin_to_website(html_path="daily_bulletin.html"):
+def push_file_to_website(local_path, repo_path):
     """
-    Push the generated bulletin HTML to nocashflow.net repo
-    so the website automatically shows the latest bulletin.
+    Push a file to nocashflow.net repo.
     Requires GITHUB_TOKEN env variable (set as GitHub Secret).
     """
     token = os.environ.get("GITHUB_TOKEN")
@@ -31,15 +31,14 @@ def push_bulletin_to_website(html_path="daily_bulletin.html"):
         print("⚠️  GITHUB_TOKEN not set — skipping website push.")
         return False
 
-    if not os.path.isfile(html_path):
-        print(f"❌ HTML not found: {html_path}")
+    if not os.path.isfile(local_path):
+        print(f"❌ File not found: {local_path}")
         return False
 
-    with open(html_path, "rb") as f:
+    with open(local_path, "rb") as f:
         content_b64 = base64.b64encode(f.read()).decode("utf-8")
 
-    # Get current file SHA (required for update)
-    api_url = "https://api.github.com/repos/orknn/nocashflow.net/contents/daily_bulletin.html"
+    api_url = f"https://api.github.com/repos/orknn/nocashflow.net/contents/{repo_path}"
     headers = {
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3+json",
@@ -55,14 +54,13 @@ def push_bulletin_to_website(html_path="daily_bulletin.html"):
         if e.code == 404:
             sha = None  # File doesn't exist yet
         else:
-            print(f"❌ GitHub API error getting SHA: {e.code}")
+            print(f"❌ GitHub API error getting SHA for {repo_path}: {e.code}")
             return False
 
     # Commit message with today's date
-    from datetime import datetime
     today = datetime.now().strftime("%Y-%m-%d")
     payload = {
-        "message": f"bulletin: auto-update {today}",
+        "message": f"bulletin: auto-update {repo_path} {today}",
         "content": content_b64,
         "branch": "main",
     }
@@ -76,13 +74,11 @@ def push_bulletin_to_website(html_path="daily_bulletin.html"):
             method="PUT"
         )
         with urllib.request.urlopen(req) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-            commit_url = result.get("commit", {}).get("html_url", "")
-            print(f"  ✅ Website updated: {commit_url}")
+            print(f"  ✅ Website updated: {repo_path}")
             return True
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8")
-        print(f"  ❌ GitHub push failed: {e.code} — {body}")
+        print(f"  ❌ GitHub push failed for {repo_path}: {e.code} — {body}")
         return False
 
 
@@ -237,14 +233,16 @@ def generate_daily_newsletter():
     html_filename = 'daily_bulletin.html'
     generate_newsletter_html(data, html_filename)
 
-    # ── Push to nocashflow.net website ──
-    print("\nWebsite güncelleniyor...")
-    push_bulletin_to_website(html_filename)
-
     # ── Convert to PDF ──
     print("\nPDF'e dönüştürülüyor...")
     pdf_filename = 'daily_bulletin.pdf'
     html_to_pdf(html_filename, pdf_filename)
+
+    # ── Push to nocashflow.net website ──
+    print("\nWebsite güncelleniyor...")
+    push_file_to_website(html_filename, "daily_bulletin.html")
+    if os.path.exists(pdf_filename):
+        push_file_to_website(pdf_filename, "daily_bulletin.pdf")
 
     # ── Generate private AI report ──
     print("\nAI raporları oluşturuluyor (sadece editör için)...")
