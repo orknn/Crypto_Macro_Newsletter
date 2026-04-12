@@ -147,8 +147,8 @@ def generate_daily_newsletter():
     print("  → Fear & Greed Index...")
     fear_and_greed = get_fear_and_greed_index()
 
-    print("  → Funding rates...")
-    funding_rates = get_funding_rates()
+    print("  → Funding rates and OI...")
+    funding_rates, open_interest = get_funding_rates()
 
     print("  → Ekonomik takvim...")
     economic_calendar = get_economic_calendar()
@@ -188,6 +188,7 @@ def generate_daily_newsletter():
         'commodities': commodities,
         'fear_and_greed': fear_and_greed,
         'funding_rates': funding_rates,
+        'open_interest': open_interest,
         'economic_calendar': economic_calendar,
         'coinbase_premium': coinbase_premium,
         'macro_news': macro_news,

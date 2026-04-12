@@ -181,21 +181,38 @@ def get_fear_and_greed_index():
 
 def get_funding_rates():
     """
-    Fetch real-time funding rates from Binance Futures API.
+    Fetch real-time funding rates and Open Interest from Bybit v5 public API.
+    Avoids Binance REST API which blocks US IPs on GitHub Actions.
     """
     symbols = {'BTC': 'BTCUSDT', 'ETH': 'ETHUSDT', 'SOL': 'SOLUSDT'}
-    results = {}
+    fr_results = {}
+    oi_results = {}
+    
     for name, symbol in symbols.items():
         try:
-            url = f"https://fapi.binance.com/fapi/v1/premiumIndex?symbol={symbol}"
+            url = f"https://api.bybit.com/v5/market/tickers?category=linear&symbol={symbol}"
             response = requests.get(url, timeout=10)
-            response.raise_for_status()
             data = response.json()
-            results[name] = float(data.get('lastFundingRate', 0)) * 100  # convert to %
+            if data.get('retCode') == 0 and len(data['result']['list']) > 0:
+                item = data['result']['list'][0]
+                fr_results[name] = float(item.get('fundingRate', 0)) * 100  # convert to %
+                
+                # Bybit openInterestValue is already in USDT
+                oi_usd = float(item.get('openInterestValue', 0))
+                
+                oi_results[name] = {
+                    'oi': oi_usd,
+                    'oi_chg_24h': 0.0  # Bybit basic ticker doesn't provide 24h OI chg
+                }
+            else:
+                fr_results[name] = 0.0
+                oi_results[name] = {}
         except Exception as e:
-            print(f"Error fetching funding rate for {name}: {e}")
-            results[name] = 0.0
-    return results
+            print(f"Error fetching Bybit data for {name}: {e}")
+            fr_results[name] = 0.0
+            oi_results[name] = {}
+            
+    return fr_results, oi_results
 
 def get_crypto_futures_basis():
     """
