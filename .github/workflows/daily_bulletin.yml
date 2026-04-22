@@ -3,8 +3,9 @@ name: Daily Bulletin
 on:
   schedule:
     # 08:00 CET = 07:00 UTC (winter) / 06:00 UTC (summer)
-    # Using 06:00 UTC to cover both CET and CEST
-    - cron: '0 6 * * *'
+    # GitHub Actions'ta tam saat başı (0) yoğunluktan dolayı gecikmeler yaşandığı için
+    # 15 dakika erken (05:45 UTC) tetiklenmesi ayarlandı. (Yaz saati için 07:45 Avrupa)
+    - cron: '45 5 * * *'
   workflow_dispatch:  # Manuel tetikleme — test için
 
 jobs:
