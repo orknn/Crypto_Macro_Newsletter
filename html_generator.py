@@ -6,9 +6,14 @@ import os
 from datetime import datetime
 
 
+def _na(v):
+    """True for missing values, including float NaN (which `is None` misses)."""
+    return v is None or (isinstance(v, float) and v != v)
+
+
 def _fmt_price(price, fmt="price2"):
     """Format price based on type."""
-    if price is None or price == 0:
+    if _na(price) or price == 0:
         return "—"
     if fmt == "index":
         return f"{price:,.0f}" if price >= 1000 else f"{price:.2f}"
@@ -34,7 +39,7 @@ def _fmt_price(price, fmt="price2"):
 
 def _fmt_change(val):
     """Format percentage change with sign."""
-    if val is None:
+    if _na(val):
         return "—", ""
     sign = "+" if val >= 0 else ""
     cls = "up" if val >= 0 else "down"
@@ -44,7 +49,7 @@ def _fmt_change(val):
 
 def _momentum_score(chg):
     """Map change to 0-100 momentum score."""
-    if chg is None:
+    if _na(chg):
         return 50
     return max(0, min(100, 50 + chg * 5))
 
@@ -297,6 +302,102 @@ def _generate_coinbase_premium(data):
     </div>'''
 
 
+def _generate_m2_money_supply(data):
+    """Generate the M2 Money Supply section with a 5-year SVG line chart."""
+    m2 = data.get('m2_money_supply')
+    if not m2:
+        return ""
+
+    val_fmt = m2.get('value_formatted', '')
+    chg = m2.get('monthly_change', 0)
+    chg_text, chg_cls = _fmt_change(chg)
+    trend = m2.get('trend', [])
+
+    chart_html = ""
+    if trend:
+        width = 700
+        height = 120
+        pad_l, pad_r, pad_t, pad_b = 0, 0, 8, 8
+
+        vals = [p['value'] for p in trend]
+        min_v = min(vals)
+        max_v = max(vals)
+        rng = max_v - min_v or 0.001
+        n = len(vals)
+
+        def px(i, v):
+            x = pad_l + (i / max(n - 1, 1)) * (width - pad_l - pad_r)
+            y = height - pad_b - ((v - min_v) / rng) * (height - pad_t - pad_b)
+            return x, y
+
+        # Build polyline points
+        points = " ".join(f"{px(i,v)[0]:.1f},{px(i,v)[1]:.1f}" for i, v in enumerate(vals))
+
+        # Build gradient area (closed path)
+        path_d = f"M {px(0, vals[0])[0]:.1f},{px(0, vals[0])[1]:.1f} "
+        path_d += " ".join(f"L {px(i,v)[0]:.1f},{px(i,v)[1]:.1f}" for i, v in enumerate(vals))
+        last_x = px(n - 1, vals[-1])[0]
+        path_d += f" L {last_x:.1f},{height - pad_b} L {pad_l},{height - pad_b} Z"
+
+        # Year labels: show one label per year
+        year_labels = []
+        seen_years = set()
+        for i, p in enumerate(trend):
+            yr = p['date'][:4]
+            if yr not in seen_years:
+                seen_years.add(yr)
+                x, _ = px(i, vals[i])
+                year_labels.append(
+                    f'<text x="{x:.0f}" y="{height}" font-size="8" '
+                    f'fill="rgba(255,255,255,0.25)" font-family="monospace" text-anchor="middle">{yr}</text>'
+                )
+
+        # Current value marker
+        last_x2, last_y2 = px(n - 1, vals[-1])
+
+        chart_html = f'''
+        <div style="position:relative; margin-top:16px; overflow:hidden;">
+          <svg width="100%" viewBox="0 0 {width} {height + 12}" preserveAspectRatio="none"
+               style="display:block; height:110px;">
+            <defs>
+              <linearGradient id="m2grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#4aba7a" stop-opacity="0.25"/>
+                <stop offset="100%" stop-color="#4aba7a" stop-opacity="0.01"/>
+              </linearGradient>
+            </defs>
+            <!-- Area fill -->
+            <path d="{path_d}" fill="url(#m2grad)"/>
+            <!-- Line -->
+            <polyline points="{points}" fill="none" stroke="#4aba7a" stroke-width="1.5"
+                      stroke-linejoin="round" stroke-linecap="round"/>
+            <!-- Endpoint dot -->
+            <circle cx="{last_x2:.1f}" cy="{last_y2:.1f}" r="3" fill="#4aba7a"/>
+            <!-- Year labels -->
+            {''.join(year_labels)}
+          </svg>
+        </div>'''
+
+    return f'''
+    <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:18px; page-break-inside:avoid;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <div style="font-family:var(--sans); font-size:13px; color:var(--text); font-weight:600;">Global Liquidity Proxy</div>
+          <div style="font-family:var(--mono); font-size:9px; color:var(--dim); margin-top:2px;">US M2 Money Supply — 5Y Weekly · FRED (M2SL)</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-family:var(--mono); font-size:20px; font-weight:700; color:var(--text);">{val_fmt}</div>
+          <div class="{chg_cls}" style="font-family:var(--mono); font-size:12px; margin-top:2px;">{chg_text} <span style="color:var(--dim); font-size:10px;">MoM</span></div>
+        </div>
+      </div>
+      {chart_html}
+      <div style="font-family:var(--sans); font-size:10px; color:var(--dim); font-style:italic; line-height:1.5; margin-top:10px;">
+        A rising M2 supply indicates expanding liquidity, which generally provides tailwinds for risk assets.
+      </div>
+    </div>
+    '''
+
+
+
 def _generate_asset_table(assets, columns, id_prefix="row"):
     """Generate a heatmap-style asset table."""
     rows = []
@@ -357,7 +458,6 @@ def _generate_news_stories(news_data, ai_commentaries=None):
         for item in ai_commentaries:
             key_headline = item.get('original_headline') or item.get('headline', '')
             ai_lookup[key_headline] = {
-                'turkish_headline': item.get('turkish_headline', ''),
                 'commentary': item.get('commentary', '')
             }
 
@@ -393,10 +493,9 @@ def _generate_news_stories(news_data, ai_commentaries=None):
             headline = news_item.get('title', '')
             img_url = news_item.get('image_url', '')
 
-        # Use AI commentary and precise translated headline if available, otherwise fallback
+        # Use AI commentary if available, otherwise fallback
         ai_data = ai_lookup.get(headline, {})
-        turkish_headline = ai_data.get('turkish_headline', '')
-        display_headline = turkish_headline if turkish_headline else headline
+        display_headline = headline
         
         commentary = ai_data.get('commentary') or _fallback_commentary(headline)
         ai_label = 'AI Insight' if ai_data else 'Analysis'
@@ -422,40 +521,7 @@ def _generate_news_stories(news_data, ai_commentaries=None):
       </div>''')
     return '\n'.join(items)
 
-def _generate_options_market(options_data, options_note=None):
-    """Generate the Options Market (Deribit) section."""
-    if not options_data:
-        return ""
-    
-    dvol = options_data.get('dvol_index', 0)
-    dvol_chg = options_data.get('dvol_change_24h', 0)
-    pcr = options_data.get('put_call_ratio', 0)
-    oi = options_data.get('open_interest_btc', 0)
-    
-    dvol_chg_text, dvol_chg_cls = _fmt_change(dvol_chg)
-    
-    options_fallback = "DVOL index reflects market-implied volatility expectations. A put/call ratio below 1.0 suggests bullish sentiment with more call buying, while above 1.0 indicates bearish hedging activity."
-    return f'''
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-label">BTC DVOL (Implied Vol.)</div>
-        <div class="kpi-value">{dvol:.1f}</div>
-        <div class="kpi-change {dvol_chg_cls}">{dvol_chg_text}</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Put/Call Ratio (Volume)</div>
-        <div class="kpi-value">{pcr:.2f}</div>
-        <div class="kpi-change">{"Bearish Bias" if pcr > 1.0 else "Bullish Bias"}</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Open Interest (OI)</div>
-        <div class="kpi-value">{oi/1000:.1f}K BTC</div>
-      </div>
-    </div>
-    <div style="margin-top:12px; font-family:var(--sans); font-size:11px; color:var(--dim); line-height:1.6;">
-      <strong style="color:var(--gold2);">Options Market Note:</strong> 
-      {options_note or options_fallback}
-    </div>'''
+
 
 
 def _md_to_html(md_text):
@@ -704,9 +770,11 @@ def _generate_etf_flows(data):
     if not etf:
         return ""
         
-    ibit = etf.get('IBIT_flow_m', 0)
-    fbtc = etf.get('FBTC_flow_m', 0)
-    total = etf.get('Total_flow_m', 0)
+    ibit = etf.get('IBIT_flow_m')
+    fbtc = etf.get('FBTC_flow_m')
+    total = etf.get('Total_flow_m')
+    if _na(ibit) or _na(fbtc) or _na(total):
+        return ""  # incomplete real data → omit the section rather than invent values
     sentiment = etf.get('sentiment', 'Neutral')
     note = data.get('etf_note', '')
     
@@ -823,34 +891,38 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
 
     # ── Makro Scoreboard (Inline Bar) ──
     ms = data.get('macro_scoreboard', {})
-    dxy = ms.get('DXY', 0)
-    dxy_chg = ms.get('DXY_chg', 0)
-    m2 = ms.get('M2', 0)
-    m2_chg = ms.get('M2_chg', 0)
-    pmi = ms.get('PMI', 0)
-    pmi_chg = ms.get('PMI_chg', 0)
+    dxy = ms.get('DXY')
+    dxy_chg = ms.get('DXY_chg')
+    m2 = ms.get('M2')
+    m2_chg = ms.get('M2_chg')
+    pmi = ms.get('PMI')
+    pmi_chg = ms.get('PMI_chg')
 
     dxy_chg_text, dxy_chg_cls = _fmt_change(dxy_chg)
     m2_chg_text, m2_chg_cls = _fmt_change(m2_chg)
     pmi_chg_text, pmi_chg_cls = _fmt_change(pmi_chg)
+    # None-safe display (missing series render "—", never a fabricated 0)
+    dxy_str = "—" if _na(dxy) else f"{dxy:.2f}"
+    m2_str = "—" if _na(m2) else f"${m2:.1f}T"
+    pmi_str = "—" if _na(pmi) else f"{pmi:.1f}"
 
     macro_scoreboard_html = f'''
     <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:11px 18px; margin-top:16px;">
       <div style="display:flex; align-items:center; gap:8px;">
         <span style="font-family:var(--sans); font-size:9px; color:var(--dim); text-transform:uppercase; font-weight:600; letter-spacing:1px;">DXY</span>
-        <span style="font-family:var(--mono); font-size:13px; color:var(--text); font-weight:500;">{dxy:.2f}</span>
+        <span style="font-family:var(--mono); font-size:13px; color:var(--text); font-weight:500;">{dxy_str}</span>
         <span class="{dxy_chg_cls}" style="font-size:11px;">{dxy_chg_text}</span>
       </div>
       <div style="width:1px; height:16px; background:var(--border);"></div>
       <div style="display:flex; align-items:center; gap:8px;">
         <span style="font-family:var(--sans); font-size:9px; color:var(--dim); text-transform:uppercase; font-weight:600; letter-spacing:1px;">M2 Supply</span>
-        <span style="font-family:var(--mono); font-size:13px; color:var(--text); font-weight:500;">${m2:.1f}T</span>
+        <span style="font-family:var(--mono); font-size:13px; color:var(--text); font-weight:500;">{m2_str}</span>
         <span class="{m2_chg_cls}" style="font-size:11px;">{m2_chg_text}</span>
       </div>
       <div style="width:1px; height:16px; background:var(--border);"></div>
       <div style="display:flex; align-items:center; gap:8px;">
         <span style="font-family:var(--sans); font-size:9px; color:var(--dim); text-transform:uppercase; font-weight:600; letter-spacing:1px;">US PMI</span>
-        <span style="font-family:var(--mono); font-size:13px; color:var(--text); font-weight:500;">{pmi:.1f}</span>
+        <span style="font-family:var(--mono); font-size:13px; color:var(--text); font-weight:500;">{pmi_str}</span>
         <span class="{pmi_chg_cls}" style="font-size:11px;">{pmi_chg_text}</span>
       </div>
     </div>
@@ -861,6 +933,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     econ_calendar = _generate_economic_calendar(data.get('economic_calendar', []))
     kpi_cards = _generate_kpi_cards(data)
     coinbase_premium = _generate_coinbase_premium(data)
+    m2_supply_html = _generate_m2_money_supply(data)
     commodity_rows = _generate_asset_table(data.get('commodities', []), 'commodities', 'row')
     mag7_rows = _generate_asset_table(
         [{'Name': s['Name'], 'Symbol': s['Symbol'], 'Price': s['Price'],
@@ -898,7 +971,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
         '''
 
     news_stories = _generate_news_stories(data.get('macro_news', {}), data.get('news_commentaries'))
-    options_market = _generate_options_market(data.get('options_data', {}))
+
     fear_greed_gauge = _generate_fear_greed_gauge(data)
 
     # Extra indicators (Content Proposals #6, #7, #8)
@@ -1372,6 +1445,11 @@ body{background:#1c2026;color:var(--text);font-family:var(--sans);-webkit-font-s
     {coinbase_premium}
   </div>
 
+  <div class="section">
+    <div class="section-label">Macro Liquidity</div>
+    {m2_supply_html}
+  </div>
+
   <!-- BTC ANALYSIS & ETF FLOWS -->
   <div class="section">
     <div class="section-label">BTC Analysis & ETF Flows</div>
@@ -1411,11 +1489,7 @@ body{background:#1c2026;color:var(--text);font-family:var(--sans);-webkit-font-s
     <div style="margin-top:8px;font-family:var(--sans);font-size:9px;color:var(--dim);font-style:italic">Momentum &gt; 70: overbought · Momentum &lt; 30: oversold</div>
   </div>
 
-  <!-- OPTIONS MARKETS -->
-  <div class="section">
-    <div class="section-label">Deribit Options Markets</div>
-    {options_market}
-  </div>
+
 
   <!-- TOP STORIES -->
   <div class="section">

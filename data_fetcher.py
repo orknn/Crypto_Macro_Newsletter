@@ -1,7 +1,6 @@
 import requests
 import pandas as pd
 import yfinance as yf
-import random
 from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
 # ═══════════════════════════════════════════
@@ -280,52 +279,72 @@ def get_crypto_futures_basis():
         }
     except Exception as e:
         print(f"Error fetching real crypto futures basis: {e}")
-        return {
-            'btc_basis': 8.5,
-            'eth_basis': 7.2,
-            'sentiment': 'Bullish',
-            'description': "Annualized futures premiums stand at 8.5% for BTC (API Fallback)."
-        }
+        return None  # no fabricated fallback — caller renders "—" when unavailable
 
 
 def get_etf_flows():
     """
-    Fetch Spot Bitcoin ETF flows scraping Farside Investors (or mocked fallback).
-    IBIT (BlackRock) and FBTC (Fidelity) drive institutional interest.
+    Fetch Spot Bitcoin ETF daily flows from Farside Investors.
+
+    Returns real parsed values, or None when the data can't be obtained — it
+    never fabricates numbers. The previous implementation invented flows with
+    random.uniform(); that has been removed (no fake data).
     """
-    import random
     try:
-        url = "https://farside.co.uk/btc/"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=10)
-        
-        # Scrape logic here would be brittle for a simple script, 
-        # so we extract basic info if available or use an intelligent simulated fallback based on BTC price action
         from bs4 import BeautifulSoup
+        import re as _re
+        url = "https://farside.co.uk/btc/"
+        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # To avoid breaking if layout changes, we use a fallback simulation 
-        # based on typical flow rates: usually ranging -$50M to +$400M
-        ibit_flow = random.uniform(50.0, 300.0) 
-        fbtc_flow = random.uniform(-20.0, 150.0)
-        total_flow = ibit_flow + fbtc_flow + random.uniform(-100, 100) # adding other ETFs
-        
+        table = soup.find('table')
+        if not table:
+            return None
+
+        # Header → column index for IBIT / FBTC / Total
+        headers = [th.get_text(strip=True).upper() for th in table.find_all('th')]
+        def col(name):
+            for i, h in enumerate(headers):
+                if name in h:
+                    return i
+            return None
+        i_ibit, i_fbtc, i_total = col('IBIT'), col('FBTC'), col('TOTAL')
+
+        def to_m(txt):
+            txt = txt.replace(',', '').replace('(', '-').replace(')', '').replace('$', '').strip()
+            if txt in ('', '-', '—'):
+                return None
+            try:
+                return float(txt)
+            except ValueError:
+                return None
+
+        # Last row whose first cell is a real date holds the most recent day.
+        last = None
+        for tr in table.find_all('tr'):
+            cells = [td.get_text(strip=True) for td in tr.find_all('td')]
+            if cells and _re.match(r'\d{1,2}\s+\w{3}\s+\d{4}', cells[0]):
+                last = cells
+        if not last:
+            return None
+
+        ibit = to_m(last[i_ibit]) if i_ibit is not None and i_ibit < len(last) else None
+        fbtc = to_m(last[i_fbtc]) if i_fbtc is not None and i_fbtc < len(last) else None
+        total = to_m(last[i_total]) if i_total is not None and i_total < len(last) else None
+        if total is None and ibit is None and fbtc is None:
+            return None
+
         return {
-            'IBIT_flow_m': round(ibit_flow, 1),
-            'FBTC_flow_m': round(fbtc_flow, 1),
-            'Total_flow_m': round(total_flow, 1),
-            'date': datetime.now().strftime("%Y-%m-%d"),
-            'sentiment': 'Strong Inflow' if total_flow > 200 else ('Outflow' if total_flow < 0 else 'Moderate Inflow')
+            'IBIT_flow_m': ibit,
+            'FBTC_flow_m': fbtc,
+            'Total_flow_m': total,
+            'date': last[0],
+            'sentiment': None if total is None else
+                ('Strong Inflow' if total > 200 else ('Outflow' if total < 0 else 'Moderate Inflow'))
         }
     except Exception as e:
         print(f"Error fetching ETF flows: {e}")
-        return {
-            'IBIT_flow_m': 145.5,
-            'FBTC_flow_m': 42.1,
-            'Total_flow_m': 187.6,
-            'date': datetime.now().strftime("%Y-%m-%d"),
-            'sentiment': 'Moderate Inflow'
-        }
+        return None
 
 
 # ═══════════════════════════════════════════
@@ -416,8 +435,7 @@ def get_macro_scoreboard():
             print(f"      ✅ M2: ${results['M2']:.2f}T")
     except Exception as e:
         print(f"      ⚠️  Error fetching M2 for scoreboard: {e}")
-        results['M2'] = 20.8  # Fallback Trillions
-        results['M2_chg'] = 0.1
+        # no fabricated fallback — leave M2 unset so the template renders "—"
 
     # US PMI from FRED (ISM Manufacturing: NAPM)
     try:
@@ -438,15 +456,13 @@ def get_macro_scoreboard():
             print(f"      ✅ PMI: {current:.1f}")
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 404:
-            print(f"      ⚠️  PMI data not found on FRED (404), using fallback.")
+            print(f"      ⚠️  PMI unavailable (FRED NAPM discontinued) — left unset, no fallback.")
         else:
             print(f"      ⚠️  Error fetching PMI for scoreboard: {e}")
-        results['PMI'] = 49.5 # Fallback
-        results['PMI_chg'] = -0.5
+        # no fabricated 49.5 fallback
     except Exception as e:
         print(f"      ⚠️  Error fetching PMI for scoreboard: {e}")
-        results['PMI'] = 49.5 # Fallback
-        results['PMI_chg'] = -0.5
+        # no fabricated 49.5 fallback
 
     return results
 
@@ -959,8 +975,10 @@ def get_economic_calendar():
 
 
 
+
+
 # ═══════════════════════════════════════════
-# COINBASE PREMIUM (Mock — CoinGlass API is paid)
+# COINBASE PREMIUM (Calculated via Binance & Coinbase API)
 # ═══════════════════════════════════════════
 
 def get_coinbase_premium_index():
@@ -1029,14 +1047,8 @@ def get_coinbase_premium_index():
                 
     except Exception as e:
         print(f"Error fetching historical Premium data: {e}")
-        # Generate mock fallback if API fails
-        now = datetime.now()
-        base_val = 0.0
-        for i in range(168):
-            t = now - timedelta(hours=168-i)
-            base_val += random.uniform(-0.015, 0.015)
-            trend.append({'time': t, 'value': base_val})
-        premium_pct = trend[-1]['value']
+        # no fabricated trend — leave it empty rather than inventing 168 points
+        premium_pct = None
 
     return {
         'current_value': premium_pct,
@@ -1044,7 +1056,7 @@ def get_coinbase_premium_index():
         'btc_support_level': support_1,
         'btc_resistance_level': resist_1,
         '4h_status': {
-            'trend': 'Bullish' if premium_pct > 0 else 'Bearish',
+            'trend': None if premium_pct is None else ('Bullish' if premium_pct > 0 else 'Bearish'),
             'support_1': support_1,
             'support_2': support_2,
             'resistance_1': resist_1,
@@ -1054,126 +1066,117 @@ def get_coinbase_premium_index():
 
 
 # ═══════════════════════════════════════════
-# TOKEN UNLOCKS (Mock)
-# ═══════════════════════════════════════════
-
-
-
-
-# ═══════════════════════════════════════════
-# MACRO NEWS (Mock)
+# MACRO NEWS (Finnhub API)
 # ═══════════════════════════════════════════
 
 def get_macro_news():
-    """Fetch real Macro News from CoinTelegraph RSS feed"""
+    """Fetch real Macro News from Finnhub API"""
+    import os
     import base64
-    import urllib.request
-    import xml.etree.ElementTree as ET
     
     news_items = []
-    try:
-        url = 'https://cointelegraph.com/rss'
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        response = urllib.request.urlopen(req, timeout=10)
-        data = response.read()
-        
-        root = ET.fromstring(data)
-        items = root.findall('.//item')
-        
-        # Get up to 5 latest crypto/macro news items
-        for item in items[:5]:
-            title_node = item.find('title')
-            # Look for media:content url for the image if available
-            # CoinTelegraph provides an image typically in <media:content>
-            namespace = {'media': 'http://search.yahoo.com/mrss/'}
-            media_content = item.find('media:content', namespace)
+    api_key = os.environ.get('FINNHUB_API_KEY')
+    
+    if api_key:
+        try:
+            url = f'https://finnhub.io/api/v1/news?category=general&token={api_key}'
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            data = response.json()
             
-            img_url = ""
-            if media_content is not None and 'url' in media_content.attrib:
-                raw_url = media_content.attrib['url']
-                try:
-                    img_res = requests.get(raw_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
-                    if img_res.status_code == 200:
-                        encoded = base64.b64encode(img_res.content).decode('utf-8')
-                        img_url = f"data:image/jpeg;base64,{encoded}"
-                except Exception as e:
-                    print(f"Error fetching image {raw_url}: {e}")
-            
-            # Use enclosure fallback if media:content not found
-            if not img_url:
-                enclosure = item.find('enclosure')
-                if enclosure is not None and 'url' in enclosure.attrib:
-                    raw_url = enclosure.attrib['url']
+            # Get up to 5 latest macro news items
+            for item in data[:5]:
+                img_url = ""
+                raw_img = item.get('image', '')
+                if raw_img:
                     try:
-                        img_res = requests.get(raw_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+                        img_res = requests.get(raw_img, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
                         if img_res.status_code == 200:
                             encoded = base64.b64encode(img_res.content).decode('utf-8')
                             img_url = f"data:image/jpeg;base64,{encoded}"
                     except Exception as e:
-                        pass
-            
-            news_items.append({
-                "title": title_node.text if title_node is not None else "",
-                "image_url": img_url
-            })
-    except Exception as e:
-        print(f"Error fetching Macro News: {e}")
+                        print(f"      ⚠️  Error fetching Finnhub image {raw_img}: {e}")
+                
+                news_items.append({
+                    "title": item.get('headline', ''),
+                    "image_url": img_url
+                })
+        except Exception as e:
+            print(f"      ⚠️  Error fetching Macro News from Finnhub: {e}")
+    else:
+        print("      ⚠️  FINNHUB_API_KEY is not set. Skipping Finnhub news.")
         
-    # Fallback to general if API fails
+    # Fallback to general if API fails or no key
     if not news_items:
         news_items = [
-            {"title": "Küresel piyasalarda veri akışı zayıf, yönsüz seyir hakim.", "image_url": ""},
-            {"title": "Yatırımcılar merkez bankası açıklamalarını bekliyor.", "image_url": ""},
-            {"title": "Emtia piyasalarında dalgalanma sürüyor.", "image_url": ""}
+            {"title": "Global markets show muted trading amid light economic data.", "image_url": ""},
+            {"title": "Investors await key central bank policy announcements.", "image_url": ""},
+            {"title": "Commodity markets experience continued volatility.", "image_url": ""}
         ]
         
     return {
         "news": news_items,
-        "events": [] # We will still append the events from investpy later in main if needed
+        "events": []
     }
 
 # ═══════════════════════════════════════════
-# OPTIONS MARKET DATA (Deribit API)
+# M2 MONEY SUPPLY (FRED API)
 # ═══════════════════════════════════════════
 
-def get_options_market_data():
+def get_m2_money_supply():
     """
-    Real Deribit Options Market Data for BTC.
+    Fetch M2 Money Supply from FRED API.
+    Uses M2SL (Monthly, Seasonally Adjusted).
+    Returns current value, monthly change, and 5-year weekly trend.
     """
-    dvol = 50.0 # fallback
-    pcr = 0.8 # fallback
-    oi = 300000 # fallback
-    
     try:
-        # Fetch DVOL
-        dvol_res = requests.get('https://www.deribit.com/api/v2/public/get_index_price?index_name=btc_dvol').json()
-        if 'result' in dvol_res and dvol_res['result']:
-            dvol = float(dvol_res['result'].get('index_price', 50.0))
-            
-        # Fetch Options Volume/PCR
-        summary = requests.get('https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option').json()
-        result = summary.get('result', [])
-        
-        call_vol = sum(item.get('volume_usd', 0) for item in result if item.get('instrument_name', '').endswith('-C'))
-        put_vol = sum(item.get('volume_usd', 0) for item in result if item.get('instrument_name', '').endswith('-P'))
-        
-        if call_vol > 0:
-            pcr = put_vol / call_vol
-            
-        total_oi_btc = sum(item.get('open_interest', 0) for item in result)
-        if total_oi_btc > 0:
-            oi = total_oi_btc
-            
+        from datetime import timedelta
+        import io
+        import pandas as pd
+
+        # Fetch 5+ years of data for trend chart
+        start_date = (datetime.now() - timedelta(days=365 * 5 + 60)).strftime('%Y-%m-%d')
+        url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id=M2SL&cosd={start_date}"
+
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        df = pd.read_csv(io.StringIO(resp.text))
+        df.columns = ['date', 'value']
+        df['value'] = pd.to_numeric(df['value'], errors='coerce')
+        df = df.dropna()
+        df['date'] = pd.to_datetime(df['date'])
+
+        if len(df) >= 2:
+            current = df['value'].iloc[-1]
+            prev = df['value'].iloc[-2]
+            monthly_change = ((current - prev) / prev) * 100
+            current_t = current / 1000
+
+            # Build trend list: date label + value in trillions
+            trend = [
+                {'date': row['date'].strftime('%Y-%m'), 'value': round(row['value'] / 1000, 3)}
+                for _, row in df.iterrows()
+            ]
+
+            return {
+                'value': current_t,
+                'value_formatted': f"${current_t:.2f}T",
+                'monthly_change': round(monthly_change, 2),
+                'source': 'FRED (M2SL)',
+                'trend': trend,
+            }
     except Exception as e:
-        print(f"Error fetching Options Data: {e}")
-        
+        print(f"  ⚠️  M2 Money Supply fetch error: {e}")
+
+    # Fallback
     return {
-        'dvol_index': dvol, 
-        'dvol_change_24h': random.uniform(-1.5, 1.5), # Simulated small jitter since Deribit doesn't explicitly return 24h change easily here
-        'put_call_ratio': pcr,
-        'open_interest_btc': oi,
-        'max_pain_price': 85000 + random.randint(-2000, 2000) # Max pain is complex to calculate in real time efficiently without heavy processing
+        'value': 21.0,
+        'value_formatted': '$21.00T',
+        'monthly_change': 0.0,
+        'source': 'fallback',
+        'trend': [],
     }
+
 
 
 # ═══════════════════════════════════════════
