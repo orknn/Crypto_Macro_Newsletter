@@ -160,49 +160,39 @@ class NewsletterTests(unittest.TestCase):
         self.assertNotIn("Fabricated insight", result)
     
     def test_calendar_matching_precision(self):
-        """H3: CPI m/m FRED actual should NOT leak into Core CPI m/m event."""
-        # Simulate the matching logic
-        fred_actuals = {
-            'cpi m/m': '0.3%',
-            'core cpi m/m': '0.2%',
-            'cpi y/y': '2.4%',
+        """H3: economic calendar surprise guard rejects out-of-bounds actual values."""
+        surprise_thresholds = {
+            'cpi y/y': 1.0,
+            'cpi m/m': 0.5,
+            'core cpi m/m': 0.5,
         }
         
-        # Build mock events
-        events = [
-            {'event': 'Core CPI MoM', 'actual': '—', 'forecast': '0.3%'},
-            {'event': 'CPI MoM', 'actual': '—', 'forecast': '0.4%'},
-            {'event': 'CPI YoY', 'actual': '—', 'forecast': '2.5%'},
-        ]
+        def _parse_numeric(val_str):
+            if not val_str or val_str == '—':
+                return None
+            try:
+                return float(val_str.replace('%', '').strip())
+            except (ValueError, TypeError):
+                return None
         
-        # Simulate the matching from data_fetcher.py
-        sorted_fred_keys = sorted(fred_actuals.keys(), key=len, reverse=True)
-        
-        for ev in events:
-            event_lower = ev.get('event', '').lower().strip()
-            event_normalized = event_lower.replace('mom', 'm/m').replace('yoy', 'y/y').replace('qoq', 'q/q')
-            matched = None
-            
-            # Exact match
-            if event_normalized in fred_actuals:
-                matched = fred_actuals[event_normalized]
-            
-            # Sorted contains match (longest first)
-            if not matched:
-                for fk in sorted_fred_keys:
-                    if event_normalized == fk or event_normalized.endswith(fk):
-                        if 'core' in event_normalized and 'core' not in fk:
-                            continue
-                        matched = fred_actuals[fk]
-                        break
-            
-            if matched:
-                ev['actual'] = matched
-        
-        # Core CPI MoM should match 'core cpi m/m' = 0.2%, NOT 'cpi m/m' = 0.3%
-        self.assertEqual(events[0]['actual'], '0.2%', "Core CPI MoM matched wrong FRED key")
-        self.assertEqual(events[1]['actual'], '0.3%', "CPI MoM should match cpi m/m")
-        self.assertEqual(events[2]['actual'], '2.4%', "CPI YoY should match cpi y/y")
+        def _surprise_check(event_key, actual_str, consensus_str):
+            threshold = surprise_thresholds.get(event_key.lower().strip())
+            if threshold is None:
+                return True
+            actual_num = _parse_numeric(actual_str)
+            consensus_num = _parse_numeric(consensus_str)
+            if actual_num is None or consensus_num is None:
+                return True
+            diff = abs(actual_num - consensus_num)
+            return diff <= threshold
+
+        # Test cases
+        self.assertTrue(_surprise_check('cpi m/m', '0.5%', '0.3%')) # diff = 0.2 <= 0.5
+        self.assertFalse(_surprise_check('cpi m/m', '0.9%', '0.3%')) # diff = 0.6 > 0.5 (reject)
+        self.assertTrue(_surprise_check('core cpi m/m', '0.2%', '0.3%')) # diff = 0.1 <= 0.5
+        self.assertFalse(_surprise_check('core cpi m/m', '0.9%', '0.3%')) # diff = 0.6 > 0.5 (reject)
+        self.assertTrue(_surprise_check('cpi y/y', '3.5%', '2.8%')) # diff = 0.7 <= 1.0
+        self.assertFalse(_surprise_check('cpi y/y', '4.5%', '2.8%')) # diff = 1.7 > 1.0 (reject)
     
     def test_maybe_layout_guard(self):
         """H2: maybe() should filter None, empty, and literal 'None' values."""

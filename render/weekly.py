@@ -69,7 +69,9 @@ def render_weekly(data, lang='tr'):
     strategy_note = lang_data.get('notes', {}).get('week_plan_note') or data.get('week_plan_note', '')
     if events or (strategy_note and str(strategy_note).strip() and str(strategy_note).strip() != 'None'):
         calendar_weekly_html = f'''
-        {render_section_divider(STR['section_calendar_weekly'][lang])}
+        {render_section_divider(STR['section_calendar_weekly'][lang])}'''
+        if events:
+            calendar_weekly_html += f'''
         {render_economic_calendar(events, lang=lang)}'''
         
         if strategy_note and str(strategy_note).strip() and str(strategy_note).strip() != 'None':

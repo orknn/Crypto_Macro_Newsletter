@@ -853,120 +853,37 @@ def _fallback_liquidity():
 
 
 # ═══════════════════════════════════════════
-# FRED ACTUALS LOOKUP
+# ECONOMIC CALENDAR (ForexFactory)
 # ═══════════════════════════════════════════
 
-def _fetch_fred_actuals():
-    """
-    Fetch the latest actual released values for key economic indicators from FRED.
-    Returns a dict mapping event keyword patterns to their latest actual value string.
-    This is used to fill in the 'actual' column when ForexFactory doesn't provide it.
-    """
-    import io
-    actuals = {}
-    
-    def _fred_csv(series_id, start='2024-01-01'):
-        """Fetch a FRED CSV series and return a DataFrame."""
-        url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}&cosd={start}"
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        df = pd.read_csv(io.StringIO(resp.text))
-        df.columns = ['date', 'value']
-        df['value'] = pd.to_numeric(df['value'], errors='coerce')
-        return df.dropna()
-    
-    def _mom_pct(series_id):
-        """Get latest month-over-month % change from a FRED index series."""
-        df = _fred_csv(series_id)
-        if len(df) >= 2:
-            curr = df.iloc[-1]['value']
-            prev = df.iloc[-2]['value']
-            return round(((curr - prev) / prev) * 100, 1)
-        return None
-    
-    try:
-        # CPI m/m (All Items) — CPIAUCSL
-        cpi_mom = _mom_pct('CPIAUCSL')
-        if cpi_mom is not None:
-            actuals['cpi m/m'] = f"{cpi_mom}%"
-        
-        # Core CPI m/m (Less Food & Energy) — CPILFESL
-        core_cpi_mom = _mom_pct('CPILFESL')
-        if core_cpi_mom is not None:
-            actuals['core cpi m/m'] = f"{core_cpi_mom}%"
-        
-        # CPI y/y — computed from CPIAUCSL (latest vs 12 months ago)
-        df_cpi = _fred_csv('CPIAUCSL')
-        if len(df_cpi) >= 13:
-            latest = df_cpi.iloc[-1]['value']
-            y_ago = df_cpi.iloc[-13]['value']
-            cpi_yoy = round(((latest - y_ago) / y_ago) * 100, 1)
-            actuals['cpi y/y'] = f"{cpi_yoy}%"
-        
-        # Core PCE Price Index m/m — PCEPILFE
-        core_pce_mom = _mom_pct('PCEPILFE')
-        if core_pce_mom is not None:
-            actuals['core pce price index m/m'] = f"{core_pce_mom}%"
-            actuals['core pce'] = f"{core_pce_mom}%"
-
-        # Core CPI y/y — computed from CPILFESL (latest vs 12 months ago)
-        df_core_cpi = _fred_csv('CPILFESL')
-        if len(df_core_cpi) >= 13:
-            latest = df_core_cpi.iloc[-1]['value']
-            y_ago = df_core_cpi.iloc[-13]['value']
-            core_cpi_yoy = round(((latest - y_ago) / y_ago) * 100, 1)
-            actuals['core cpi y/y'] = f"{core_cpi_yoy}%"
-
-        # PPI m/m — PPIFID
-        ppi_mom = _mom_pct('PPIFID')
-        if ppi_mom is not None:
-            actuals['ppi m/m'] = f"{ppi_mom}%"
-
-        # Core PPI m/m — PPIFES
-        core_ppi_mom = _mom_pct('PPIFES')
-        if core_ppi_mom is not None:
-            actuals['core ppi m/m'] = f"{core_ppi_mom}%"
-        
-        # GDP q/q annualized — A191RL1Q225SBEA (this series IS the % change directly)
+def _log_finnhub_calendar_lock():
+    """Write finnhub_calendar: premium_locked to fetch_report.json."""
+    report_path = "fetch_report.json"
+    report_data = {}
+    if os.path.exists(report_path):
         try:
-            df_gdp = _fred_csv('A191RL1Q225SBEA')
-            if len(df_gdp) >= 1:
-                gdp_latest = df_gdp.iloc[-1]['value']
-                actuals['final gdp q/q'] = f"{gdp_latest}%"
-                actuals['gdp q/q'] = f"{gdp_latest}%"
-                actuals['advance gdp'] = f"{gdp_latest}%"
-                actuals['preliminary gdp'] = f"{gdp_latest}%"
+            with open(report_path, 'r', encoding='utf-8') as f:
+                report_data = json.load(f)
         except Exception:
             pass
-        
-        # ISM Services PMI — ISM/NMI (try USININDEX if NMFCI fails)
-        for sid in ['ISM/NMI', 'USININDEX']:
-            try:
-                df_ism = _fred_csv(sid, start='2025-01-01')
-                if len(df_ism) >= 1:
-                    actuals['ism services pmi'] = f"{df_ism.iloc[-1]['value']:.1f}"
-                    break
-            except Exception:
-                continue
-                
-        print(f"      ✅ FRED actuals fetched: {list(actuals.keys())}")
-        
-    except Exception as e:
-        print(f"      ⚠️  Error fetching FRED actuals: {e}")
     
-    return actuals
-
-
-# ═══════════════════════════════════════════
-# ECONOMIC CALENDAR (ForexFactory + FRED Actuals)
-# ═══════════════════════════════════════════
+    report_data["finnhub_calendar"] = "premium_locked"
+    
+    try:
+        with open(report_path, 'w', encoding='utf-8') as f:
+            json.dump(report_data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 def get_economic_calendar():
     """
-    Fetch upcoming Economic Calendar events from ForexFactory JSON API.
-    Includes actual released values, forecast, and previous.
-    Filters for USD and EUR, High impact only.
+    Fetch Economic Calendar events from ForexFactory JSON API.
+    Filters for USD and EUR, High and Medium impact only.
+    Applies surprise guard checks directly to actual values.
     """
+    # Write Finnhub Premium Lock status as requested
+    _log_finnhub_calendar_lock()
+
     events = []
     try:
         url = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
@@ -998,7 +915,7 @@ def get_economic_calendar():
         
         data = response.json()
         
-        # Exclude events that are marked as "High" but aren't true 3-star macro releases
+        # Exclude events that aren't true macro releases
         exclude_keywords = [
             'speaks', 'speech', 'press conference',
             'crude oil inventories', 'natural gas',
@@ -1008,11 +925,56 @@ def get_economic_calendar():
             'fomc member', 'testifies'
         ]
         
+        # Surprise guard thresholds: |actual - consensus| must be <= threshold
+        # If exceeded, the actual is rejected (likely a data error)
+        surprise_thresholds = {
+            'cpi y/y': 1.0,      # percentage points
+            'cpi m/m': 0.5,
+            'core cpi m/m': 0.5,
+            'core cpi y/y': 1.0,
+            'core pce price index m/m': 0.5,
+            'core pce': 0.5,
+            'ppi m/m': 1.0,
+            'core ppi m/m': 1.0,
+            'ism services pmi': 5.0,
+            'final gdp q/q': 2.0,
+            'gdp q/q': 2.0,
+            'advance gdp': 2.0,
+            'preliminary gdp': 2.0,
+        }
+        
+        def _parse_numeric(val_str):
+            """Parse a string like '3.4%' or '54.8' into a float."""
+            if not val_str or val_str == '—':
+                return None
+            try:
+                return float(val_str.replace('%', '').strip())
+            except (ValueError, TypeError):
+                return None
+        
+        def _surprise_check(event_key, actual_str, consensus_str):
+            """Return True if the actual passes the surprise guard (is reasonable)."""
+            threshold = surprise_thresholds.get(event_key.lower().strip())
+            if threshold is None:
+                return True  # No threshold defined, allow it
+            actual_num = _parse_numeric(actual_str)
+            consensus_num = _parse_numeric(consensus_str)
+            if actual_num is None or consensus_num is None:
+                return True  # Can't compare, allow it
+            diff = abs(actual_num - consensus_num)
+            if diff > threshold:
+                print(f"      ⚠️  Surprise guard REJECTED: {event_key} actual={actual_str} consensus={consensus_str} diff={diff:.2f} > threshold={threshold}")
+                # Log to fetch_report.json
+                _log_calendar_rejection(event_key, actual_str, consensus_str, diff, threshold)
+                return False
+            return True
+
         for event in data:
             country = event.get('country', '')
             impact = event.get('impact', '')
             
-            if country not in ['USD', 'EUR'] or impact != 'High':
+            # Filter for USD/EUR and High/Medium impact only
+            if country not in ['USD', 'EUR'] or impact not in ['High', 'Medium']:
                 continue
                 
             event_name = event.get('title', '')
@@ -1036,7 +998,6 @@ def get_economic_calendar():
             date_iso = event.get('date', '')
             ts = None
             try:
-                # python 3.7+ fromisoformat handles simple timezone offsets
                 dt = datetime.fromisoformat(date_iso.replace('Z', '+00:00'))
                 formatted_date = dt.strftime('%d %b %a')
                 time_str = dt.strftime('%I:%M %p').lstrip('0')
@@ -1045,19 +1006,32 @@ def get_economic_calendar():
                 formatted_date = date_iso.split('T')[0] if 'T' in date_iso else date_iso
                 time_str = date_iso.split('T')[1][:5] if 'T' in date_iso else '—'
             
+            # Apply surprise guard if actual and forecast are present
+            if actual != '—' and forecast != '—':
+                event_normalized = event_lower.replace('mom', 'm/m').replace('yoy', 'y/y').replace('qoq', 'q/q').strip()
+                # Find exact matching key in surprise_thresholds
+                matched_key = None
+                for k in surprise_thresholds:
+                    if event_normalized == k:
+                        matched_key = k
+                        break
+                
+                if matched_key:
+                    if not _surprise_check(matched_key, actual, forecast):
+                        actual = '—'
+            
             events.append({
                 'date': formatted_date,
                 'timestamp': ts,
                 'time': time_str,
                 'country': country,
                 'event': event_name.strip(),
-                'importance': 3,
+                'importance': 3 if impact == 'High' else 2,
                 'previous': previous,
                 'forecast': forecast,
                 'actual': actual
             })
             
-        # Optional: Sort by date if needed, though usually sequential
         # Limit to top 15 events
         events = events[:15]
         
@@ -1065,173 +1039,6 @@ def get_economic_calendar():
         print(f"Error fetching ForexFactory calendar: {e}")
         events = []
 
-    # ── ENRICH with FRED actuals ──
-    fred_actuals = {}
-    try:
-        fred_actuals = _fetch_fred_actuals()
-    except Exception as e:
-        print(f"      ⚠️  Error fetching FRED actuals: {e}")
-    
-    # Surprise guard thresholds: |actual - consensus| must be <= threshold
-    # If exceeded, the actual is rejected (likely a data error)
-    surprise_thresholds = {
-        'cpi y/y': 1.0,      # percentage points
-        'cpi m/m': 0.5,
-        'core cpi m/m': 0.5,
-        'core cpi y/y': 1.0,
-        'core pce price index m/m': 0.5,
-        'core pce': 0.5,
-        'ppi m/m': 1.0,
-        'core ppi m/m': 1.0,
-        'ism services pmi': 5.0,
-        'final gdp q/q': 2.0,
-        'gdp q/q': 2.0,
-        'advance gdp': 2.0,
-        'preliminary gdp': 2.0,
-    }
-    
-    def _parse_numeric(val_str):
-        """Parse a string like '3.4%' or '54.8' into a float."""
-        if not val_str or val_str == '—':
-            return None
-        try:
-            return float(val_str.replace('%', '').strip())
-        except (ValueError, TypeError):
-            return None
-    
-    def _surprise_check(event_key, actual_str, consensus_str):
-        """Return True if the actual passes the surprise guard (is reasonable)."""
-        threshold = surprise_thresholds.get(event_key.lower().strip())
-        if threshold is None:
-            return True  # No threshold defined, allow it
-        actual_num = _parse_numeric(actual_str)
-        consensus_num = _parse_numeric(consensus_str)
-        if actual_num is None or consensus_num is None:
-            return True  # Can't compare, allow it
-        diff = abs(actual_num - consensus_num)
-        if diff > threshold:
-            print(f"      ⚠️  Surprise guard REJECTED: {event_key} actual={actual_str} consensus={consensus_str} diff={diff:.2f} > threshold={threshold}")
-            # Log to fetch_report.json
-            _log_calendar_rejection(event_key, actual_str, consensus_str, diff, threshold)
-            return False
-        return True
-    
-    if fred_actuals:
-        # If we have ForexFactory events, enrich them with EXACT key matching
-        # CRITICAL: Use exact match on normalized event title to avoid
-        # substring collision (e.g. 'cpi m/m' matching 'core cpi m/m')
-        if events:
-            # Build a lookup: normalized event title -> FRED key
-            # Sort FRED keys by length DESC so longer/more specific keys match first
-            sorted_fred_keys = sorted(fred_actuals.keys(), key=len, reverse=True)
-            
-            for ev in events:
-                if ev.get('actual', '—') == '—':
-                    event_lower = ev.get('event', '').lower().strip()
-                    matched = None
-                    matched_key = None
-                    
-                    # 1. Try exact match first
-                    if event_lower in fred_actuals:
-                        matched = fred_actuals[event_lower]
-                        matched_key = event_lower
-                    
-                    # 2. Try matching where the event title exactly equals a FRED key
-                    #    (after stripping common suffixes like MoM, YoY, QoQ)
-                    if not matched:
-                        event_normalized = event_lower.replace('mom', 'm/m').replace('yoy', 'y/y').replace('qoq', 'q/q')
-                        if event_normalized in fred_actuals:
-                            matched = fred_actuals[event_normalized]
-                            matched_key = event_normalized
-                    
-                    # 3. Only fall back to contains-check if the FRED key is a COMPLETE
-                    #    word boundary match within the event title (not just substring)
-                    if not matched:
-                        for fk in sorted_fred_keys:
-                            # The FRED key must match the END of the event title
-                            # to avoid 'cpi m/m' matching 'core cpi m/m'
-                            if event_lower == fk or event_lower.endswith(fk):
-                                # Extra guard: if event has 'core' but key doesn't, skip
-                                if 'core' in event_lower and 'core' not in fk:
-                                    continue
-                                matched = fred_actuals[fk]
-                                matched_key = fk
-                                break
-                    
-                    if matched and matched_key:
-                        # Apply surprise guard
-                        consensus = ev.get('forecast', '—')
-                        if _surprise_check(matched_key, matched, consensus):
-                            ev['actual'] = matched
-                            print(f"      → FRED actual for '{ev['event']}': {matched}")
-                        else:
-                            print(f"      ⚠️  FRED actual for '{ev['event']}' rejected by surprise guard")
-        
-        # If FF failed entirely, build calendar from FRED data
-        if not events:
-            print("      📅 Building calendar from FRED actuals...")
-            fred_calendar = []
-            
-            # Map FRED actuals to standard economic events
-            event_defs = [
-                ('ISM Services PMI',    'ism services pmi',             '10:00 AM', '—'),
-                ('FOMC Meeting Minutes','fomc',                          '2:00 PM',  '—'),
-                ('Core PCE Price Index m/m', 'core pce price index m/m','8:30 AM',  '—'),
-                ('Final GDP q/q',       'final gdp q/q',                '8:30 AM',  '—'),
-                ('Core CPI m/m',        'core cpi m/m',                 '8:30 AM',  '—'),
-                ('CPI m/m',             'cpi m/m',                      '8:30 AM',  '—'),
-                ('CPI y/y',             'cpi y/y',                      '8:30 AM',  '—'),
-            ]
-            
-            for event_name, key, time_str, default in event_defs:
-                actual_val = fred_actuals.get(key, default)
-                # Get fore/prev from the FRED data metadata if possible
-                forecast = '—'
-                previous = '—'
-                
-                # Use known recent forecasts/previous from this week
-                if key == 'cpi m/m':
-                    forecast = '1.0%'; previous = '0.3%'
-                elif key == 'core cpi m/m':
-                    forecast = '0.3%'; previous = '0.2%'
-                elif key == 'cpi y/y':
-                    forecast = '3.4%'; previous = '2.4%'
-                elif key == 'core pce price index m/m':
-                    forecast = '0.4%'; previous = '0.4%'
-                elif key == 'final gdp q/q':
-                    forecast = '0.7%'; previous = '0.7%'
-                elif key == 'ism services pmi':
-                    forecast = '54.8'; previous = '56.1'
-                
-                if actual_val and actual_val != '—':
-                    fred_calendar.append({
-                        'date': '—',
-                        'time': time_str,
-                        'country': 'USD',
-                        'event': event_name,
-                        'importance': 3,
-                        'previous': previous,
-                        'forecast': forecast,
-                        'actual': actual_val
-                    })
-            
-            if fred_calendar:
-                events = fred_calendar
-    
-    # Final fallback if still empty
-    if not events:
-        events = [{
-            'date': datetime.now().strftime('%d %b %a'),
-            'timestamp': datetime.now().timestamp(),
-            'time': '—',
-            'country': 'USD',
-            'event': 'Weekly Data Pending...',
-            'importance': 1,
-            'previous': '—',
-            'forecast': '—',
-            'actual': '—'
-        }]
-        
     # Standardize abbreviations (e.g. m/m -> MoM)
     for ev in events:
         if ev.get('event'):
