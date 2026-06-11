@@ -3,6 +3,76 @@ import pandas as pd
 import yfinance as yf
 from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
+import time
+import io
+
+# ═══════════════════════════════════════════
+# CACHING & UTILITY FUNCTIONS
+# ═══════════════════════════════════════════
+
+_YF_CACHE = {}
+
+def preload_yfinance_data(tickers, period='35d'):
+    global _YF_CACHE
+    try:
+        needed = [t for t in tickers if (t, period) not in _YF_CACHE]
+        if not needed:
+            return
+        print(f"      → Preloading {len(needed)} tickers for period {period}...")
+        data = yf.download(needed, period=period, progress=False, group_by='ticker', threads=True)
+        if len(needed) == 1:
+            ticker = needed[0]
+            _YF_CACHE[(ticker, period)] = data
+        else:
+            for t in needed:
+                if t in data:
+                    _YF_CACHE[(t, period)] = data[t]
+    except Exception as e:
+        print(f"      ⚠️  Error preloading yfinance data: {e}")
+
+def get_yfinance_data(ticker, period='5d'):
+    global _YF_CACHE
+    key = (ticker, period)
+    if key in _YF_CACHE:
+        return _YF_CACHE[key]
+    try:
+        data = yf.download(ticker, period=period, progress=False)
+        _YF_CACHE[key] = data
+        return data
+    except Exception as e:
+        print(f"      ⚠️  Error downloading {ticker} from yfinance: {e}")
+        return pd.DataFrame()
+
+def get_fred_data(series_id, start_date=None, days_back=None, retries=3):
+    """
+    Fetch a series from FRED public CSV endpoint.
+    Includes retries and rate limit delay to ensure robust execution.
+    """
+    if not start_date and days_back:
+        start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+    elif not start_date:
+        start_date = '2023-01-01'
+        
+    url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}&cosd={start_date}"
+    
+    for attempt in range(retries):
+        try:
+            time.sleep(1.0)  # Rate limit prevention delay
+            resp = requests.get(url, timeout=20)
+            resp.raise_for_status()
+            df = pd.read_csv(io.StringIO(resp.text))
+            df.columns = ['date', 'value']
+            df['date'] = pd.to_datetime(df['date'])
+            df['value'] = pd.to_numeric(df['value'], errors='coerce')
+            df = df.dropna()
+            return df
+        except Exception as e:
+            print(f"      ⚠️  Attempt {attempt+1} failed for FRED {series_id}: {e}")
+            if attempt == retries - 1:
+                return None
+            time.sleep(2 * (attempt + 1))
+    return None
+
 # ═══════════════════════════════════════════
 # CRYPTO DATA
 # ═══════════════════════════════════════════
@@ -390,11 +460,10 @@ def get_etf_flows():
 
 def get_macro_indicators():
     """
-    Fetch VIX, DXY, US 10Y Yield, NASDAQ 100 Futures using yfinance.
+    Fetch VIX, DXY, US 10Y Yield, NASDAQ 100 Futures using yfinance, and 2Y Yield from FRED.
     """
     tickers = {
         'US 10-Year Treasury Yield': '^TNX',
-        'US 2-Year Treasury Yield': '^IRX',
         'VIX': '^VIX',
         'DXY': 'DX-Y.NYB',
         'NASDAQ 100 Futures': 'NQ=F',
@@ -404,7 +473,7 @@ def get_macro_indicators():
     results = {}
     for name, ticker in tickers.items():
         try:
-            data = yf.download(ticker, period='5d', progress=False)
+            data = get_yfinance_data(ticker, period='5d')
             if not data.empty and 'Close' in data and len(data['Close']) >= 2:
                 last_close = float(data['Close'].iloc[-1].item())
                 prev_close = float(data['Close'].iloc[-2].item())
@@ -421,26 +490,50 @@ def get_macro_indicators():
             print(f"Error fetching {name}: {e}")
             results[name] = 0.0
             results[f"{name}_chg"] = 0.0
+            
+    # Fetch 2Y Yield from FRED (DGS2)
+    try:
+        df_dgs2 = get_fred_data('DGS2', days_back=10)
+        if df_dgs2 is not None and len(df_dgs2) >= 2:
+            last_close = float(df_dgs2['value'].iloc[-1])
+            prev_close = float(df_dgs2['value'].iloc[-2])
+            pct_change = ((last_close - prev_close) / prev_close) * 100 if prev_close else 0.0
+            results['US 2-Year Treasury Yield'] = last_close
+            results['US 2-Year Treasury Yield_chg'] = pct_change
+        else:
+            results['US 2-Year Treasury Yield'] = 0.0
+            results['US 2-Year Treasury Yield_chg'] = 0.0
+    except Exception as e:
+        print(f"Error fetching US 2-Year Treasury Yield from FRED: {e}")
+        results['US 2-Year Treasury Yield'] = 0.0
+        results['US 2-Year Treasury Yield_chg'] = 0.0
+        
+    # Calculate 2s10s spread
+    ten_year = results.get('US 10-Year Treasury Yield', 0.0)
+    two_year = results.get('US 2-Year Treasury Yield', 0.0)
+    results['2s10s_spread'] = ten_year - two_year
+    
     return results
 
 def get_macro_scoreboard():
     """
-    Fetch data for the Macro Scoreboard: DXY, M2 Money Supply, and US PMI.
-    Uses yfinance for DXY and FRED public CSV endpoint for M2 and PMI.
+    Fetch data for the Macro Scoreboard: DXY, M2 Money Supply, HY OAS, and MOVE.
     """
     results = {
         'DXY': 0.0,
         'DXY_chg': 0.0,
         'M2': 0.0,
         'M2_chg': 0.0,
-        'PMI': 0.0,
-        'PMI_chg': 0.0
+        'HY_OAS': 0.0,
+        'HY_OAS_chg_bp': 0.0,
+        'MOVE': 0.0,
+        'MOVE_chg': 0.0
     }
     
     # DXY from yfinance
     try:
         print("      → Fetching DXY (^DX-Y.NYB)...")
-        data = yf.download('DX-Y.NYB', period='5d', progress=False)
+        data = get_yfinance_data('DX-Y.NYB', period='5d')
         if not data.empty and 'Close' in data and len(data['Close']) >= 2:
             last_close = float(data['Close'].iloc[-1].item())
             prev_close = float(data['Close'].iloc[-2].item())
@@ -448,23 +541,14 @@ def get_macro_scoreboard():
             results['DXY'] = last_close
             results['DXY_chg'] = pct_change
             print(f"      ✅ DXY: {last_close:.2f}")
-        else:
-            print("      ⚠️  DXY data empty or insufficient.")
     except Exception as e:
         print(f"      ⚠️  Error fetching DXY for scoreboard: {e}")
 
     # M2 Money Supply from FRED (M2SL)
     try:
         print("      → Fetching M2 Money Supply...")
-        import io
-        url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=M2SL&cosd=2023-01-01"
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        df = pd.read_csv(io.StringIO(resp.text))
-        df.columns = ['date', 'value']
-        df['value'] = pd.to_numeric(df['value'], errors='coerce')
-        df = df.dropna()
-        if len(df) >= 2:
+        df = get_fred_data('M2SL', days_back=60)
+        if df is not None and len(df) >= 2:
             current = df['value'].iloc[-1]
             prev = df['value'].iloc[-2]
             results['M2'] = current / 1000  # Convert to Trillions if it's in Billions
@@ -472,34 +556,34 @@ def get_macro_scoreboard():
             print(f"      ✅ M2: ${results['M2']:.2f}T")
     except Exception as e:
         print(f"      ⚠️  Error fetching M2 for scoreboard: {e}")
-        # no fabricated fallback — leave M2 unset so the template renders "—"
 
-    # US PMI from FRED (ISM Manufacturing: NAPM)
+    # HY OAS from FRED (BAMLH0A0HYM2)
     try:
-        print("      → Fetching US PMI...")
-        import io
-        url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=NAPM&cosd=2023-01-01"
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        df = pd.read_csv(io.StringIO(resp.text))
-        df.columns = ['date', 'value']
-        df['value'] = pd.to_numeric(df['value'], errors='coerce')
-        df = df.dropna()
-        if len(df) >= 2:
-            current = df['value'].iloc[-1]
-            prev = df['value'].iloc[-2]
-            results['PMI'] = current
-            results['PMI_chg'] = ((current - prev) / prev) * 100 if prev else 0.0
-            print(f"      ✅ PMI: {current:.1f}")
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 404:
-            print(f"      ⚠️  PMI unavailable (FRED NAPM discontinued) — left unset, no fallback.")
-        else:
-            print(f"      ⚠️  Error fetching PMI for scoreboard: {e}")
-        # no fabricated 49.5 fallback
+        print("      → Fetching HY OAS...")
+        df_hy = get_fred_data('BAMLH0A0HYM2', days_back=30)
+        if df_hy is not None and len(df_hy) >= 6:
+            current_hy = float(df_hy['value'].iloc[-1])
+            prev_week_hy = float(df_hy['value'].iloc[-6])
+            change_bp = (current_hy - prev_week_hy) * 100
+            results['HY_OAS'] = current_hy
+            results['HY_OAS_chg_bp'] = change_bp
+            print(f"      ✅ HY OAS: {current_hy}%, change: {change_bp:+.1f} bps")
     except Exception as e:
-        print(f"      ⚠️  Error fetching PMI for scoreboard: {e}")
-        # no fabricated 49.5 fallback
+        print(f"      ⚠️  Error fetching HY OAS for scoreboard: {e}")
+
+    # MOVE index from yfinance
+    try:
+        print("      → Fetching MOVE (^MOVE)...")
+        data_move = get_yfinance_data('^MOVE', period='5d')
+        if not data_move.empty and 'Close' in data_move and len(data_move['Close']) >= 2:
+            last_close = float(data_move['Close'].iloc[-1].item())
+            prev_close = float(data_move['Close'].iloc[-2].item())
+            pct_change = ((last_close - prev_close) / prev_close) * 100 if prev_close else 0.0
+            results['MOVE'] = last_close
+            results['MOVE_chg'] = pct_change
+            print(f"      ✅ MOVE: {last_close:.2f}")
+    except Exception as e:
+        print(f"      ⚠️  Error fetching MOVE for scoreboard: {e}")
 
     return results
 
@@ -525,7 +609,7 @@ def get_sp500_sectors():
     results = []
     for symbol, name in sectors.items():
         try:
-            data = yf.download(symbol, period='5d', progress=False)
+            data = get_yfinance_data(symbol, period='5d')
             if not data.empty and 'Close' in data and len(data['Close']) >= 2:
                 current = float(data['Close'].iloc[-1].item())
                 prev = float(data['Close'].iloc[-2].item())
@@ -565,7 +649,7 @@ def get_magnificent_7():
     results = []
     for symbol, name in tickers.items():
         try:
-            data = yf.download(symbol, period='35d', progress=False)
+            data = get_yfinance_data(symbol, period='35d')
             if not data.empty and 'Close' in data:
                 closes = data['Close'].dropna()
                 if len(closes) >= 2:
@@ -624,7 +708,7 @@ def get_commodities():
     results = []
     for name, ticker in tickers.items():
         try:
-            data = yf.download(ticker, period='35d', progress=False)
+            data = get_yfinance_data(ticker, period='35d')
             if not data.empty and 'Close' in data:
                 closes = data['Close'].dropna()
                 if len(closes) >= 2:
@@ -1236,7 +1320,7 @@ def get_bist_data():
     }
     try:
         # BIST 100
-        bist = yf.download('XU100.IS', period='5d', progress=False)
+        bist = get_yfinance_data('XU100.IS', period='5d')
         if not bist.empty and 'Close' in bist and len(bist['Close']) >= 2:
             current = float(bist['Close'].iloc[-1].item())
             prev = float(bist['Close'].iloc[-2].item())
@@ -1248,7 +1332,7 @@ def get_bist_data():
 
     try:
         # USD/TRY
-        fx = yf.download('USDTRY=X', period='5d', progress=False)
+        fx = get_yfinance_data('USDTRY=X', period='5d')
         if not fx.empty and 'Close' in fx and len(fx['Close']) >= 2:
             current = float(fx['Close'].iloc[-1].item())
             prev = float(fx['Close'].iloc[-2].item())
@@ -1426,4 +1510,375 @@ def get_stablecoin_data():
             'change_24h_pct': 0.0,
             'success': False
         }
+
+
+# ═══════════════════════════════════════════
+# NEW PHASE 3 AGGREGATORS
+# ═══════════════════════════════════════════
+
+def get_net_liquidity():
+    """
+    Calculate Net Liquidity = WALCL - WTREGEN - RRP
+    WALCL and WTREGEN from FRED, RRP from NY Fed.
+    Returns historical 3-year weekly series.
+    """
+    try:
+        start_date = (datetime.now() - timedelta(days=3*365 + 60)).strftime('%Y-%m-%d')
+        walcl = get_fred_data('WALCL', start_date=start_date)
+        if walcl is None or walcl.empty:
+            return None
+        
+        wtregen = get_fred_data('WTREGEN', start_date=start_date)
+        if wtregen is None or wtregen.empty:
+            return None
+            
+        url = f"https://markets.newyorkfed.org/api/rp/reverserepo/propositions/search.json?startDate={start_date}&endDate={datetime.now().strftime('%Y-%m-%d')}"
+        resp = requests.get(url, timeout=20)
+        resp.raise_for_status()
+        rrp_data = resp.json().get('repo', {}).get('operations', [])
+        
+        records = []
+        for op in rrp_data:
+            d = op.get('operationDate')
+            amt = op.get('totalAmtAccepted', 0)
+            records.append({'date': pd.to_datetime(d), 'rrp': amt / 1_000_000})
+            
+        rrp = pd.DataFrame(records)
+        if rrp.empty:
+            return None
+            
+        rrp = rrp.groupby('date')['rrp'].sum().reset_index()
+        
+        walcl.set_index('date', inplace=True)
+        wtregen.set_index('date', inplace=True)
+        rrp.set_index('date', inplace=True)
+        
+        min_date = min(walcl.index.min(), wtregen.index.min(), rrp.index.min())
+        all_dates = pd.date_range(start=min_date, end=datetime.now(), freq='D')
+        
+        walcl_daily = walcl.reindex(all_dates).ffill()
+        wtregen_daily = wtregen.reindex(all_dates).ffill()
+        rrp_daily = rrp.reindex(all_dates).ffill()
+        
+        combined = pd.DataFrame(index=all_dates)
+        combined['walcl'] = walcl_daily['value']
+        combined['wtregen'] = wtregen_daily['value']
+        combined['rrp'] = rrp_daily['rrp']
+        
+        combined = combined.dropna()
+        combined['net_liquidity'] = combined['walcl'] - combined['wtregen'] - combined['rrp']
+        combined['net_liquidity_trillions'] = combined['net_liquidity'] / 1_000_000
+        
+        weekly = combined.resample('W-SUN').last()
+        three_years_ago = datetime.now() - timedelta(days=3*365)
+        weekly = weekly[weekly.index >= three_years_ago]
+        
+        results = []
+        for d, row in weekly.iterrows():
+            results.append({
+                'date': d.strftime('%Y-%m-%d'),
+                'value': float(row['net_liquidity_trillions'])
+            })
+        return results
+    except Exception as e:
+        print(f"      ⚠️  Error calculating Net Liquidity: {e}")
+        return None
+
+def get_stablecoin_history():
+    """
+    Fetch historical stablecoin market cap data and calculate USDT/USDC market shares for the last 3 years.
+    Returns: list of dicts [{'date': 'YYYY-MM-DD', 'total': float_billions, 'usdt': float_billions, 'usdc': float_billions, 'usdt_share': %, 'usdc_share': %}]
+    """
+    try:
+        r_total = requests.get("https://stablecoins.llama.fi/stablecoincharts/all", timeout=15)
+        r_total.raise_for_status()
+        total_data = r_total.json()
+        
+        r_usdt = requests.get("https://stablecoins.llama.fi/stablecoincharts/all?stablecoin=1", timeout=15)
+        r_usdt.raise_for_status()
+        usdt_data = r_usdt.json()
+        
+        r_usdc = requests.get("https://stablecoins.llama.fi/stablecoincharts/all?stablecoin=2", timeout=15)
+        r_usdc.raise_for_status()
+        usdc_data = r_usdc.json()
+        
+        records_total = []
+        for item in total_data:
+            date_str = datetime.utcfromtimestamp(int(item['date'])).strftime('%Y-%m-%d')
+            val = item.get('totalCirculatingUSD', {}).get('peggedUSD', 0.0)
+            records_total.append({'date': date_str, 'total': val})
+        df_total = pd.DataFrame(records_total).drop_duplicates('date')
+        
+        records_usdt = []
+        for item in usdt_data:
+            date_str = datetime.utcfromtimestamp(int(item['date'])).strftime('%Y-%m-%d')
+            val = item.get('totalCirculatingUSD', {}).get('peggedUSD', 0.0)
+            records_usdt.append({'date': date_str, 'usdt': val})
+        df_usdt = pd.DataFrame(records_usdt).drop_duplicates('date')
+        
+        records_usdc = []
+        for item in usdc_data:
+            date_str = datetime.utcfromtimestamp(int(item['date'])).strftime('%Y-%m-%d')
+            val = item.get('totalCirculatingUSD', {}).get('peggedUSD', 0.0)
+            records_usdc.append({'date': date_str, 'usdc': val})
+        df_usdc = pd.DataFrame(records_usdc).drop_duplicates('date')
+        
+        df = pd.merge(df_total, df_usdt, on='date', how='left')
+        df = pd.merge(df, df_usdc, on='date', how='left')
+        df['date'] = pd.to_datetime(df['date'])
+        df.set_index('date', inplace=True)
+        df = df.ffill().fillna(0.0)
+        
+        df_weekly = df.resample('W-SUN').last()
+        three_years_ago = datetime.now() - timedelta(days=3*365)
+        df_weekly = df_weekly[df_weekly.index >= three_years_ago]
+        
+        results = []
+        for d, row in df_weekly.iterrows():
+            total_val = float(row['total'])
+            usdt_val = float(row['usdt'])
+            usdc_val = float(row['usdc'])
+            
+            usdt_share = (usdt_val / total_val) * 100 if total_val > 0 else 0.0
+            usdc_share = (usdc_val / total_val) * 100 if total_val > 0 else 0.0
+            
+            results.append({
+                'date': d.strftime('%Y-%m-%d'),
+                'total': round(total_val / 1_000_000_000, 3),
+                'usdt': round(usdt_val / 1_000_000_000, 3),
+                'usdc': round(usdc_val / 1_000_000_000, 3),
+                'usdt_share': round(usdt_share, 2),
+                'usdc_share': round(usdc_share, 2)
+            })
+        return results
+    except Exception as e:
+        print(f"      ⚠️  Error calculating Stablecoin History: {e}")
+        return None
+
+def get_inflation_path():
+    """
+    Fetch CPIAUCSL, CPILFESL, and PCEPILFE from FRED for the last 5 years.
+    Calculate YoY change for each.
+    Returns: list of dicts [{'date': 'YYYY-MM', 'cpi': %, 'core_cpi': %, 'core_pce': %}]
+    """
+    try:
+        start_date = (datetime.now() - timedelta(days=365 * 6 + 60)).strftime('%Y-%m-%d')
+        cpi = get_fred_data('CPIAUCSL', start_date=start_date)
+        core_cpi = get_fred_data('CPILFESL', start_date=start_date)
+        core_pce = get_fred_data('PCEPILFE', start_date=start_date)
+        
+        if cpi is None or core_cpi is None or core_pce is None:
+            return None
+            
+        cpi['cpi_yoy'] = cpi['value'].pct_change(periods=12) * 100
+        core_cpi['core_cpi_yoy'] = core_cpi['value'].pct_change(periods=12) * 100
+        core_pce['core_pce_yoy'] = core_pce['value'].pct_change(periods=12) * 100
+        
+        cpi.set_index('date', inplace=True)
+        core_cpi.set_index('date', inplace=True)
+        core_pce.set_index('date', inplace=True)
+        
+        merged = pd.DataFrame(index=cpi.index)
+        merged['cpi'] = cpi['cpi_yoy']
+        merged['core_cpi'] = core_cpi['core_cpi_yoy']
+        merged['core_pce'] = core_pce['core_pce_yoy']
+        
+        merged = merged.dropna()
+        five_years_ago = datetime.now() - timedelta(days=5*365)
+        merged = merged[merged.index >= five_years_ago]
+        
+        results = []
+        for d, row in merged.iterrows():
+            results.append({
+                'date': d.strftime('%Y-%m'),
+                'cpi': round(float(row['cpi']), 2),
+                'core_cpi': round(float(row['core_cpi']), 2),
+                'core_pce': round(float(row['core_pce']), 2)
+            })
+        return results
+    except Exception as e:
+        print(f"      ⚠️  Error fetching Inflation Path: {e}")
+        return None
+
+def get_btc_cycle_metrics():
+    """
+    Calculate Mayer Multiple, 200WMA, and Drawdown from ATH.
+    Uses yfinance BTC-USD for historical data (period='5y').
+    Returns a dict with spot, WMA200, multiple, ath, drawdown.
+    """
+    try:
+        df_raw = get_yfinance_data('BTC-USD', period='5y')
+        if df_raw.empty or 'Close' not in df_raw:
+            return None
+            
+        close_series = df_raw['Close']
+        if isinstance(close_series, pd.DataFrame):
+            close_series = close_series.iloc[:, 0]
+            
+        # Recreate a simple single-level Index DataFrame to avoid MultiIndex issues
+        df = pd.DataFrame({'Close': close_series}, index=df_raw.index)
+        
+        spot = float(df['Close'].iloc[-1])
+        
+        df['200d_sma'] = df['Close'].rolling(window=200).mean()
+        mayer_200d_sma = float(df['200d_sma'].iloc[-1])
+        mayer_multiple = spot / mayer_200d_sma if mayer_200d_sma > 0 else 1.0
+        
+        df_weekly = df.resample('W-SUN').last()
+        df_weekly['200w_ma'] = df_weekly['Close'].rolling(window=200).mean()
+        wma200 = float(df_weekly['200w_ma'].iloc[-1]) if len(df_weekly) >= 200 else spot
+        distance_to_200wma = ((spot - wma200) / wma200) * 100 if wma200 > 0 else 0.0
+        
+        ath = float(df['Close'].max())
+        drawdown = ((spot - ath) / ath) * 100 if ath > 0 else 0.0
+        
+        df['year'] = df.index.year
+        df['month'] = df.index.month
+        
+        seq_monthly = df.resample('ME').last()
+        seq_monthly['return'] = seq_monthly['Close'].pct_change(fill_method=None) * 100
+        
+        heatmap = {}
+        current_year = datetime.now().year
+        for y in [current_year - 2, current_year - 1, current_year]:
+            heatmap[str(y)] = {}
+            for m in range(1, 13):
+                mask = (seq_monthly.index.year == y) & (seq_monthly.index.month == m)
+                ret_val = seq_monthly.loc[mask, 'return']
+                if not ret_val.empty and not pd.isna(ret_val.iloc[0]):
+                    heatmap[str(y)][str(m)] = round(float(ret_val.iloc[0]), 2)
+                else:
+                    heatmap[str(y)][str(m)] = None
+                    
+        return {
+            'spot': spot,
+            'wma200': wma200,
+            'mayer_multiple': round(mayer_multiple, 3),
+            'distance_to_200wma': round(distance_to_200wma, 2),
+            'ath': ath,
+            'drawdown': round(drawdown, 2),
+            'monthly_heatmap': heatmap
+        }
+    except Exception as e:
+        print(f"      ⚠️  Error fetching BTC cycle metrics: {e}")
+        return None
+
+def get_correlation_matrix():
+    """
+    Calculate 30-day rolling correlation of daily returns for BTC, Nasdaq, Gold, DXY, and 10Y Yield.
+    """
+    try:
+        tickers = {
+            'BTC': 'BTC-USD',
+            'NDX': '^NDX',
+            'GOLD': 'GC=F',
+            'DXY': 'DX-Y.NYB',
+            'US10Y': '^TNX'
+        }
+        
+        dfs = {}
+        for name, ticker in tickers.items():
+            df = get_yfinance_data(ticker, period='35d')
+            if not df.empty and 'Close' in df:
+                close_col = df['Close']
+                if isinstance(close_col, pd.DataFrame):
+                    close_col = close_col.iloc[:, 0]
+                dfs[name] = close_col
+                
+        if len(dfs) < 5:
+            print("      ⚠️  Not all tickers available for correlation matrix.")
+            return None
+            
+        combined = pd.DataFrame(dfs)
+        combined = combined.ffill().dropna()
+        
+        returns = combined.pct_change(fill_method=None).dropna().tail(30)
+        corr = returns.corr()
+        
+        corr_dict = {}
+        for col in corr.columns:
+            corr_dict[col] = {}
+            for idx in corr.index:
+                corr_dict[col][idx] = round(float(corr.loc[idx, col]), 3)
+                
+        return corr_dict
+    except Exception as e:
+        print(f"      ⚠️  Error generating correlation matrix: {e}")
+        return None
+
+def get_etf_flows_history(limit=10):
+    """
+    Fetch Spot Bitcoin ETF daily flows from Farside Investors and return the last N days.
+    """
+    try:
+        from bs4 import BeautifulSoup
+        import re as _re
+        import cloudscraper
+        url = "https://farside.co.uk/btc/"
+        scraper = cloudscraper.create_scraper()
+        response = scraper.get(url, timeout=10)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        table = soup.find('table', class_='etf')
+        if not table:
+            return None
+
+        header_row = None
+        total_col_idx = 13
+        
+        for tr in table.find_all('tr'):
+            cells = [td.get_text(strip=True).upper() for td in tr.find_all(['td', 'th'])]
+            if 'IBIT' in cells or 'FBTC' in cells:
+                header_row = cells
+                break
+
+        if header_row:
+            i_ibit = None
+            i_fbtc = None
+            for idx, c in enumerate(header_row):
+                if 'IBIT' in c:
+                    i_ibit = idx
+                elif 'FBTC' in c:
+                    i_fbtc = idx
+            
+            for tr in table.find_all('tr'):
+                cells = [td.get_text(strip=True).upper() for td in tr.find_all(['td', 'th'])]
+                if 'TOTAL' in cells:
+                    total_col_idx = cells.index('TOTAL')
+                    break
+        else:
+            i_ibit = 1
+            i_fbtc = 2
+            total_col_idx = 13
+
+        def to_m(txt):
+            txt = txt.replace(',', '').replace('(', '-').replace(')', '').replace('$', '').strip()
+            if txt in ('', '-', '—'):
+                return 0.0
+            try:
+                return float(txt)
+            except ValueError:
+                return 0.0
+
+        date_rows = []
+        for tr in table.find_all('tr'):
+            cells = [td.get_text(strip=True) for td in tr.find_all('td')]
+            if cells and _re.match(r'\d{1,2}\s+\w{3}\s+\d{4}', cells[0]):
+                date_rows.append(cells)
+
+        results = []
+        for r in date_rows[-limit:]:
+            ibit = to_m(r[i_ibit]) if i_ibit is not None and i_ibit < len(r) else 0.0
+            fbtc = to_m(r[i_fbtc]) if i_fbtc is not None and i_fbtc < len(r) else 0.0
+            total = to_m(r[total_col_idx]) if total_col_idx is not None and total_col_idx < len(r) else 0.0
+            results.append({
+                'date': r[0],
+                'IBIT_flow_m': ibit,
+                'FBTC_flow_m': fbtc,
+                'Total_flow_m': total
+            })
+        return results
+    except Exception as e:
+        print(f"      ⚠️  Error fetching ETF flows history: {e}")
+        return None
 

@@ -255,22 +255,60 @@ body { background: var(--navy); font-family: 'Inter', sans-serif; color: var(--t
 # AGENT CLASSES
 # ═══════════════════════════════════════════
 
+WEEKLY_CONTENT_EDITOR_SYSTEM_PROMPT = """Sen, küresel piyasa analizi ve dijital yayıncılık konusunda uzmanlaşmış bir Kıdemli Finansal İçerik Editörüsün.
+
+Görevin, haftalık piyasa verilerini ve son snapshot özetlerini analiz ederek aşağıdaki JSON formatında Türkçe haftalık bülten içeriğini oluşturmaktır:
+
+1. "weekly_themes": Haftanın en önemli 3 makro/kripto teması. Her tema bir başlık (en fazla 2 kelime, örn: "LIKIDITE RUZGARI" veya "JEOPOLITIK GERILIM") ve 2-3 cümlelik açıklama içermelidir.
+2. "liquidity_note": Haftalık Fed Net Likiditesi ve para arzı (M2) üzerine analitik not (1-2 cümle).
+3. "inflation_note": ABD enflasyon patikası (CPI/Core CPI/PCE) üzerine analitik not (1-2 cümle).
+4. "stablecoin_note": Stablecoin arzlarındaki değişim ve pazar payı savaşı üzerine analitik not (1-2 cümle).
+5. "etf_note": Haftalık spot ETF akışları (özellikle IBIT ve FBTC) ve kurumsal ilgi üzerine analitik not (1-2 cümle). Bu akışların nasıl okunması gerektiğini (pozitif akış = alım baskısı/talep, negatif akış = satış baskısı/çıkış) da kısaca açıklayan eğitici bir yorum içermelidir.
+6. "rotation_note": Sektör rotasyon eğilimleri üzerine analitik not (1-2 cümle).
+7. "cycle_note": Bitcoin döngüsel göstergeleri (Mayer, 200WMA, drawdown) üzerine analitik not (1-2 cümle).
+8. "correlation_note": Varlıklar arası korelasyon matrisi üzerine analitik not (1-2 cümle).
+9. "futures_note": Vadeli yapı, funding ve konumlanma üzerine analitik not (1-2 cümle).
+10. "week_plan_note": Önümüzdeki haftanın stratejik planı ve beklentileri üzerine analitik not (1-2 cümle).
+
+ÖNEMLİ: Yanıtını MUTLAKA aşağıdaki JSON formatında ver, başka format kabul edilmez. JSON içindeki metin alanlarında çift tırnak işaretlerini kesinlikle kaçış karakteriyle (\\") yaz veya tek tırnak (') kullan:
+{
+  "weekly_themes": [
+    {"title": "...", "description": "..."},
+    {"title": "...", "description": "..."},
+    {"title": "..." ,"description": "..."}
+  ],
+  "liquidity_note": "...",
+  "inflation_note": "...",
+  "stablecoin_note": "...",
+  "etf_note": "...",
+  "rotation_note": "...",
+  "cycle_note": "...",
+  "correlation_note": "...",
+  "futures_note": "...",
+  "week_plan_note": "..."
+}"""
+
+
 class ContentEditorAgent:
     """
     Finansal İçerik Editörü Agent.
     Bülten içeriğini analiz edip İçerik Strateji Raporu üretir.
     """
 
-    def analyze(self, data):
+    def analyze(self, data, edition='daily'):
         """
-        Analyze newsletter data and produce:
-        - genel_degerlendirme: AI-written Turkish market summary
-        - news_commentaries: AI commentary for each news headline
-        Returns a dict with structured output.
+        Analyze newsletter data and produce structured commentary.
         """
         api_key = os.environ.get('ANTHROPIC_API_KEY', '')
         if not api_key:
-            print("    ⚠️  ANTHROPIC_API_KEY tanımlı değil — İçerik Editörü atlanıyor.")
+            print(f"    ⚠️  ANTHROPIC_API_KEY tanımlı değil — İçerik Editörü atlanıyor ({edition}).")
+            if edition == 'weekly':
+                return {
+                    'success': False, 'weekly_themes': [], 'liquidity_note': None,
+                    'inflation_note': None, 'stablecoin_note': None, 'etf_note': None,
+                    'rotation_note': None, 'cycle_note': None, 'correlation_note': None,
+                    'futures_note': None, 'week_plan_note': None
+                }
             return {'success': False, 'genel_degerlendirme': None, 'korelasyon_notu': None, 'news_commentaries': None}
 
         try:
@@ -278,24 +316,46 @@ class ContentEditorAgent:
             client = Anthropic(api_key=api_key)
 
             data_summary = _prepare_data_summary(data)
-            raw_news = data.get('macro_news', {}).get('news', [])
-            # Extract just the titles so the AI doesn't get confused by image URLs
-            news_headlines = [n['title'] if isinstance(n, dict) else n for n in raw_news]
+            
+            if edition == 'weekly':
+                user_prompt = f"""Aşağıda bu haftanın bülten verileri yer almaktadır.
+Bu verileri analiz ederek haftalık bülten için JSON çıktısı oluştur:
 
-            user_prompt = f"""Aşağıda bugünkü finans bülteninin tüm canlı piyasa verileri yer almaktadır.
+Piyasa Verileri:
+```json
+{json.dumps(data_summary, ensure_ascii=False, indent=2, default=str)}
+```
 
+YANITINI SADECE JSON OLARAK VER, başka metin ekleme. JSON içindeki metin alanlarında çift tırnak işaretlerini kesinlikle kaçış karakteriyle (\\") yaz veya tek tırnak (') kullan."""
+                
+                raw_response = _call_with_retry(client, WEEKLY_CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt)
+                result = self._parse_response(raw_response)
+                print("    ✅ Haftalık Temalar ve Dinamik KPI Notları üretildi.")
+                return {
+                    'success': True,
+                    'weekly_themes': result.get('weekly_themes', []),
+                    'liquidity_note': result.get('liquidity_note'),
+                    'inflation_note': result.get('inflation_note'),
+                    'stablecoin_note': result.get('stablecoin_note'),
+                    'etf_note': result.get('etf_note'),
+                    'rotation_note': result.get('rotation_note'),
+                    'cycle_note': result.get('cycle_note'),
+                    'correlation_note': result.get('correlation_note'),
+                    'futures_note': result.get('futures_note'),
+                    'week_plan_note': result.get('week_plan_note'),
+                }
+            else:
+                raw_news = data.get('macro_news', {}).get('news', [])
+                news_headlines = [n['title'] if isinstance(n, dict) else n for n in raw_news]
+
+                user_prompt = f"""Aşağıda bugünkü finans bülteninin tüm canlı piyasa verileri yer almaktadır.
 Bu verileri analiz ederek aşağıdaki JSON formatında yanıt ver:
 
 1. "genel_degerlendirme": Bültenin "Genel Değerlendirme" bölümü için profesyonel bir Türkçe piyasa özeti paragrafı (4-6 cümle). HTML tag kullanabilirsin (<strong>, <span class='highlight'>).
-
 2. "korelasyon_notu": Güncel verilere bağlı kalarak varlık korelasyonları ve risk iştahı hakkında 1-2 cümlelik analitik bir söz/not (kısa ve vurucu).
-
 3. "news_commentaries": Aşağıdaki her haber başlığı için JSON içerisinde "original_headline" (orijinal İngilizce başlık) ve "commentary" (1-2 cümlelik İNGİLİZCE analiz) alanlarını doldur. Haberleri Türkçe'ye çevirme.
-
 4. "futures_note": Crypto Futures Basis (Vadeli İşlem Primleri) anlık verisi üzerine eğitici analitik not (1-2 cümle).
-
 5. "etf_note": Spot Bitcoin ETF Günlük Akış (Özellikle IBIT, FBTC) verisine, kurumsal ilgiye ve bu akışların nasıl okunacağına (pozitif=talep/alım baskısı, negatif=satış baskısı) dair eğitici analitik not (1-2 cümle).
-
 6. "indicators_note": Ek Piyasa Göstergeleri (2Y-10Y Spread, Stablecoin, SMH) üzerine eğitici analitik not (1-2 cümle).
 
 Haber Başlıkları:
@@ -306,26 +366,31 @@ Piyasa Verileri:
 {json.dumps(data_summary, ensure_ascii=False, indent=2, default=str)}
 ```
 
-YANITINI SADECE JSON OLARAK VER, başka metin ekleme. JSON içindeki metin alanlarında çift tırnak işaretlerini kesinlikle kaçış karakteriyle (\") yaz veya tek tırnak (') kullan."""
+YANITINI SADECE JSON OLARAK VER, başka metin ekleme. JSON içindeki metin alanlarında çift tırnak işaretlerini kesinlikle kaçış karakteriyle (\\") yaz veya tek tırnak (') kullan."""
 
-            raw_response = _call_with_retry(client, CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt)
-            
-            # Parse JSON from response
-            result = self._parse_response(raw_response)
-            print("    ✅ Genel Değerlendirme, Haber Yorumları ve Dinamik KPI Notları üretildi.")
-            return {
-                'success': True,
-                'genel_degerlendirme': result.get('genel_degerlendirme'),
-                'korelasyon_notu': result.get('korelasyon_notu'),
-                'news_commentaries': result.get('news_commentaries', []),
-                'content_suggestions': result.get('content_suggestions', []),
-                'futures_note': result.get('futures_note'),
-                'etf_note': result.get('etf_note'),
-                'indicators_note': result.get('indicators_note'),
-            }
+                raw_response = _call_with_retry(client, CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt)
+                result = self._parse_response(raw_response)
+                print("    ✅ Genel Değerlendirme, Haber Yorumları ve Dinamik KPI Notları üretildi.")
+                return {
+                    'success': True,
+                    'genel_degerlendirme': result.get('genel_degerlendirme'),
+                    'korelasyon_notu': result.get('korelasyon_notu'),
+                    'news_commentaries': result.get('news_commentaries', []),
+                    'content_suggestions': result.get('content_suggestions', []),
+                    'futures_note': result.get('futures_note'),
+                    'etf_note': result.get('etf_note'),
+                    'indicators_note': result.get('indicators_note'),
+                }
 
         except Exception as e:
             print(f"    ⚠️  İçerik Editörü hatası: {e}")
+            if edition == 'weekly':
+                return {
+                    'success': False, 'weekly_themes': [], 'liquidity_note': None,
+                    'inflation_note': None, 'stablecoin_note': None, 'etf_note': None,
+                    'rotation_note': None, 'cycle_note': None, 'correlation_note': None,
+                    'futures_note': None, 'week_plan_note': None
+                }
             return {
                 'success': False, 'genel_degerlendirme': None, 'korelasyon_notu': None, 
                 'news_commentaries': None, 'content_suggestions': None,
