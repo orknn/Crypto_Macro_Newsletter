@@ -529,8 +529,8 @@ def run_pipeline():
     for lang in languages:
         print(f"\nHTML bülten oluşturuluyor ({edition} - {lang.upper()})...")
         
-        html_filename = f'out/{edition}_{lang}.html'
-        pdf_filename = f'out/{edition}_{lang}.pdf'
+        html_filename = f'{edition}_bulletin_{lang}.html'
+        pdf_filename = f'{edition}_bulletin_{lang}.pdf'
         
         if edition == 'weekly':
             html_content = render_weekly(data, lang=lang)
@@ -584,8 +584,8 @@ def run_pipeline():
     print(f"\n{'='*50}")
     print(f"  ✅ Bülten(ler) hazır!")
     for lang in languages:
-        html_filename = f'out/{edition}_{lang}.html'
-        pdf_filename = f'out/{edition}_{lang}.pdf'
+        html_filename = f'{edition}_bulletin_{lang}.html'
+        pdf_filename = f'{edition}_bulletin_{lang}.pdf'
         print(f"  [{lang.upper()}] HTML: {os.path.abspath(html_filename)}")
         if os.path.exists(pdf_filename):
             print(f"  [{lang.upper()}] PDF:  {os.path.abspath(pdf_filename)}")
