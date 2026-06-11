@@ -877,17 +877,60 @@ def _log_finnhub_calendar_lock():
 
 def _clean_calendar_val(v):
     if v is None:
-        return '—'
+        return None
     if isinstance(v, (int, float)):
         return str(v)
-    v_str = str(v).strip()
-    return v_str if v_str else '—'
+    return str(v).strip()
+
+def _get_calendar_from_newest_snapshot():
+    """Scan snapshots/ for the newest JSON file containing non-empty calendar data."""
+    import os
+    import json
+    import re
+    
+    snapshot_dir = 'snapshots'
+    if not os.path.exists(snapshot_dir):
+        return [], None
+        
+    try:
+        files = os.listdir(snapshot_dir)
+    except Exception:
+        return [], None
+        
+    # Filter for YYYY-MM-DD.json
+    pattern = re.compile(r'^\d{4}-\d{2}-\d{2}\.json$')
+    snapshot_files = [f for f in files if pattern.match(f)]
+    
+    if not snapshot_files:
+        return [], None
+        
+    # Sort descending (newest first)
+    snapshot_files.sort(reverse=True)
+    
+    for filename in snapshot_files:
+        filepath = os.path.join(snapshot_dir, filename)
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                snap_data = json.load(f)
+            cal = snap_data.get('economic_calendar', [])
+            if isinstance(cal, list) and len(cal) > 0:
+                first_event = cal[0].get('event', '')
+                # Ensure it's not a generic fallback event
+                if "Pending" not in first_event and "No scheduled" not in first_event:
+                    date_str = filename.replace('.json', '')
+                    return cal, date_str
+        except Exception:
+            pass
+            
+    return [], None
 
 def get_economic_calendar():
     """
     Fetch Economic Calendar events from ForexFactory JSON API.
     Filters for USD and EUR, High and Medium impact only.
     Applies surprise guard checks directly to actual values.
+    If live fetch fails, falls back to the calendar data from the most recent
+    successful snapshot in the snapshots/ directory, marking events with source date.
     """
     # Write Finnhub Premium Lock status as requested
     _log_finnhub_calendar_lock()
@@ -896,31 +939,34 @@ def get_economic_calendar():
     try:
         url = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
         response = None
+        import time
+        import cloudscraper
+        
+        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        
         for attempt in range(3):
             try:
-                try:
-                    import cloudscraper
-                    scraper = cloudscraper.create_scraper()
-                    response = scraper.get(url, timeout=15)
-                except ImportError:
-                    headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
-                    response = requests.get(url, headers=headers, timeout=15)
+                scraper = cloudscraper.create_scraper()
+                response = scraper.get(url, headers={"User-Agent": user_agent}, timeout=15)
                 
                 if response.status_code == 429:
-                    import time
-                    wait = (attempt + 1) * 3
-                    print(f"      ⚠️  FF API rate limited (429), retrying in {wait}s...")
-                    time.sleep(wait)
+                    wait_time = 5 * (2 ** attempt)
+                    print(f"      ⚠️  FF API rate limited (429), retrying in {wait_time}s (attempt {attempt + 1}/3)...")
+                    time.sleep(wait_time)
                     continue
                 response.raise_for_status()
                 break
             except Exception as e:
+                wait_time = 5 * (2 ** attempt)
                 if attempt < 2:
-                    import time
-                    time.sleep(2)
+                    print(f"      ⚠️  FF API request failed: {e}. Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
                     continue
                 raise
         
+        if response is None or response.status_code != 200:
+            raise Exception(f"FF API returned non-200 status: {response.status_code if response is not None else 'None'}")
+            
         data = response.json()
         
         # Exclude events that aren't true macro releases
@@ -1012,7 +1058,7 @@ def get_economic_calendar():
                 time_str = date_iso.split('T')[1][:5] if 'T' in date_iso else '—'
             
             # Apply surprise guard if actual and forecast are present
-            if actual != '—' and forecast != '—':
+            if actual is not None and actual != "" and forecast is not None and forecast != "":
                 event_normalized = event_lower.replace('mom', 'm/m').replace('yoy', 'y/y').replace('qoq', 'q/q').strip()
                 # Find exact matching key in surprise_thresholds
                 matched_key = None
@@ -1023,7 +1069,7 @@ def get_economic_calendar():
                 
                 if matched_key:
                     if not _surprise_check(matched_key, actual, forecast):
-                        actual = '—'
+                        actual = None
             
             events.append({
                 'date': formatted_date,
@@ -1041,8 +1087,16 @@ def get_economic_calendar():
         events = events[:15]
         
     except Exception as e:
-        print(f"Error fetching ForexFactory calendar: {e}")
-        events = []
+        print(f"      ⚠️  Error fetching ForexFactory calendar live: {e}")
+        print("      🔄 Attempting fallback to most recent snapshot calendar...")
+        events, source_date = _get_calendar_from_newest_snapshot()
+        if events:
+            print(f"      ✅ Successfully restored calendar from snapshot date: {source_date}")
+            for ev in events:
+                ev['source_date'] = source_date
+        else:
+            print("      ⚠️  No historical calendar data found in snapshots.")
+            events = []
 
     # Standardize abbreviations (e.g. m/m -> MoM)
     for ev in events:

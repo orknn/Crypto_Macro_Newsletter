@@ -73,8 +73,19 @@ def render_weekly(data, lang='tr'):
     events = data.get('economic_calendar', [])
     strategy_note = lang_data.get('notes', {}).get('week_plan_note') or data.get('week_plan_note', '')
     if events or (strategy_note and str(strategy_note).strip() and str(strategy_note).strip() != 'None'):
+        source_date = None
+        if events:
+            for ev in events:
+                if ev.get('source_date'):
+                    source_date = ev.get('source_date')
+                    break
+                    
+        title = STR['section_calendar_weekly'][lang]
+        if source_date:
+            title += f" (önceki veri · {source_date})" if lang == 'tr' else f" (previous data · {source_date})"
+            
         calendar_weekly_html = f'''
-        {render_section_divider(STR['section_calendar_weekly'][lang])}'''
+        {render_section_divider(title)}'''
         if events:
             calendar_weekly_html += f'''
         {render_economic_calendar(events, lang=lang)}'''

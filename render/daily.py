@@ -58,8 +58,18 @@ def render_daily(data, lang='tr'):
     calendar_html = ""
     events = data.get('economic_calendar', [])
     if events:
+        source_date = None
+        for ev in events:
+            if ev.get('source_date'):
+                source_date = ev.get('source_date')
+                break
+                
+        title = STR['section_calendar'][lang]
+        if source_date:
+            title += f" (önceki veri · {source_date})" if lang == 'tr' else f" (previous data · {source_date})"
+            
         calendar_html = f'''
-        {render_section_divider(STR['section_calendar'][lang])}
+        {render_section_divider(title)}
         {render_economic_calendar(events, lang=lang)}
         '''
         
@@ -114,7 +124,10 @@ def render_daily(data, lang='tr'):
     crypto_ov = data.get('crypto_market_overview', {})
     
     # Localized Indicators Note
-    ind_note = lang_data.get('notes', {}).get('indicators_note') or data.get('indicators_note', '')
+    ind_note = lang_data.get('notes', {}).get('indicators_note')
+    if not ind_note and lang == 'tr':
+        ind_note = data.get('indicators_note')
+    ind_note = ind_note or ''
     
     kpis = [
         {'label': STR['card_mcap'][lang], 'value': f"${crypto_ov.get('total_market_cap', 0)/1e12:.2f}T", 'change': '', 'cls': ''},
@@ -245,7 +258,10 @@ def render_daily(data, lang='tr'):
         'Strong Bearish': 'background:rgba(239,68,68,0.12); color:var(--red); border:1px solid rgba(239,68,68,0.3);',
     }
     fb_badge_style = fb_badges.get(fb_sen, fb_badges['Neutral'])
-    futures_note = lang_data.get('notes', {}).get('futures_note') or data.get('futures_note') or ''
+    futures_note = lang_data.get('notes', {}).get('futures_note')
+    if not futures_note and lang == 'tr':
+        futures_note = data.get('futures_note')
+    futures_note = futures_note or ''
     # Guard: skip if the only available note is the hardcoded English basis description
     # and we're in TR mode — use i18n template instead
     fb_desc = fb.get('description', '')
@@ -410,7 +426,10 @@ def render_daily(data, lang='tr'):
         total = etf.get('Total_flow_m')
         sentiment = etf.get('sentiment', 'Neutral')
         etf_date = etf.get('date', '')
-        etf_note = lang_data.get('notes', {}).get('etf_note') or data.get('etf_note', '')
+        etf_note = lang_data.get('notes', {}).get('etf_note')
+        if not etf_note and lang == 'tr':
+            etf_note = data.get('etf_note')
+        etf_note = etf_note or ''
         
         ibit_cls = "up" if ibit >= 0 else "down"
         fbtc_cls = "up" if fbtc >= 0 else "down"

@@ -163,8 +163,8 @@ def validate_ai_notes(data):
         if isinstance(notes, dict):
             for note_key, note_text in list(notes.items()):
                 if isinstance(note_text, str) and note_text.strip() and note_text.strip() != 'None':
-                    # Find percentages like +0.61% or -0.27% or 1.80%
-                    percentage_matches = re.findall(r'[+-]?\d+\.\d+%', note_text)
+                    # Find percentages in both formats: +0.61% and %+0.61 (with optional signs)
+                    percentage_matches = re.findall(r'[+-]?\d+\.\d+%', note_text) + re.findall(r'%[+-]?\d+\.\d+', note_text)
                     for match in percentage_matches:
                         val_str = match.replace('%', '').strip()
                         try:

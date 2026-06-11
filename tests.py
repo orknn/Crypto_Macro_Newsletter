@@ -312,9 +312,9 @@ class NewsletterTests(unittest.TestCase):
 
     def test_clean_calendar_val(self):
         from data_fetcher import _clean_calendar_val
-        self.assertEqual(_clean_calendar_val(None), "—")
-        self.assertEqual(_clean_calendar_val(""), "—")
-        self.assertEqual(_clean_calendar_val("   "), "—")
+        self.assertIsNone(_clean_calendar_val(None))
+        self.assertEqual(_clean_calendar_val(""), "")
+        self.assertEqual(_clean_calendar_val("   "), "")
         self.assertEqual(_clean_calendar_val(0), "0")
         self.assertEqual(_clean_calendar_val(0.0), "0.0")
         self.assertEqual(_clean_calendar_val(3.5), "3.5")
@@ -334,6 +334,7 @@ class NewsletterTests(unittest.TestCase):
                 'notes': {
                     'futures_note': "BTC vadeli primi +0.61% seviyesinde.",  # Valid: matches btc_basis
                     'etf_note': "ETF akışları -0.27% negatif.",             # Invalid: -0.27 not in snapshot
+                    'indicators_note': "Bazı oranlar %0.56 düştü.",          # Invalid: 0.56 not in snapshot
                 }
             },
             'en': {
@@ -356,17 +357,23 @@ class NewsletterTests(unittest.TestCase):
         self.assertEqual(validated['tr']['notes']['futures_note'], "BTC vadeli primi +0.61% seviyesinde.")
         self.assertEqual(validated['en']['notes']['futures_note'], "ETH basis is at 1.80% currently.")
         
-        # etf_note should be set to None due to mismatch
+        # etf_note and indicators_note should be set to None due to mismatch
         self.assertIsNone(validated['tr']['notes']['etf_note'])
+        self.assertIsNone(validated['tr']['notes']['indicators_note'])
         
         # Verify fetch_report.json contains rejections
         self.assertTrue(os.path.exists("fetch_report.json"))
         with open("fetch_report.json", "r", encoding="utf-8") as f:
             report = json.load(f)
             self.assertEqual(report.get("ai_note_rejected"), "value_mismatch")
-            self.assertEqual(len(report.get("rejected_ai_notes", [])), 1)
-            self.assertEqual(report["rejected_ai_notes"][0]["note"], "etf_note")
-            self.assertEqual(report["rejected_ai_notes"][0]["unmatched_value"], "-0.27%")
+            rejected_values = [n["unmatched_value"] for n in report.get("rejected_ai_notes", [])]
+            self.assertIn("-0.27%", rejected_values)
+            self.assertIn("%0.56", rejected_values)
+
+        # Assert that the fake TR note containing '%0.56' is NOT rendered in the final HTML
+        html_tr = render_daily(validated, lang='tr')
+        self.assertNotIn("Bazı oranlar", html_tr)
+        self.assertNotIn("%0.56", html_tr)
 
 if __name__ == '__main__':
     unittest.main()

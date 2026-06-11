@@ -470,22 +470,27 @@ def render_economic_calendar(events, lang='tr'):
         
     rows = []
     for ev in events:
-        actual = ev.get('actual', '—')
-        forecast = ev.get('forecast', '—')
-        previous = ev.get('previous', '—')
+        actual = ev.get('actual')
+        forecast = ev.get('forecast')
+        previous = ev.get('previous')
+        
+        disp_actual = "" if actual == "" else ("—" if (actual is None or actual == 'None') else actual)
+        disp_forecast = "—" if (forecast is None or forecast == "" or forecast == 'None') else forecast
+        disp_previous = "—" if (previous is None or previous == "" or previous == 'None') else previous
         
         actual_style = 'color:var(--dim);'
-        if actual and actual != '—':
+        if actual is not None and actual != "" and actual != 'None' and actual != '—':
             actual_style = 'font-weight:700; color:var(--text);'
             try:
-                act_num = float(actual.replace('%', '').replace('K', '').replace('M', '').replace('B', '').strip())
-                for_num = float(forecast.replace('%', '').replace('K', '').replace('M', '').replace('B', '').strip())
-                higher_is_better = ev.get('better_direction', 'up') == 'up'
-                
-                if act_num > for_num:
-                    actual_style = f"font-weight:700; color:var(--{'green' if higher_is_better else 'red'});"
-                elif act_num < for_num:
-                    actual_style = f"font-weight:700; color:var(--{'red' if higher_is_better else 'green'});"
+                if forecast is not None and forecast != "" and forecast != 'None' and forecast != '—':
+                    act_num = float(str(actual).replace('%', '').replace('K', '').replace('M', '').replace('B', '').strip())
+                    for_num = float(str(forecast).replace('%', '').replace('K', '').replace('M', '').replace('B', '').strip())
+                    higher_is_better = ev.get('better_direction', 'up') == 'up'
+                    
+                    if act_num > for_num:
+                        actual_style = f"font-weight:700; color:var(--{'green' if higher_is_better else 'red'});"
+                    elif act_num < for_num:
+                        actual_style = f"font-weight:700; color:var(--{'red' if higher_is_better else 'green'});"
             except:
                 pass
 
@@ -515,9 +520,9 @@ def render_economic_calendar(events, lang='tr'):
           <td class="mono" style="white-space:nowrap; width:12%;">{ev.get('time', '')}</td>
           <td><div class="asset-name"><div class="asset-dot"></div>{ev.get('event', '')}</div></td>
           <td style="color:var(--dim); white-space:nowrap; width:10%;">{ev.get('country', '')}</td>
-          <td class="mono" style="color:var(--dim); text-align:right; white-space:nowrap; width:10%;">{previous}</td>
-          <td class="mono" style="color:var(--gold); text-align:right; white-space:nowrap; width:10%;">{forecast}</td>
-          <td class="mono" style="{actual_style} text-align:right; white-space:nowrap; width:10%;">{actual}</td>
+          <td class="mono" style="color:var(--dim); text-align:right; white-space:nowrap; width:10%;">{disp_previous}</td>
+          <td class="mono" style="color:var(--gold); text-align:right; white-space:nowrap; width:10%;">{disp_forecast}</td>
+          <td class="mono" style="{actual_style} text-align:right; white-space:nowrap; width:10%;">{disp_actual}</td>
         </tr>''')
         
     return f'''
