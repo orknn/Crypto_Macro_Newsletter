@@ -1,0 +1,50 @@
+name: Weekly Bulletin
+
+on:
+  schedule:
+    # Every Sunday at 16:00 UTC
+    - cron: '0 16 * * 0'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  generate-and-send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout newsletter repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: |
+          python -m playwright install chromium --with-deps
+
+      - name: Generate weekly bulletin & send
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.WEBSITE_PUSH_TOKEN }}
+          SEND_EMAIL: "true"
+          CI: "true"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python main.py --edition weekly --send-email
+
+      - name: Upload weekly bulletin as artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: weekly-bulletin-${{ github.run_number }}
+          path: |
+            weekly_bulletin.html
+            weekly_bulletin.pdf
+          retention-days: 30
