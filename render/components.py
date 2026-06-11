@@ -404,12 +404,12 @@ def render_economic_calendar(events):
         rows.append(f'''
         <tr>
           <td style="color:var(--dim); white-space:nowrap; width:12%;">{ev.get('date', '')}</td>
-          <td class="mono" style="width:10%;">{ev.get('time', '')}</td>
+          <td class="mono" style="white-space:nowrap; width:12%;">{ev.get('time', '')}</td>
           <td><div class="asset-name"><div class="asset-dot"></div>{ev.get('event', '')}</div></td>
-          <td style="color:var(--dim); width:10%;">{ev.get('country', '')}</td>
-          <td class="mono" style="color:var(--dim); text-align:right; width:10%;">{previous}</td>
-          <td class="mono" style="color:var(--gold); text-align:right; width:10%;">{forecast}</td>
-          <td class="mono" style="{actual_style} text-align:right; width:10%;">{actual}</td>
+          <td style="color:var(--dim); white-space:nowrap; width:10%;">{ev.get('country', '')}</td>
+          <td class="mono" style="color:var(--dim); text-align:right; white-space:nowrap; width:10%;">{previous}</td>
+          <td class="mono" style="color:var(--gold); text-align:right; white-space:nowrap; width:10%;">{forecast}</td>
+          <td class="mono" style="{actual_style} text-align:right; white-space:nowrap; width:10%;">{actual}</td>
         </tr>''')
         
     return f'''
@@ -438,7 +438,19 @@ def render_asset_table(assets, type_name):
         
     rows = []
     for a in assets:
-        symbol = a.get('Symbol', '')
+        symbol = a.get('Symbol') or a.get('Ticker') or ''
+        # Map Yahoo Finance commodity tickers to cleaner symbols
+        if symbol in ['GC=F', 'SI=F', 'HG=F', 'NG=F', 'CC=F', 'KC=F', 'BZ=F']:
+            mapping = {
+                'GC=F': 'XAU',
+                'SI=F': 'XAG',
+                'HG=F': 'HG',
+                'NG=F': 'NG',
+                'CC=F': 'CC',
+                'KC=F': 'KC',
+                'BZ=F': 'BZ',
+            }
+            symbol = mapping[symbol]
         name = a.get('Name', '')
         price = a.get('Price', a.get('Current Price USD', 0))
         
@@ -578,5 +590,78 @@ def render_footer():
       <p style="margin:0 0 10px 0; font-weight:600; color:var(--text); letter-spacing:1px;">NOCASHFLOW bültenidir.</p>
       <p style="margin:0 0 10px 0;">This document is for informational purposes only and does not constitute financial, investment, or legal advice. All investment decisions carry risks.</p>
       <p style="margin:0;">&copy; {now.year} nocashflow.net. All rights reserved. <a href="https://nocashflow.net" style="color:var(--accent); text-decoration:none;" target="_blank">nocashflow.net</a></p>
+    </div>
+    '''
+
+def render_coinbase_premium_card(cp_data):
+    """Render the full-width Coinbase Premium Index Card with stats and bar chart."""
+    if not cp_data or not isinstance(cp_data, dict):
+        return '<div style="color:var(--dim); text-align:center; padding:15px;">No Coinbase Premium data available</div>'
+        
+    trend = cp_data.get('trend_data', [])
+    current = cp_data.get('current_value', 0.0)
+    
+    if not trend:
+        return '<div style="color:var(--dim); text-align:center; padding:15px;">No Coinbase Premium data available</div>'
+        
+    # Calculate 24h high/low from the last 24 elements (hours) in the trend data
+    trend_24h = trend[-24:] if len(trend) >= 24 else trend
+    vals_24h = [d.get('value', 0.0) if isinstance(d, dict) else d for d in trend_24h]
+    
+    # Fallback to current if vals_24h is empty or all None
+    vals_24h = [v for v in vals_24h if v is not None]
+    if not vals_24h and current is not None:
+        vals_24h = [current]
+        
+    max_val = max(vals_24h) if vals_24h else 0.0
+    min_val = min(vals_24h) if vals_24h else 0.0
+    
+    # Generate the SVG chart
+    cp_chart = generate_coinbase_premium_chart(trend, current)
+    
+    # Determine signal
+    if current is None:
+        signal_text = '● Neutral'
+        signal_cls = 'color: var(--dim);'
+        current_str = '—'
+    elif current > 0:
+        signal_text = '▲ US buying pressure active'
+        signal_cls = 'color: var(--green); font-weight: 600;'
+        current_str = f"{current:+.4f}%"
+    else:
+        signal_text = '▼ US selling pressure'
+        signal_cls = 'color: var(--red); font-weight: 600;'
+        current_str = f"{current:+.4f}%"
+        
+    return f'''
+    <div style="margin-top:24px; margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:6px;">
+      <span style="font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--gold); font-weight:600;">COINBASE PREMIUM INDEX — 7D</span>
+    </div>
+    <div class="sparkline-wrap" style="padding:20px 24px; background:var(--bg2); border:1px solid var(--border); border-radius:6px; margin-bottom:20px; page-break-inside: avoid; break-inside: avoid;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div style="font-size:12px; color:var(--dim); margin-bottom:4px;">BTC/USD · Coinbase vs Global Spread</div>
+          <div style="font-family:var(--mono); font-size:26px; color:var(--text); font-weight:700;">{current_str}</div>
+          <div style="font-size:11px; {signal_cls} margin-top:2px;">{signal_text}</div>
+        </div>
+        <div style="display:flex; gap:24px; font-size:11px; color:var(--dim);">
+          <div style="text-align:right;">
+            <div style="font-family:var(--mono); color:var(--text); font-size:13px; font-weight:600;">{max_val:+.3f}%</div>
+            <div style="margin-top:2px;">24h High</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:var(--mono); color:var(--text); font-size:13px; font-weight:600;">{min_val:+.3f}%</div>
+            <div style="margin-top:2px;">24h Low</div>
+          </div>
+        </div>
+      </div>
+      
+      <div style="position:relative; margin-bottom:16px; margin-top:10px;">
+        {cp_chart}
+      </div>
+      
+      <div style="padding:10px 14px; background:var(--bg3); border:1px solid var(--border); border-radius:4px; font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6;">
+        <strong style="color:var(--gold2);">Reading guide:</strong> Positive values indicate US institutional buying pressure. Sustained positive premium is a bullish signal for BTC.
+      </div>
     </div>
     '''

@@ -8,7 +8,8 @@ from render.svg import (
 from render.components import (
     html_wrapper, render_header, render_ticker, render_regime_strip,
     render_section_divider, render_economic_calendar, render_asset_table,
-    render_news_section, render_footer, _fmt_change, _fmt_price
+    render_news_section, render_footer, _fmt_change, _fmt_price,
+    render_coinbase_premium_card
 )
 
 def render_daily(data):
@@ -199,23 +200,23 @@ def render_daily(data):
     fb_badge_style = fb_badges.get(fb_sen, fb_badges['Neutral'])
     futures_note = data.get('futures_note') or fb.get('description', '')
 
-    basis_html = f'''
-    <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:18px; margin-bottom:20px;">
+    basis_column_html = f'''
+    <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
-        <div style="font-family:var(--sans); font-size:13px; color:var(--text); font-weight:600;">Annualized Futures Premium</div>
-        <div style="font-family:var(--mono); font-size:9px; padding:3px 10px; border-radius:3px; font-weight:600; text-transform:uppercase; {fb_badge_style}">{fb_sen}</div>
+        <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px;">Annualized Futures Premium</div>
+        <div style="font-family:var(--mono); font-size:9px; padding:2px 8px; border-radius:3px; font-weight:600; text-transform:uppercase; {fb_badge_style}">{fb_sen}</div>
       </div>
-      <div style="display:flex; gap:28px; margin-bottom:12px;">
+      <div style="display:flex; gap:24px; margin-bottom:12px;">
         <div>
           <div style="font-family:var(--sans); font-size:9px; font-weight:500; text-transform:uppercase; color:var(--dim); letter-spacing:1px; margin-bottom:4px;">BTC Basis</div>
-          <div style="font-family:var(--mono); font-size:17px; font-weight:600; color:var(--text);">{fb_btc:.2f}%</div>
+          <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:var(--text);">{fb_btc:.2f}%</div>
         </div>
         <div>
           <div style="font-family:var(--sans); font-size:9px; font-weight:500; text-transform:uppercase; color:var(--dim); letter-spacing:1px; margin-bottom:4px;">ETH Basis</div>
-          <div style="font-family:var(--mono); font-size:17px; font-weight:600; color:var(--text);">{fb_eth:.2f}%</div>
+          <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:var(--text);">{fb_eth:.2f}%</div>
         </div>
       </div>
-      <div style="font-family:var(--sans); font-size:11px; color:var(--dim); line-height:1.6;">
+      <div style="font-family:var(--sans); font-size:11px; color:var(--dim); line-height:1.5;">
         {futures_note}
       </div>
     </div>
@@ -242,22 +243,21 @@ def render_daily(data):
     eth_oi_chg, eth_oi_cls = _fmt_change(eth_oi.get('oi_chg_24h', 0))
     sol_oi_chg, sol_oi_cls = _fmt_change(sol_oi.get('oi_chg_24h', 0))
 
+    cp_card_html = render_coinbase_premium_card(cp)
+
     derivatives_html = f'''
     {render_section_divider("Derivatives Desk", "📊")}
     {btc_status_html}
+    
+    {cp_card_html}
     
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:20px;">
       <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">
         <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:12px;">Market Sentiment (F&G)</div>
         {fng_gauge}
       </div>
-      <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">
-        <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:12px;">Coinbase Premium Index</div>
-        {cp_chart}
-      </div>
+      {basis_column_html}
     </div>
-    
-    {basis_html}
     
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:24px;">
       <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">

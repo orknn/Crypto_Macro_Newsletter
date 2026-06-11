@@ -12,7 +12,8 @@ from render.svg import (
 from render.components import (
     html_wrapper, render_header, render_ticker, render_regime_strip,
     render_section_divider, render_economic_calendar, render_asset_table,
-    render_news_section, render_footer, _fmt_change, _fmt_price
+    render_news_section, render_footer, _fmt_change, _fmt_price,
+    render_coinbase_premium_card
 )
 
 def render_weekly(data):
@@ -445,18 +446,29 @@ def render_weekly(data):
     fb_btc = fb.get('btc_basis', 0)
     fb_eth = fb.get('eth_basis', 0)
 
+    cp_card_html = render_coinbase_premium_card(cp)
+
+    basis_column_html = f'''
+    <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">
+      <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:12px;">Futures Term Structure</div>
+      <table width="100%" style="border-collapse:collapse; font-size:12px;">
+        <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 0; color:var(--dim);">BTC Futures Basis</td><td class="mono" align="right" style="color:var(--text); font-weight:600; padding:8px 0;">{fb_btc:.2f}%</td></tr>
+        <tr><td style="padding:8px 0; color:var(--dim);">ETH Futures Basis</td><td class="mono" align="right" style="color:var(--text); font-weight:600; padding:8px 0;">{fb_eth:.2f}%</td></tr>
+      </table>
+    </div>
+    '''
+
     positioning_html = f'''
     {render_section_divider("Vadeli Yapı & Konumlanma", "🎯")}
+    
+    {cp_card_html}
     
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:20px;">
       <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">
         <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:12px;">Market Sentiment (F&G)</div>
         {fng_gauge}
       </div>
-      <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">
-        <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:12px;">Coinbase Premium Index</div>
-        {cp_chart}
-      </div>
+      {basis_column_html}
     </div>
     
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:20px;">
@@ -474,13 +486,6 @@ def render_weekly(data):
           <tr><td style="padding:6px 0; color:var(--dim);">ETH OI Change</td><td class="mono" align="right">{eth_oi_str} &nbsp;<span class="{eth_oi_cls}">{eth_oi_chg}</span></td></tr>
         </table>
       </div>
-    </div>
-    <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px; margin-bottom:20px;">
-      <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:12px;">Futures Term Structure (Annualized Premium)</div>
-      <table width="100%" style="border-collapse:collapse; font-size:12px;">
-        <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0; color:var(--dim);">BTC Futures Basis (Current)</td><td class="mono" align="right" style="color:var(--text); font-weight:600;">{fb_btc:.2f}%</td></tr>
-        <tr><td style="padding:6px 0; color:var(--dim);">ETH Futures Basis (Current)</td><td class="mono" align="right" style="color:var(--text); font-weight:600;">{fb_eth:.2f}%</td></tr>
-      </table>
     </div>
     <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6; margin-bottom:24px; background:var(--bg2); padding:10px 14px; border-left:3px solid var(--gold); border-radius:0 4px 4px 0;">
       <strong style="color:var(--text);">Futures Analysis Note:</strong> {futures_note}
