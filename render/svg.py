@@ -38,12 +38,21 @@ def generate_sparkline(prices, width=100, height=30):
     return svg
 
 def generate_net_liquidity_chart(series, width=600, height=200):
-    """Draw a 3-year line chart of Net Liquidity."""
+    """Draw a 3-year line chart of Net Liquidity with a 4-week moving average."""
     if not series or len(series) < 2:
         return '<div style="color:var(--dim); text-align:center; padding:20px;">No historical Net Liquidity data</div>'
         
     dates = [s['date'] for s in series]
     values = [s['value'] for s in series]
+    
+    # Calculate 4-week moving average
+    ma_values = []
+    for i in range(len(values)):
+        if i < 3:
+            subset = values[:i+1]
+        else:
+            subset = values[i-3:i+1]
+        ma_values.append(sum(subset) / len(subset))
     
     min_val, max_val = min(values), max(values)
     diff = max_val - min_val if max_val != min_val else 1.0
@@ -60,14 +69,22 @@ def generate_net_liquidity_chart(series, width=600, height=200):
     chart_w = width - padding_left - padding_right
     chart_h = height - padding_top - padding_bottom
     
-    points = []
+    # Raw points (background)
+    raw_points = []
     for i, val in enumerate(values):
         x = padding_left + (i / (len(values) - 1)) * chart_w
         y = padding_top + chart_h - ((val - min_val) / diff) * chart_h
-        points.append(f"{x:.1f},{y:.1f}")
-        
-    path_d = f"M {points[0]} " + " ".join([f"L {p}" for p in points[1:]])
-    area_d = f"M {padding_left:.1f},{padding_top + chart_h:.1f} " + " ".join([f"L {p}" for p in points]) + f" L {padding_left + chart_w:.1f},{padding_top + chart_h:.1f} Z"
+        raw_points.append(f"{x:.1f},{y:.1f}")
+    raw_path_d = f"M {raw_points[0]} " + " ".join([f"L {p}" for p in raw_points[1:]])
+    
+    # MA points (main line & area)
+    ma_points = []
+    for i, val in enumerate(ma_values):
+        x = padding_left + (i / (len(ma_values) - 1)) * chart_w
+        y = padding_top + chart_h - ((val - min_val) / diff) * chart_h
+        ma_points.append(f"{x:.1f},{y:.1f}")
+    ma_path_d = f"M {ma_points[0]} " + " ".join([f"L {p}" for p in ma_points[1:]])
+    ma_area_d = f"M {padding_left:.1f},{padding_top + chart_h:.1f} " + " ".join([f"L {p}" for p in ma_points]) + f" L {padding_left + chart_w:.1f},{padding_top + chart_h:.1f} Z"
     
     # X-axis label index selection
     labels = []
@@ -107,9 +124,11 @@ def generate_net_liquidity_chart(series, width=600, height=200):
           <stop offset="100%" stop-color="{color_accent}" stop-opacity="0.00"/>
         </linearGradient>
       </defs>
-      <path d="{area_d}" fill="url(#liqGrad)" />
-      <!-- Line -->
-      <path d="{path_d}" fill="none" stroke="{color_accent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="{ma_area_d}" fill="url(#liqGrad)" />
+      <!-- Raw Line (Faded Background) -->
+      <path d="{raw_path_d}" fill="none" stroke="{color_accent}" stroke-width="1.2" opacity="0.25" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- MA Line (Thick Main Line) -->
+      <path d="{ma_path_d}" fill="none" stroke="{color_accent}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
       <!-- X-axis Labels -->
       {''.join(labels)}
       <!-- Axis border line -->

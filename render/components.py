@@ -1,5 +1,5 @@
 # render/components.py
-from datetime import datetime
+from datetime import datetime, timedelta
 from render.tokens import STYLE_TOKENS, CSS_VARIABLES
 from render.svg import (
     generate_sparkline, generate_fear_greed_gauge_svg,
@@ -8,6 +8,7 @@ from render.svg import (
     generate_cycle_heatmap_svg, generate_net_liquidity_chart,
     generate_inflation_chart
 )
+from render.i18n import STR, format_bulletin_date
 
 def _na(v):
     return v is None or (isinstance(v, float) and v != v)
@@ -138,10 +139,11 @@ def html_wrapper(title, content, accent_color="#3b82f6"):
     }}
     
     table.data-table td {{
-        padding: 10px 12px;
+        padding: 8px 12px;
         font-size: 12px;
         border-bottom: 1px solid rgba(255,255,255,0.03);
         vertical-align: middle;
+        line-height: 1.35;
     }}
     
     .mono {{
@@ -157,9 +159,11 @@ def html_wrapper(title, content, accent_color="#3b82f6"):
     }}
     
     .section-title {{
-        font-family: var(--serif);
-        font-size: 18px;
-        font-weight: 600;
+        font-family: var(--sans);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
         color: var(--text);
     }}
     
@@ -241,6 +245,34 @@ def html_wrapper(title, content, accent_color="#3b82f6"):
         align-items: center;
         font-weight: 500;
     }}
+    
+    .summary-card {{
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--gold);
+        border-radius: 0 4px 4px 0;
+        padding: 16px 20px;
+        margin-bottom: 24px;
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }}
+    
+    .summary-text {{
+        font-size: 13.5px;
+        line-height: 1.8;
+        color: var(--dim);
+        margin: 0;
+    }}
+    
+    .summary-text strong {{
+        color: var(--text);
+        font-weight: 600;
+    }}
+    
+    .summary-text .highlight {{
+        color: var(--gold);
+        font-weight: 600;
+    }}
   </style>
 </head>
 <body>
@@ -251,12 +283,10 @@ def html_wrapper(title, content, accent_color="#3b82f6"):
 </html>
 '''
 
-def render_header(title, sub_title, accent_color, fng_data=None):
+def render_header(title, sub_title, accent_color, fng_data=None, lang='tr'):
     """Render the premium header section with optional Fear & Greed index indicator."""
     now = datetime.now()
-    days_en = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-    months_en = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
-    date_str = f"{days_en[now.weekday()]} · {now.day:02d} {months_en[now.month-1]} {now.year}"
+    date_str = format_bulletin_date(now, lang)
     
     fng_html = ""
     if fng_data:
@@ -265,11 +295,21 @@ def render_header(title, sub_title, accent_color, fng_data=None):
         color = STYLE_TOKENS['colors']['gold']
         if val <= 25: color = STYLE_TOKENS['colors']['red']
         elif val >= 75: color = STYLE_TOKENS['colors']['green']
+        
+        lbl_tr = {
+            'Neutral': 'Nötr',
+            'Fear': 'Korku',
+            'Extreme Fear': 'Aşırı Korku',
+            'Greed': 'Açgözlülük',
+            'Extreme Greed': 'Aşırı Açgözlülük'
+        }
+        lbl_mapped = lbl_tr.get(lbl, lbl) if lang == 'tr' else lbl
+        
         fng_html = f'''
         <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:15px; padding:4px 12px; display:inline-flex; align-items:center; gap:8px;">
-          <span style="font-size:9.5px; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Fear & Greed:</span>
+          <span style="font-size:9.5px; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">{STR['card_fng'][lang]}:</span>
           <span style="font-family:var(--mono); font-size:11px; font-weight:700; color:{color};">{val}</span>
-          <span style="font-size:10px; color:var(--dim); font-weight:500;">({lbl})</span>
+          <span style="font-size:10px; color:var(--dim); font-weight:500;">({lbl_mapped})</span>
         </div>
         '''
         
@@ -289,13 +329,14 @@ def render_header(title, sub_title, accent_color, fng_data=None):
     </table>
     '''
 
-def render_ticker(data):
+def render_ticker(data, lang='tr'):
     """Render the top ticker bar with 7-day sparklines."""
     macro = data.get('macro_indicators', {})
     crypto_prices = data.get('crypto_prices', [])
     commodities = data.get('commodities', [])
     fng = data.get('fear_and_greed', {})
     crypto_ov = data.get('crypto_market_overview', {})
+    ticker_history = data.get('ticker_history', {})
 
     # Find BTC and Gold prices
     btc_price = 0
@@ -314,6 +355,18 @@ def render_ticker(data):
             gold_chg = c.get('Change %', 0)
             break
 
+    # F&G Classification mapped
+    fng_val = fng.get('value', 0)
+    fng_lbl = fng.get('classification', 'Neutral')
+    lbl_tr = {
+        'Neutral': 'Nötr',
+        'Fear': 'Korku',
+        'Extreme Fear': 'Aşırı Korku',
+        'Greed': 'Açgözlülük',
+        'Extreme Greed': 'Aşırı Açgözlülük'
+    }
+    fng_lbl_mapped = lbl_tr.get(fng_lbl, fng_lbl) if lang == 'tr' else fng_lbl
+
     tickers = [
         {'name': 'NASDAQ 100', 'price': _fmt_price(macro.get('NASDAQ 100 Futures', 0), 'index'),
          'chg': macro.get('NASDAQ 100 Futures_chg', 0)},
@@ -328,7 +381,7 @@ def render_ticker(data):
         {'name': 'BTC', 'price': _fmt_price(btc_price, 'price0'),
          'chg': btc_chg},
         {'name': 'BTC.D', 'price': f"{crypto_ov.get('btc_dominance', 0):.1f}%", 'chg': None},
-        {'name': 'F&G INDEX', 'price': str(fng.get('value', 0)), 'chg': None, 'custom': fng.get('classification', '')},
+        {'name': 'F&G INDEX', 'price': str(fng_val), 'chg': None, 'custom': fng_lbl_mapped},
     ]
 
     html = '<table class="ticker" cellpadding="0" cellspacing="0"><tr>\n'
@@ -337,45 +390,70 @@ def render_ticker(data):
             chg_text, chg_cls = _fmt_change(t['chg'])
         elif 'custom' in t:
             chg_text = t['custom']
-            chg_cls = 'up' if 'Greed' in chg_text else ('down' if 'Fear' in chg_text else '')
+            chg_cls = 'up' if 'Greed' in chg_text or 'Açgöz' in chg_text else ('down' if 'Fear' in chg_text or 'Korku' in chg_text else '')
         else:
             chg_text = '—'
             chg_cls = ''
             
+        history = ticker_history.get(t['name'], [])
+        sparkline_svg = generate_sparkline(history, width=50, height=15) if history else ""
+        sparkline_html = f'<div style="margin: 3px 0; height: 15px;">{sparkline_svg}</div>' if sparkline_svg else '<div style="height: 15px;"></div>'
+
         html += f'''
     <td class="ti">
       <div class="ti-name">{t['name']}</div>
       <div class="ti-val">{t['price']}</div>
+      {sparkline_html}
       <div class="ti-chg {chg_cls}">{chg_text}</div>
     </td>'''
     html += '\n</tr></table>'
     return html
 
-def render_regime_strip(data):
+def render_regime_strip(regime, regime_line, lang='tr'):
     """Render the regime language bar strip."""
-    summary_text = data.get('ai_summary', '')
-    if not summary_text:
+    if not regime:
         return ""
+    regime = regime.upper().strip()
+    if 'RISK_ON' in regime or 'RISK-ON' in regime:
+        color = 'var(--green)'
+        bg = 'rgba(16,185,129,0.06)'
+        border_color = 'var(--green)'
+        text = 'RISK-ON'
+    elif 'RISK_OFF' in regime or 'RISK-OFF' in regime:
+        color = 'var(--red)'
+        bg = 'rgba(239,68,68,0.06)'
+        border_color = 'var(--red)'
+        text = 'RISK-OFF'
+    else:
+        color = 'var(--dim)'
+        bg = 'rgba(148,163,184,0.06)'
+        border_color = 'var(--dim)'
+        text = 'NEUTRAL'
+        
     return f'''
-    <div style="background:rgba(245,158,11,0.06); border-left:3px solid var(--gold); border-radius:0 4px 4px 0; padding:12px 16px; margin-bottom:24px; font-size:12px; line-height:1.6; color:var(--text);">
-      {summary_text}
+    <div style="background:{bg}; border-left:3px solid {border_color}; border-radius:0 4px 4px 0; padding:12px 16px; margin-bottom:24px; font-family:var(--sans); font-size:12.5px; line-height:1.6; color:var(--text); page-break-inside:avoid; break-inside:avoid;">
+      <span style="font-weight:700; color:{color}; margin-right:8px; letter-spacing:1px;">{text}</span>
+      <span style="color:var(--text);">{regime_line or ""}</span>
     </div>
     '''
 
 def render_section_divider(title, icon=None):
-    """Draw a clean serif section header separator."""
-    icon_str = f"{icon} &nbsp;" if icon else ""
+    """Draw a clean serif section header separator without emojis."""
+    cleaned_title = title.upper()
+    for emoji in ["📅", "⚡", "📊", "📈", "🔍", "📰", "🔑", "💧", "🌍", "🪙", "📥", "🔄", "🤝", "🎯", "⚔️"]:
+        cleaned_title = cleaned_title.replace(emoji, "")
+    cleaned_title = cleaned_title.strip()
     return f'''
     <div class="section-divider">
-      <span class="section-title">{icon_str}{title}</span>
+      <span class="section-title">{cleaned_title}</span>
       <div class="section-line"></div>
     </div>
     '''
 
-def render_economic_calendar(events):
+def render_economic_calendar(events, lang='tr'):
     """Render the economic calendar table."""
     if not events:
-        return '<div style="color:var(--dim); text-align:center; padding:12px;">No scheduled events</div>'
+        return f'<div style="color:var(--dim); text-align:center; padding:12px;">{STR["no_events"][lang]}</div>'
         
     rows = []
     for ev in events:
@@ -388,15 +466,12 @@ def render_economic_calendar(events):
             actual_style = 'font-weight:700; color:var(--text);'
             try:
                 act_num = float(actual.replace('%', '').replace('K', '').replace('M', '').replace('B', '').strip())
-                fct_num = float(forecast.replace('%', '').replace('K', '').replace('M', '').replace('B', '').strip())
-                higher_is_better = True
-                event_lower = ev.get('event', '').lower()
-                if any(kw in event_lower for kw in ['cpi', 'pce', 'inflation', 'unemployment', 'claims']):
-                    higher_is_better = False
+                for_num = float(forecast.replace('%', '').replace('K', '').replace('M', '').replace('B', '').strip())
+                higher_is_better = ev.get('better_direction', 'up') == 'up'
                 
-                if act_num > fct_num:
+                if act_num > for_num:
                     actual_style = f"font-weight:700; color:var(--{'green' if higher_is_better else 'red'});"
-                elif act_num < fct_num:
+                elif act_num < for_num:
                     actual_style = f"font-weight:700; color:var(--{'red' if higher_is_better else 'green'});"
             except:
                 pass
@@ -416,13 +491,13 @@ def render_economic_calendar(events):
     <table class="data-table">
       <thead>
         <tr>
-          <th>Date</th>
-          <th>Time</th>
-          <th>Event</th>
-          <th>Country</th>
-          <th style="text-align:right;">Prev</th>
-          <th style="text-align:right;">Cons</th>
-          <th style="text-align:right;">Actual</th>
+          <th>{STR['col_date'][lang]}</th>
+          <th>{STR['col_time'][lang]}</th>
+          <th>{STR['col_event'][lang]}</th>
+          <th>{STR['col_country'][lang]}</th>
+          <th style="text-align:right;">{STR['col_prev'][lang]}</th>
+          <th style="text-align:right;">{STR['col_cons'][lang]}</th>
+          <th style="text-align:right;">{STR['col_actual'][lang]}</th>
         </tr>
       </thead>
       <tbody>
@@ -431,26 +506,27 @@ def render_economic_calendar(events):
     </table>
     '''
 
-def render_asset_table(assets, type_name):
+def render_asset_table(assets, type_name, lang='tr'):
     """Render Equities, Commodities, or Watchlist rows with dynamic sparklines and indicators."""
     if not assets:
-        return '<div style="color:var(--dim); text-align:center; padding:15px;">No asset data available</div>'
+        return f'<div style="color:var(--dim); text-align:center; padding:15px;">{STR["no_asset_data"][lang]}</div>'
         
     rows = []
     for a in assets:
         symbol = a.get('Symbol') or a.get('Ticker') or ''
         # Map Yahoo Finance commodity tickers to cleaner symbols
-        if symbol in ['GC=F', 'SI=F', 'HG=F', 'NG=F', 'CC=F', 'KC=F', 'BZ=F']:
+        if symbol in ['GC=F', 'SI=F', 'HG=F', 'NG=F', 'CC=F', 'KC=F', 'BZ=F', 'CL=F']:
             mapping = {
                 'GC=F': 'XAU',
                 'SI=F': 'XAG',
                 'HG=F': 'HG',
                 'NG=F': 'NG',
+                'CL=F': 'CL',
+                'BZ=F': 'BZ',
                 'CC=F': 'CC',
                 'KC=F': 'KC',
-                'BZ=F': 'BZ',
             }
-            symbol = mapping[symbol]
+            symbol = mapping.get(symbol, symbol)
         name = a.get('Name', '')
         price = a.get('Price', a.get('Current Price USD', 0))
         
@@ -493,7 +569,7 @@ def render_asset_table(assets, type_name):
             
             rows.append(f'''
             <tr>
-              <td><div class="asset-name"><div class="asset-dot"></div><strong>{symbol}</strong>&nbsp;<span style="color:var(--dim); font-size:10px;">{name}</span></div></td>
+              <td><div class="asset-name"><div class="asset-dot"></div><strong style="color:var(--text);">{symbol}</strong>&nbsp;<span style="color:var(--dim); font-size:10px;">{name}</span></div></td>
               <td class="mono" style="font-weight:600;">{p_str}</td>
               <td class="mono {c24h_cls}">{c24h_t}</td>
               <td class="mono {c7d_cls}">{c7d_t}</td>
@@ -502,23 +578,23 @@ def render_asset_table(assets, type_name):
             </tr>''')
             
     if type_name == 'crypto':
-        headers = '''
+        headers = f'''
         <tr>
-          <th>Asset</th>
-          <th>Price</th>
-          <th>1H</th>
-          <th>24H</th>
-          <th>7D</th>
+          <th>{STR['col_asset'][lang]}</th>
+          <th>{STR['col_price'][lang]}</th>
+          <th>{STR['col_1h'][lang]}</th>
+          <th>{STR['col_24h'][lang]}</th>
+          <th>{STR['col_7d'][lang]}</th>
         </tr>'''
     else:
-        headers = '''
+        headers = f'''
         <tr>
-          <th>Asset</th>
-          <th>Price</th>
-          <th>Daily</th>
-          <th>7D</th>
-          <th>30D</th>
-          <th style="text-align:center; width:60px;">Trend</th>
+          <th>{STR['col_asset'][lang]}</th>
+          <th>{STR['col_price'][lang]}</th>
+          <th>{STR['col_24h'][lang]}</th>
+          <th>{STR['col_7d'][lang]}</th>
+          <th>{STR['col_30d'][lang]}</th>
+          <th style="text-align:center; width:60px;">{STR['col_trend'][lang]}</th>
         </tr>'''
         
     return f'''
@@ -528,11 +604,11 @@ def render_asset_table(assets, type_name):
     </table>
     '''
 
-def render_news_section(news_data, ai_commentaries=None):
-    """Render news block list with custom AI insights."""
+def render_news_section(news_data, ai_commentaries=None, lang='tr'):
+    """Render news block list with custom AI insights and remote lazy loaded images."""
     stories = news_data.get('news', [])
     if not stories:
-        return '<div style="color:var(--dim); padding:10px;">No stories compiled today</div>'
+        return f'<div style="color:var(--dim); padding:10px;">{STR["no_stories"][lang]}</div>'
         
     html = []
     for idx, s in enumerate(stories[:3]): # Max 3 stories
@@ -562,7 +638,7 @@ def render_news_section(news_data, ai_commentaries=None):
         if img_url:
             img_html = f'''
             <td width="100" style="vertical-align:top; padding-left:16px;">
-              <img src="{img_url}" width="100" height="70" style="border-radius:4px; object-fit:cover; border:1px solid var(--border);" loading="lazy" />
+              <img src="{img_url}" width="100" height="70" style="border-radius:4px; object-fit:cover; border:1px solid var(--border);" loading="lazy" onerror="this.parentNode.style.display='none';" />
             </td>'''
             
         html.append(f'''
@@ -582,27 +658,51 @@ def render_news_section(news_data, ai_commentaries=None):
         
     return '\n'.join(html)
 
-def render_footer():
-    """Render footer block containing disclosure details."""
+def render_footer(lang='tr', date_str='', is_weekly=False):
+    """Render footer block containing localized disclosure details."""
     now = datetime.now()
+    
+    # Web read link
+    if is_weekly:
+        week_str = now.strftime("%Y-W%U")
+        archive_url = f"https://nocashflow.net/bulletins/weekly/{week_str}.{lang}.html"
+    else:
+        today_str = now.strftime("%Y-%m-%d")
+        archive_url = f"https://nocashflow.net/bulletins/daily/{today_str}.{lang}.html"
+        
+    preferences_url = "https://nocashflow.net/preferences"
+    unsubscribe_url = "{{{resend_unsubscribe_url}}}" # Resend unsubscribe tag
+    
+    view_web_text = STR['view_on_web'][lang]
+    pref_text = STR['language_pref'][lang]
+    unsub_text = STR['unsubscribe'][lang]
+    copyright_text = STR['footer_copyright'][lang]
+    disclaimer_text = STR['disclaimer'][lang]
+    bulletin_desc = STR['bulletin_desc'][lang]
+    
     return f'''
-    <div style="margin-top:40px; border-top:1px solid var(--border); padding-top:20px; text-align:center; font-family:var(--sans); font-size:10px; color:var(--dim); line-height:1.75;">
-      <p style="margin:0 0 10px 0; font-weight:600; color:var(--text); letter-spacing:1px;">NOCASHFLOW bültenidir.</p>
-      <p style="margin:0 0 10px 0;">This document is for informational purposes only and does not constitute financial, investment, or legal advice. All investment decisions carry risks.</p>
-      <p style="margin:0;">&copy; {now.year} nocashflow.net. All rights reserved. <a href="https://nocashflow.net" style="color:var(--accent); text-decoration:none;" target="_blank">nocashflow.net</a></p>
+    <div style="margin-top:40px; border-top:1px solid var(--border); padding-top:20px; text-align:center; font-family:var(--sans); font-size:10px; color:var(--dim); line-height:1.75; page-break-inside:avoid; break-inside:avoid;">
+      <p style="margin:0 0 10px 0; font-weight:600; color:var(--text); letter-spacing:1px;">{bulletin_desc}</p>
+      <p style="margin:0 0 15px 0;">
+        <a href="{archive_url}" style="color:var(--accent); text-decoration:none;" target="_blank">{view_web_text}</a> &nbsp;·&nbsp;
+        <a href="{preferences_url}" style="color:var(--accent); text-decoration:none;" target="_blank">{pref_text}</a> &nbsp;·&nbsp;
+        <a href="{unsubscribe_url}" style="color:var(--accent); text-decoration:none;" target="_blank">{unsub_text}</a>
+      </p>
+      <p style="margin:0 0 10px 0; max-width: 580px; margin-left: auto; margin-right: auto;">{disclaimer_text}</p>
+      <p style="margin:0;">&copy; {now.year} nocashflow.net. {copyright_text}</p>
     </div>
     '''
 
-def render_coinbase_premium_card(cp_data, period_label="7D"):
+def render_coinbase_premium_card(cp_data, period_label="7D", lang="tr"):
     """Render the full-width Coinbase Premium Index Card with stats and bar chart."""
     if not cp_data or not isinstance(cp_data, dict):
-        return '<div style="color:var(--dim); text-align:center; padding:15px;">No Coinbase Premium data available</div>'
+        return f'<div style="color:var(--dim); text-align:center; padding:15px;">{STR["no_asset_data"][lang]}</div>'
         
     trend = cp_data.get('trend_data', [])
     current = cp_data.get('current_value', 0.0)
     
     if not trend:
-        return '<div style="color:var(--dim); text-align:center; padding:15px;">No Coinbase Premium data available</div>'
+        return f'<div style="color:var(--dim); text-align:center; padding:15px;">{STR["no_asset_data"][lang]}</div>'
         
     # Calculate 24h high/low from the last 24 elements (hours) in the trend data
     trend_24h = trend[-24:] if len(trend) >= 24 else trend
@@ -621,15 +721,15 @@ def render_coinbase_premium_card(cp_data, period_label="7D"):
     
     # Determine signal
     if current is None:
-        signal_text = '● Neutral'
+        signal_text = STR['signal_neutral'][lang]
         signal_cls = 'color: var(--dim);'
         current_str = '—'
     elif current > 0:
-        signal_text = '▲ US buying pressure active'
+        signal_text = STR['signal_buying_active'][lang]
         signal_cls = 'color: var(--green); font-weight: 600;'
         current_str = f"{current:+.4f}%"
     else:
-        signal_text = '▼ US selling pressure'
+        signal_text = STR['signal_selling_active'][lang]
         signal_cls = 'color: var(--red); font-weight: 600;'
         current_str = f"{current:+.4f}%"
         
@@ -662,7 +762,7 @@ def render_coinbase_premium_card(cp_data, period_label="7D"):
       </div>
       
       <div style="padding:10px 14px; background:var(--bg3); border:1px solid var(--border); border-radius:4px; font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6;">
-        <strong style="color:var(--gold2);">Reading guide:</strong> Positive values indicate US institutional buying pressure. Sustained positive premium is a bullish signal for BTC.
+        <strong style="color:var(--gold2);">{STR['reading_guide'][lang]}:</strong> {STR['reading_guide_text'][lang]}
       </div>
     </div>
     '''

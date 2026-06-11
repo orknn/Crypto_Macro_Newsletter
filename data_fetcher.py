@@ -248,6 +248,26 @@ def get_fear_and_greed_index():
         print(f"Error fetching fear and greed: {e}")
         return {'value': 50, 'classification': 'Neutral'}
 
+def normalize_funding(raw, source, price=None, symbol=None):
+    """
+    Normalize funding rates to an 8-hour equivalent percentage.
+    """
+    if source == 'binance':
+        # Binance is already 8h, but returned as decimal (e.g. 0.0001 -> 0.01%)
+        return raw * 100.0
+    elif source == 'kraken':
+        # Kraken funding rates are applied hourly.
+        # For inverse perpetuals (PF_XBTUSD, PF_ETHUSD), raw predicted rate is absolute (denominated in quote).
+        # We divide by price to get relative hourly rate.
+        if symbol in ['PF_XBTUSD', 'PF_ETHUSD'] and price and price > 0:
+            relative_hourly = raw / price
+        else:
+            # Linear contracts (PF_SOLUSD) are already relative hourly decimal
+            relative_hourly = raw
+        # Convert to 8-hour rate and convert decimal to percentage
+        return relative_hourly * 8.0 * 100.0
+    return raw
+
 def get_funding_rates():
     """
     Fetch real-time funding rates and Open Interest from Kraken Futures API.
@@ -267,19 +287,20 @@ def get_funding_rates():
             if symbol in tickers:
                 item = tickers[symbol]
                 
-                # Kraken returns funding rate prediction (hourly/4h depending on pair) 
-                # Raw decimal like 0.0001 -> 0.01%
-                fr = float(item.get('fundingRatePrediction', 0)) * 100 
+                raw_fr = float(item.get('fundingRatePrediction', 0))
+                last_price = float(item.get('last', 0))
+                
+                # Normalize funding rate
+                fr = normalize_funding(raw_fr, 'kraken', price=last_price, symbol=symbol)
                 fr_results[name] = fr
                 
                 # OI is in base currency, convert to quote (USD)
                 oi_base = float(item.get('openInterest', 0))
-                last_price = float(item.get('last', 0))
                 oi_usd = oi_base * last_price
                 
                 oi_results[name] = {
                     'oi': oi_usd,
-                    'oi_chg_24h': 0.0
+                    'oi_chg_24h': None # Will be calculated via snapshot comparisons
                 }
             else:
                 fr_results[name] = 0.0
@@ -1193,13 +1214,37 @@ def get_coinbase_premium_index(interval='1h', limit=168):
 # ═══════════════════════════════════════════
 
 def get_macro_news():
-    """Fetch real Macro News from Finnhub API"""
+    """Fetch real Macro News from Finnhub API with strict filters, whitelist, blacklist, and scoring fallback."""
     import os
-    import base64
+    import re
     
     news_items = []
     api_key = os.environ.get('FINNHUB_API_KEY')
     
+    # Whitelist & Blacklist details
+    whitelist = {"reuters", "bloomberg", "cnbc", "financial times", "ap", "coindesk", "the block"}
+    blacklist_regex = r"(?i)top \d+|things to watch|cramer|here's what|stocks to buy"
+    
+    def is_listicle(title):
+        # Starts with a number followed by a space
+        return bool(re.match(r"^\d+\s", title))
+
+    def score_item(item):
+        score = 0
+        title = item.get('headline', '').lower()
+        summary = item.get('summary', '').lower()
+        # Key keywords
+        keywords = ["fed", "inflation", "cpi", "bitcoin", "crypto", "interest rate", "etf", "macro", "markets"]
+        for kw in keywords:
+            if kw in title or kw in summary:
+                score += 1
+        # Image presence gives a boost
+        if item.get('image'):
+            score += 2
+        # Length of summary
+        score += min(len(summary) // 50, 3)
+        return score
+
     if api_key:
         try:
             url = f'https://finnhub.io/api/v1/news?category=general&token={api_key}'
@@ -1207,18 +1252,38 @@ def get_macro_news():
             response.raise_for_status()
             data = response.json()
             
-            # Get up to 5 latest macro news items
-            for item in data[:5]:
-                img_url = ""
-                raw_img = item.get('image', '')
-                if raw_img:
-                    try:
-                        img_res = requests.get(raw_img, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
-                        if img_res.status_code == 200:
-                            encoded = base64.b64encode(img_res.content).decode('utf-8')
-                            img_url = f"data:image/jpeg;base64,{encoded}"
-                    except Exception as e:
-                        print(f"      ⚠️  Error fetching Finnhub image {raw_img}: {e}")
+            clean_items = []
+            for item in data:
+                headline = item.get('headline', '')
+                
+                # Apply regex blacklist
+                if re.search(blacklist_regex, headline):
+                    continue
+                # Apply listicle filter
+                if is_listicle(headline):
+                    continue
+                
+                clean_items.append(item)
+            
+            # Separate whitelisted vs others
+            whitelisted_items = []
+            other_items = []
+            for item in clean_items:
+                source_lower = item.get('source', '').lower().strip()
+                if source_lower in whitelist:
+                    whitelisted_items.append(item)
+                else:
+                    other_items.append(item)
+            
+            # Sort others by score
+            other_items.sort(key=score_item, reverse=True)
+            
+            # Combine: Whitelisted first, then others
+            final_selection = whitelisted_items + other_items
+            
+            # Select top 5
+            for item in final_selection[:5]:
+                img_url = item.get('image', '')
                 
                 news_items.append({
                     "title": item.get('headline', ''),
@@ -1229,15 +1294,13 @@ def get_macro_news():
                 })
         except Exception as e:
             print(f"      ⚠️  Error fetching Macro News from Finnhub: {e}")
-    else:
-        print("      ⚠️  FINNHUB_API_KEY is not set. Skipping Finnhub news.")
-        
+            
     # Fallback to general if API fails or no key
     if not news_items:
         news_items = [
-            {"title": "Global markets show muted trading amid light economic data.", "summary": "Piyasalarda veri takviminin sakin olması nedeniyle yatay ve hacimsiz seyir izleniyor.", "url": "#", "source": "Macro News", "image_url": ""},
-            {"title": "Investors await key central bank policy announcements.", "summary": "Yatırımcılar majör merkez bankalarının faiz kararları ve politika sinyallerini bekliyor.", "url": "#", "source": "Macro News", "image_url": ""},
-            {"title": "Commodity markets experience continued volatility.", "summary": "Emtia fiyatlarında volatilite ve jeopolitik risklerin etkileri sürüyor.", "url": "#", "source": "Commodity News", "image_url": ""}
+            {"title": "Global markets show muted trading amid light economic data.", "summary": "Piyasalarda veri takviminin sakin olması nedeniyle yatay ve hacimsiz seyir izleniyor.", "url": "#", "source": "Reuters", "image_url": ""},
+            {"title": "Investors await key central bank policy announcements.", "summary": "Yatırımcılar majör merkez bankalarının faiz kararları ve politika sinyallerini bekliyor.", "url": "#", "source": "Bloomberg", "image_url": ""},
+            {"title": "Commodity markets experience continued volatility.", "summary": "Emtia fiyatlarında volatilite ve jeopolitik risklerin etkileri sürüyor.", "url": "#", "source": "CNBC", "image_url": ""}
         ]
         
     return {
@@ -1353,9 +1416,52 @@ def get_bist_data():
 def get_options_market_data():
     """
     Fetch live Options Market data from Deribit API.
-    Calculates Max Pain strike price, Put/Call ratio, Open Interest, and DVOL change.
+    Calculates Max Pain strike price, Put/Call ratio, Open Interest, DVOL change,
+    25Δ Risk Reversal (nearest monthly), and Large Option Expirations table.
     """
     import time
+    import math
+    
+    def normal_cdf(x):
+        return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+    def calculate_delta(spot, strike, time_to_expiry_years, iv_pct, option_type, r=0.0):
+        if time_to_expiry_years <= 0 or iv_pct <= 0 or spot <= 0 or strike <= 0:
+            return 0.0
+        sigma = iv_pct / 100.0
+        try:
+            d1 = (math.log(spot / strike) + (r + 0.5 * sigma ** 2) * time_to_expiry_years) / (sigma * math.sqrt(time_to_expiry_years))
+            if option_type == 'C':
+                return normal_cdf(d1)
+            elif option_type == 'P':
+                return normal_cdf(d1) - 1.0
+        except:
+            return 0.0
+        return 0.0
+
+    def parse_deribit_expiry(exp_str):
+        months = {
+            'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6,
+            'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12
+        }
+        try:
+            day = int(exp_str[:2])
+            year = int("20" + exp_str[-2:])
+            month_str = exp_str[2:-2].upper()
+            month = months[month_str]
+            return datetime(year, month, day)
+        except Exception:
+            try:
+                return datetime.strptime(exp_str, "%d%b%y")
+            except:
+                return None
+
+    def is_last_friday(dt):
+        if dt.weekday() != 4:
+            return False
+        next_friday = dt + timedelta(days=7)
+        return next_friday.month != dt.month
+
     try:
         # 1. Fetch options summary
         url_options = "https://deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option"
@@ -1373,7 +1479,11 @@ def get_options_market_data():
         total_oi = 0.0
         expiries = set()
         
+        # Spot price estimation from first available contract
+        spot_price = None
         for item in results:
+            if not spot_price:
+                spot_price = float(item.get('underlying_price', 0.0))
             name = item.get('instrument_name', '')
             oi = float(item.get('open_interest', 0.0))
             total_oi += oi
@@ -1389,25 +1499,28 @@ def get_options_market_data():
                     
         pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 0.0
         
-        # Helper to find nearest quarterly expiry (last Friday of March, June, September, December)
-        def get_nearest_quarterly_expiry(exps):
-            quarterly_expiries = []
-            for exp in exps:
-                try:
-                    dt = datetime.strptime(exp, "%d%b%y")
-                    if dt.month in [3, 6, 9, 12] and dt.weekday() == 4:
-                        next_week = dt + timedelta(days=7)
-                        if next_week.month != dt.month:
-                            quarterly_expiries.append((exp, dt))
-                except Exception:
-                    continue
-            if not quarterly_expiries:
-                return None
-            quarterly_expiries.sort(key=lambda x: x[1])
-            return quarterly_expiries[0][0]
+        # Parse all expiries
+        parsed_expiries = []
+        for exp in expiries:
+            dt = parse_deribit_expiry(exp)
+            if dt:
+                parsed_expiries.append((exp, dt))
+        parsed_expiries.sort(key=lambda x: x[1])
+
+        # Helper to find nearest quarterly expiry
+        def get_nearest_quarterly_expiry(parsed_exps):
+            quarterly = []
+            for exp, dt in parsed_exps:
+                if dt.month in [3, 6, 9, 12] and dt.weekday() == 4:
+                    next_week = dt + timedelta(days=7)
+                    if next_week.month != dt.month:
+                        quarterly.append((exp, dt))
+            if quarterly:
+                return quarterly[0][0]
+            return None
 
         # Calculate Max Pain for nearest quarterly expiry
-        target_expiry = get_nearest_quarterly_expiry(expiries)
+        target_expiry = get_nearest_quarterly_expiry(parsed_expiries)
         max_pain_strike = None
         if target_expiry:
             target_options = []
@@ -1440,7 +1553,106 @@ def get_options_market_data():
                 if pain < min_pain:
                     min_pain = pain
                     max_pain_strike = S
-                    
+
+        # 25Δ Risk Reversal calculation (nearest monthly expiry)
+        target_monthly = None
+        for exp, dt in parsed_expiries:
+            if is_last_friday(dt) and dt > datetime.now():
+                target_monthly = (exp, dt)
+                break
+        
+        # Fallback to first monthly if none in the future matches last Friday exactly
+        if not target_monthly and parsed_expiries:
+            target_monthly = parsed_expiries[0]
+
+        risk_reversal = None
+        rr_expiry = None
+        if target_monthly and spot_price and spot_price > 0:
+            exp_name, exp_dt = target_monthly
+            rr_expiry = exp_name
+            now = datetime.now()
+            T = (exp_dt - now).total_seconds() / (365.25 * 24 * 3600)
+            T = max(T, 0.0)
+            
+            monthly_options = []
+            for item in results:
+                name = item.get('instrument_name', '')
+                parts = name.split('-')
+                if len(parts) == 4 and parts[1] == exp_name:
+                    strike = float(parts[2])
+                    opt_type = parts[3]
+                    iv = float(item.get('mark_iv', 0.0))
+                    monthly_options.append({
+                        'strike': strike,
+                        'type': opt_type,
+                        'iv': iv
+                    })
+            
+            calls = []
+            puts = []
+            for opt in monthly_options:
+                delta = calculate_delta(spot_price, opt['strike'], T, opt['iv'], opt['type'])
+                if opt['type'] == 'C':
+                    opt['delta'] = delta
+                    calls.append(opt)
+                elif opt['type'] == 'P':
+                    opt['delta'] = delta
+                    puts.append(opt)
+            
+            call_25d = min(calls, key=lambda x: abs(x['delta'] - 0.25)) if calls else None
+            put_25d = min(puts, key=lambda x: abs(x['delta'] - (-0.25))) if puts else None
+            
+            if call_25d and put_25d:
+                risk_reversal = call_25d['iv'] - put_25d['iv']
+
+        # Large Option Expirations Table (nearest 2 expiries)
+        large_expirations_list = []
+        if len(parsed_expiries) >= 2 and spot_price:
+            for exp_name, exp_dt in parsed_expiries[:2]:
+                total_notional = 0.0
+                expiry_options = []
+                strikes = set()
+                
+                for item in results:
+                    name = item.get('instrument_name', '')
+                    parts = name.split('-')
+                    if len(parts) == 4 and parts[1] == exp_name:
+                        oi_val = float(item.get('open_interest', 0.0))
+                        total_notional += oi_val * spot_price
+                        
+                        strike = float(parts[2])
+                        opt_type = parts[3]
+                        expiry_options.append({
+                            'strike': strike,
+                            'type': opt_type,
+                            'oi': oi_val
+                        })
+                        strikes.add(strike)
+                
+                # Calculate Max Pain for this specific expiry
+                min_pain_expiry = float('inf')
+                max_pain_expiry_strike = None
+                strikes = sorted(list(strikes))
+                for S in strikes:
+                    pain = 0.0
+                    for opt in expiry_options:
+                        K = opt['strike']
+                        opt_oi = opt['oi']
+                        if opt['type'] == 'C':
+                            pain += opt_oi * max(0.0, S - K)
+                        elif opt['type'] == 'P':
+                            pain += opt_oi * max(0.0, K - S)
+                    if pain < min_pain_expiry:
+                        min_pain_expiry = pain
+                        max_pain_expiry_strike = S
+                
+                large_expirations_list.append({
+                    'expiry': exp_name,
+                    'date_str': exp_dt.strftime('%d %b %Y'),
+                    'notional': total_notional,
+                    'max_pain': max_pain_expiry_strike
+                })
+
         # 2. Fetch DVOL data
         end_t = int(time.time() * 1000)
         start_t = end_t - 25 * 3600 * 1000  # 25 hours to ensure 24 points
@@ -1463,7 +1675,10 @@ def get_options_market_data():
             'dvol_change_24h': dvol_chg,
             'put_call_ratio': pcr,
             'open_interest_btc': total_oi,
-            'max_pain_price': max_pain_strike
+            'max_pain_price': max_pain_strike,
+            'risk_reversal_25d': risk_reversal,
+            'risk_reversal_expiry': rr_expiry,
+            'large_expirations': large_expirations_list
         }
     except Exception as e:
         print(f"      ⚠️  Error fetching options market data: {e}")
@@ -1886,4 +2101,81 @@ def get_etf_flows_history(limit=10):
     except Exception as e:
         print(f"      ⚠️  Error fetching ETF flows history: {e}")
         return None
+
+def calculate_oi_change_from_snapshots(current_oi, edition='daily'):
+    """
+    Calculate Open Interest change using historical snapshots.
+    current_oi: dict of {'BTC': {'oi': float}, 'ETH': {'oi': float}, 'SOL': {'oi': float}}
+    Returns: dict with 'oi_chg_24h' or 'oi_chg_7d' calculated.
+    """
+    import glob
+    import os
+    import json
+    from datetime import datetime, timedelta
+
+    target_delta = 1 if edition == 'daily' else 7
+    target_date = (datetime.now() - timedelta(days=target_delta)).strftime("%Y-%m-%d")
+
+    # Let's find the snapshot for the target date
+    snap_path = f"snapshots/{target_date}.json"
+    
+    # If the exact date snapshot is not found, let's find the closest snapshot
+    if not os.path.exists(snap_path):
+        files = glob.glob("snapshots/*.json")
+        if not files:
+            return current_oi  # Keep as None
+        
+        # Parse dates from file names
+        parsed_files = []
+        for f in files:
+            base = os.path.basename(f)
+            date_str = base.replace(".json", "")
+            try:
+                dt = datetime.strptime(date_str, "%Y-%m-%d")
+                parsed_files.append((f, dt))
+            except:
+                continue
+        
+        if not parsed_files:
+            return current_oi
+            
+        parsed_files.sort(key=lambda x: x[1])
+        
+        # Find the file closest to target_date
+        target_dt = datetime.now() - timedelta(days=target_delta)
+        closest_file = None
+        min_diff = timedelta(days=365)
+        for f, dt in parsed_files:
+            diff = abs(dt - target_dt)
+            if diff < min_diff and diff <= timedelta(days=3): # Max 3 days variance allowed
+                min_diff = diff
+                closest_file = f
+        
+        if closest_file:
+            snap_path = closest_file
+        else:
+            return current_oi
+
+    # Load target snapshot
+    try:
+        with open(snap_path, 'r', encoding='utf-8') as f:
+            snap_data = json.load(f)
+            past_oi = snap_data.get('open_interest', {})
+            # Fallback for old snapshot layout
+            if not past_oi:
+                past_oi = snap_data.get('derivatives_desk', {}).get('open_interest', {})
+            
+            for name in current_oi:
+                if name in past_oi and name in current_oi:
+                    curr_val = current_oi[name].get('oi')
+                    past_val = past_oi[name].get('oi')
+                    if curr_val and past_val and past_val > 0:
+                        chg = ((curr_val - past_val) / past_val) * 100
+                        change_key = 'oi_chg_24h' if edition == 'daily' else 'oi_chg_7d'
+                        current_oi[name][change_key] = chg
+    except Exception as e:
+        print(f"Error calculating OI change from snapshot {snap_path}: {e}")
+        
+    return current_oi
+
 

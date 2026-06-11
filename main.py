@@ -22,9 +22,10 @@ from data_fetcher import (
     get_etf_flows, get_bist_data, get_m2_money_supply, get_stablecoin_data,
     get_net_liquidity, get_stablecoin_history, get_inflation_path, 
     get_btc_cycle_metrics, get_correlation_matrix, get_etf_flows_history,
-    get_yfinance_data
+    get_yfinance_data, calculate_oi_change_from_snapshots
 )
 from agents import ContentEditorAgent, ExperienceDesignerAgent
+import validators
 from render.daily import render_daily
 from render.weekly import render_weekly
 from ai_report_generator import generate_ai_report
@@ -259,11 +260,19 @@ def run_pipeline():
         if idx + 1 < len(sys.argv):
             edition = sys.argv[idx + 1].lower()
             
+    lang_arg = 'both'
+    if '--lang' in sys.argv:
+        idx = sys.argv.index('--lang')
+        if idx + 1 < len(sys.argv):
+            lang_arg = sys.argv[idx + 1].lower()
+            if lang_arg not in ['tr', 'en', 'both']:
+                lang_arg = 'both'
+            
     dry_run = '--dry-run' in sys.argv
     skip_agents = '--no-agents' in sys.argv
     send_email_arg = '--send-email' in sys.argv
     
-    print(f"Running pipeline in {edition.upper()} edition...")
+    print(f"Running pipeline in {edition.upper()} edition (Language: {lang_arg.upper()})...")
     if dry_run:
         print("  ⚠️  DRY RUN mode active — no emails, no web push.")
         
@@ -304,6 +313,10 @@ def run_pipeline():
     
     print("  → Funding rates and Open Interest...")
     funding_rates, open_interest = get_funding_rates()
+    try:
+        open_interest = calculate_oi_change_from_snapshots(open_interest, edition=edition)
+    except Exception as e:
+        print(f"      ⚠️  Error calculating snapshot-based OI change: {e}")
     
     print("  → Economic calendar...")
     economic_calendar = get_economic_calendar()
@@ -338,6 +351,26 @@ def run_pipeline():
     print("  → Stablecoin data...")
     stablecoin_data = get_stablecoin_data()
 
+    # Fetch sparkline histories
+    print("  → Ticker history (sparklines)...")
+    ticker_history_data = {}
+    ticker_mappings = {
+        'NASDAQ 100': 'NQ=F',
+        'DXY': 'DX-Y.NYB',
+        'GOLD': 'GC=F',
+        '10Y UST': '^TNX',
+        'VIX': '^VIX',
+        'BTC': 'BTC-USD'
+    }
+    for name, sym in ticker_mappings.items():
+        try:
+            df = get_yfinance_data(sym, period='35d')
+            if not df.empty and 'Close' in df:
+                closes = df['Close'].dropna().tolist()
+                ticker_history_data[name] = [float(x) for x in closes[-7:]]
+        except Exception as e:
+            print(f"      ⚠️  Error fetching history for ticker sparkline {name}: {e}")
+
     # Combine into core data dict
     data = {
         'date': datetime.now().strftime('%Y-%m-%d'),
@@ -360,7 +393,12 @@ def run_pipeline():
         'etf_flows': etf_flows,
         'bist_try': bist_try,
         'stablecoin_data': stablecoin_data,
+        'ticker_history': ticker_history_data,
     }
+
+    # Run data validation sanity checks
+    print("  → Running metric validation checks...")
+    data = validators.validate_and_sanitize(data)
 
     # ── 2. Fetch Weekly Specific Data (if weekly) ──
     if edition == 'weekly':
@@ -404,6 +442,10 @@ def run_pipeline():
     # ── 3. AI Agent Analysis ──
     if skip_agents:
         print("\n⏭️  AI Agent'lar atlanıyor (--no-agents)")
+        data['regime'] = 'NEUTRAL'
+        data['tr'] = {}
+        data['en'] = {}
+        # Legacies for backward compatibility
         data['ai_summary'] = None
         data['news_commentaries'] = None
         data['design_improvement_report'] = None
@@ -417,26 +459,38 @@ def run_pipeline():
         print("  → Finansal İçerik Editörü...")
         editor_result = ContentEditorAgent().analyze(data, edition=edition)
         
-        if edition == 'weekly':
-            data['weekly_themes'] = editor_result.get('weekly_themes', [])
-            data['liquidity_note'] = editor_result.get('liquidity_note')
-            data['inflation_note'] = editor_result.get('inflation_note')
-            data['stablecoin_note'] = editor_result.get('stablecoin_note')
-            data['etf_note'] = editor_result.get('etf_note')
-            data['rotation_note'] = editor_result.get('rotation_note')
-            data['cycle_note'] = editor_result.get('cycle_note')
-            data['correlation_note'] = editor_result.get('correlation_note')
-            data['futures_note'] = editor_result.get('futures_note')
-            data['week_plan_note'] = editor_result.get('week_plan_note')
-            data['news_note'] = editor_result.get('news_note')
+        if editor_result.get('success'):
+            data['regime'] = editor_result.get('regime', 'NEUTRAL')
+            data['tr'] = editor_result.get('tr', {})
+            data['en'] = editor_result.get('en', {})
+            
+            # Map legacy properties for compatibility
+            data['ai_summary'] = data['tr'].get('overview')
+            data['futures_note'] = data['tr'].get('notes', {}).get('futures_note')
+            data['etf_note'] = data['tr'].get('notes', {}).get('etf_note')
+            data['indicators_note'] = data['tr'].get('notes', {}).get('indicators_note')
+            data['weekly_themes'] = data['tr'].get('themes', [])
+            
+            data['news_commentaries'] = []
+            raw_news = data.get('macro_news', {}).get('news', [])
+            tr_insights = data['tr'].get('insights', [])
+            for idx, n in enumerate(raw_news):
+                headline = n.get('title', '')
+                comm = tr_insights[idx] if idx < len(tr_insights) else ""
+                data['news_commentaries'].append({
+                    "headline": headline,
+                    "commentary": comm
+                })
         else:
-            data['ai_summary'] = editor_result.get('genel_degerlendirme')
-            data['korelasyon_notu'] = editor_result.get('korelasyon_notu')
-            data['news_commentaries'] = editor_result.get('news_commentaries')
-            data['content_suggestions'] = editor_result.get('content_suggestions')
-            data['futures_note'] = editor_result.get('futures_note')
-            data['etf_note'] = editor_result.get('etf_note')
-            data['indicators_note'] = editor_result.get('indicators_note')
+            data['regime'] = 'NEUTRAL'
+            data['tr'] = {}
+            data['en'] = {}
+            data['ai_summary'] = None
+            data['news_commentaries'] = None
+            data['futures_note'] = None
+            data['etf_note'] = None
+            data['indicators_note'] = None
+            data['weekly_themes'] = []
 
         # Short sleep to prevent Anthropic rate limiting
         import time
@@ -463,68 +517,81 @@ def run_pipeline():
         # Validate snapshot schema
         validate_snapshot(serializable_data)
 
-    # ── 5. Generate HTML and PDFs ──
-    print(f"\nHTML bülten oluşturuluyor ({edition})...")
-    html_filename = 'weekly_bulletin.html' if edition == 'weekly' else 'daily_bulletin.html'
-    pdf_filename = 'weekly_bulletin.pdf' if edition == 'weekly' else 'daily_bulletin.pdf'
-    
-    if edition == 'weekly':
-        html_content = render_weekly(data)
+    # ── 5. Generate HTML and PDFs for requested languages ──
+    languages = []
+    if lang_arg == 'both':
+        languages = ['tr', 'en']
     else:
-        html_content = render_daily(data)
+        languages = [lang_arg]
+
+    os.makedirs('out', exist_ok=True)
+
+    for lang in languages:
+        print(f"\nHTML bülten oluşturuluyor ({edition} - {lang.upper()})...")
         
-    with open(html_filename, 'w', encoding='utf-8') as f:
-        f.write(html_content)
-    print(f"  ✅ HTML bülten oluşturuldu: {os.path.abspath(html_filename)}")
-
-    # Convert to PDF
-    html_to_pdf(html_filename, pdf_filename)
-
-    # ── 6. Push to website (if not dry run) ──
-    if not dry_run:
-        print("\nWebsite güncelleniyor...")
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        week_str = datetime.now().strftime("%Y-W%U")
+        html_filename = f'out/{edition}_{lang}.html'
+        pdf_filename = f'out/{edition}_{lang}.pdf'
         
         if edition == 'weekly':
-            push_file_to_website(html_filename, f"bulletins/weekly/{week_str}.html")
-            push_file_to_website(html_filename, "weekly_bulletin.html")
-            if os.path.exists(pdf_filename):
-                push_file_to_website(pdf_filename, f"bulletins/weekly/{week_str}.pdf")
-                push_file_to_website(pdf_filename, "weekly_bulletin.pdf")
+            html_content = render_weekly(data, lang=lang)
         else:
-            push_file_to_website(html_filename, f"bulletins/daily/{today_str}.html")
-            push_file_to_website(html_filename, "daily_bulletin.html")
-            if os.path.exists(pdf_filename):
-                push_file_to_website(pdf_filename, f"bulletins/daily/{today_str}.pdf")
-                push_file_to_website(pdf_filename, "daily_bulletin.pdf")
+            html_content = render_daily(data, lang=lang)
+            
+        with open(html_filename, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        print(f"  ✅ HTML bülten oluşturuldu: {os.path.abspath(html_filename)}")
 
-    # ── 7. Generate Private AI Report ──
+        # Convert to PDF
+        html_to_pdf(html_filename, pdf_filename)
+
+        # ── 6. Push to website (if not dry run) ──
+        if not dry_run:
+            print(f"\nWebsite güncelleniyor ({lang.upper()})...")
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            week_str = datetime.now().strftime("%Y-W%U")
+            
+            if edition == 'weekly':
+                push_file_to_website(html_filename, f"bulletins/weekly/{week_str}.{lang}.html")
+                push_file_to_website(html_filename, f"bulletins/weekly/latest.{lang}.html")
+                if os.path.exists(pdf_filename):
+                    push_file_to_website(pdf_filename, f"bulletins/weekly/{week_str}.{lang}.pdf")
+                    push_file_to_website(pdf_filename, f"bulletins/weekly/latest.{lang}.pdf")
+            else:
+                push_file_to_website(html_filename, f"bulletins/daily/{today_str}.{lang}.html")
+                push_file_to_website(html_filename, f"bulletins/daily/latest.{lang}.html")
+                if os.path.exists(pdf_filename):
+                    push_file_to_website(pdf_filename, f"bulletins/daily/{today_str}.{lang}.pdf")
+                    push_file_to_website(pdf_filename, f"bulletins/daily/latest.{lang}.pdf")
+
+        # ── 7. Send Email ──
+        is_ci = os.environ.get("CI", "").lower() == "true"
+        env_send = os.environ.get("SEND_EMAIL", "").lower() == "true"
+        should_email = (is_ci or env_send or send_email_arg) and not dry_run
+        
+        if should_email:
+            print(f"\n📧 E-posta gönderimi başlatılıyor ({lang.upper()})...")
+            try:
+                send_newsletter_email(html_path=html_filename, pdf_path=pdf_filename, lang=lang, edition=edition, data=data)
+            except Exception as e:
+                print(f"  ❌ E-posta gönderimi sırasında beklenmedik hata: {e}")
+        else:
+            print(f"\n💡 E-posta gönderimi atlandı ({lang.upper()}).")
+
+    # ── 8. Generate Private AI Report ──
     print("\nAI raporları oluşturuluyor (sadece editör için)...")
     ai_report_file = generate_ai_report(data, output_filename="ai_reports.html")
 
     print(f"\n{'='*50}")
-    print(f"  ✅ Bülten hazır!")
-    print(f"  HTML: {os.path.abspath(html_filename)}")
-    if os.path.exists(pdf_filename):
-        print(f"  PDF:  {os.path.abspath(pdf_filename)}")
+    print(f"  ✅ Bülten(ler) hazır!")
+    for lang in languages:
+        html_filename = f'out/{edition}_{lang}.html'
+        pdf_filename = f'out/{edition}_{lang}.pdf'
+        print(f"  [{lang.upper()}] HTML: {os.path.abspath(html_filename)}")
+        if os.path.exists(pdf_filename):
+            print(f"  [{lang.upper()}] PDF:  {os.path.abspath(pdf_filename)}")
     if ai_report_file:
         print(f"  📋 AI Rapor: {os.path.abspath(ai_report_file)}")
     print(f"{'='*50}")
-
-    # ── 8. Send Email ──
-    is_ci = os.environ.get("CI", "").lower() == "true"
-    env_send = os.environ.get("SEND_EMAIL", "").lower() == "true"
-    should_email = (is_ci or env_send or send_email_arg) and not dry_run
-    
-    if should_email:
-        print("\n📧 E-posta gönderimi başlatılıyor...")
-        try:
-            send_newsletter_email(html_filename, data=data)
-        except Exception as e:
-            print(f"  ❌ E-posta gönderimi sırasında beklenmedik hata: {e}")
-    else:
-        print("\n💡 E-posta gönderimi atlandı.")
 
 
 if __name__ == "__main__":
