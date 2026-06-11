@@ -530,6 +530,7 @@ def render_weekly(data):
     {macro_scoreboard_html}
     {equities_html}
     {sectors_html}
+    <div style="margin-top:16px;"></div>
     {ytd_html}
     {turkey_html}
     {crypto_divider}

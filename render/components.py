@@ -640,7 +640,7 @@ def render_coinbase_premium_card(cp_data):
     <div class="sparkline-wrap" style="padding:20px 24px; background:var(--bg2); border:1px solid var(--border); border-radius:6px; margin-bottom:20px; page-break-inside: avoid; break-inside: avoid;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
         <div>
-          <div style="font-size:12px; color:var(--dim); margin-bottom:4px;">BTC/USD · Coinbase vs Global Spread</div>
+          <div style="font-size:12px; color:var(--dim); margin-bottom:4px;">BTC/USD · Coinbase vs Global Spread (Hourly Trend)</div>
           <div style="font-family:var(--mono); font-size:26px; color:var(--text); font-weight:700;">{current_str}</div>
           <div style="font-size:11px; {signal_cls} margin-top:2px;">{signal_text}</div>
         </div>

@@ -158,9 +158,11 @@ def get_ytd_comparison_data():
         try:
             df = get_yfinance_data(ticker, period='2y')
             if not df.empty and 'Close' in df:
-                df_ytd = df[df.index >= start_of_year].copy()
+                # Drop rows where Close is NaN (e.g. holidays aligned during batch download)
+                df_clean = df.dropna(subset=['Close'])
+                df_ytd = df_clean[df_clean.index >= start_of_year].copy()
                 if not df_ytd.empty:
-                    first_close = float(df_ytd['Close'].iloc[0].item())
+                    first_close = float(df_ytd['Close'].iloc[0])
                     df_ytd['ytd_return'] = ((df_ytd['Close'] - first_close) / first_close) * 100
                     res[name] = [
                         {'date': idx.strftime('%Y-%m-%d'), 'value': float(row['ytd_return'])}
