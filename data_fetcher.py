@@ -908,6 +908,24 @@ def _fetch_fred_actuals():
         if core_pce_mom is not None:
             actuals['core pce price index m/m'] = f"{core_pce_mom}%"
             actuals['core pce'] = f"{core_pce_mom}%"
+
+        # Core CPI y/y — computed from CPILFESL (latest vs 12 months ago)
+        df_core_cpi = _fred_csv('CPILFESL')
+        if len(df_core_cpi) >= 13:
+            latest = df_core_cpi.iloc[-1]['value']
+            y_ago = df_core_cpi.iloc[-13]['value']
+            core_cpi_yoy = round(((latest - y_ago) / y_ago) * 100, 1)
+            actuals['core cpi y/y'] = f"{core_cpi_yoy}%"
+
+        # PPI m/m — PPIFID
+        ppi_mom = _mom_pct('PPIFID')
+        if ppi_mom is not None:
+            actuals['ppi m/m'] = f"{ppi_mom}%"
+
+        # Core PPI m/m — PPIFES
+        core_ppi_mom = _mom_pct('PPIFES')
+        if core_ppi_mom is not None:
+            actuals['core ppi m/m'] = f"{core_ppi_mom}%"
         
         # GDP q/q annualized — A191RL1Q225SBEA (this series IS the % change directly)
         try:
@@ -1060,8 +1078,11 @@ def get_economic_calendar():
         'cpi y/y': 1.0,      # percentage points
         'cpi m/m': 0.5,
         'core cpi m/m': 0.5,
+        'core cpi y/y': 1.0,
         'core pce price index m/m': 0.5,
         'core pce': 0.5,
+        'ppi m/m': 1.0,
+        'core ppi m/m': 1.0,
         'ism services pmi': 5.0,
         'final gdp q/q': 2.0,
         'gdp q/q': 2.0,
