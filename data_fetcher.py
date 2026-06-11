@@ -1102,11 +1102,12 @@ def get_economic_calendar():
 # COINBASE PREMIUM (Calculated via Binance & Coinbase API)
 # ═══════════════════════════════════════════
 
-def get_coinbase_premium_index():
+def get_coinbase_premium_index(interval='1h', limit=168):
     """
     Fetch real-time Coinbase Premium Index trend by comparing historical 
     Coinbase BTC-USD candles and Binance BTCUSDT klines. 
     Also calculates 4-Hour Support & Resistance levels from real recent highs/lows.
+    Supports '1h' (limit=168) and '1d' (limit=180) resolutions.
     """
     btc_price = 65000 # fallback
     premium_pct = 0.0
@@ -1121,8 +1122,8 @@ def get_coinbase_premium_index():
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         
-        # Fetch last 1-hour candles from Binance Vision (Official proxy, bypasses Geoblocks)
-        bin_url = 'https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=168'
+        # Fetch candles from Binance Vision (Official proxy, bypasses Geoblocks)
+        bin_url = f'https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval={interval}&limit={limit}'
         bin_res = requests.get(bin_url, headers=headers, timeout=10).json()
         
         # Format: [open_time, open, high, low, close, volume, ...]
@@ -1135,7 +1136,7 @@ def get_coinbase_premium_index():
         
         btc_price = binance_closes[-1]
         
-        # Support/Resistance based on recent 168h extremes
+        # Support/Resistance based on recent extremes
         resist_2 = max(bin_highs)
         resist_1 = (resist_2 + btc_price) / 2
         
@@ -1144,15 +1145,16 @@ def get_coinbase_premium_index():
         
         # Coinbase historical API usually returns up to 300 data points 
         # Format: [ time, low, high, open, close, volume ]
-        cb_res = requests.get('https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=3600', headers=headers, timeout=15).json()
+        cb_granularity = 86400 if interval == '1d' else 3600
+        cb_res = requests.get(f'https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity={cb_granularity}', headers=headers, timeout=15).json()
         cb_map = {int(c[0]): float(c[4]) for c in cb_res}
         
         # Find common timestamps
         common_times = sorted(list(set(bin_map.keys()) & set(cb_map.keys())))
         
         if common_times:
-            # Take up to the last 168 common hours
-            valid_times = common_times[-168:]
+            # Take up to the last limit common intervals
+            valid_times = common_times[-limit:]
             for t in valid_times:
                 cb_p = cb_map[t]
                 bin_p = bin_map[t]
@@ -1168,7 +1170,7 @@ def get_coinbase_premium_index():
                 
     except Exception as e:
         print(f"Error fetching historical Premium data: {e}")
-        # no fabricated trend — leave it empty rather than inventing 168 points
+        # no fabricated trend — leave it empty rather than inventing points
         premium_pct = None
 
     return {

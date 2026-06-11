@@ -593,7 +593,7 @@ def render_footer():
     </div>
     '''
 
-def render_coinbase_premium_card(cp_data):
+def render_coinbase_premium_card(cp_data, period_label="7D"):
     """Render the full-width Coinbase Premium Index Card with stats and bar chart."""
     if not cp_data or not isinstance(cp_data, dict):
         return '<div style="color:var(--dim); text-align:center; padding:15px;">No Coinbase Premium data available</div>'
@@ -633,14 +633,15 @@ def render_coinbase_premium_card(cp_data):
         signal_cls = 'color: var(--red); font-weight: 600;'
         current_str = f"{current:+.4f}%"
         
+    bar_interval = "24H Bars" if period_label == "180D" else "1H Bars"
     return f'''
     <div style="margin-top:24px; margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:6px;">
-      <span style="font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--gold); font-weight:600;">COINBASE PREMIUM INDEX — 7D</span>
+      <span style="font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--gold); font-weight:600;">COINBASE PREMIUM INDEX — {period_label}</span>
     </div>
     <div class="sparkline-wrap" style="padding:20px 24px; background:var(--bg2); border:1px solid var(--border); border-radius:6px; margin-bottom:20px; page-break-inside: avoid; break-inside: avoid;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
         <div>
-          <div style="font-size:12px; color:var(--dim); margin-bottom:4px;">BTC/USD · Coinbase vs Global Spread (Hourly Trend)</div>
+          <div style="font-size:12px; color:var(--dim); margin-bottom:4px;">BTC/USD · Coinbase vs Global Spread ({bar_interval})</div>
           <div style="font-family:var(--mono); font-size:26px; color:var(--text); font-weight:700;">{current_str}</div>
           <div style="font-size:11px; {signal_cls} margin-top:2px;">{signal_text}</div>
         </div>

@@ -243,7 +243,7 @@ def render_daily(data):
     eth_oi_chg, eth_oi_cls = _fmt_change(eth_oi.get('oi_chg_24h', 0))
     sol_oi_chg, sol_oi_cls = _fmt_change(sol_oi.get('oi_chg_24h', 0))
 
-    cp_card_html = render_coinbase_premium_card(cp)
+    cp_card_html = render_coinbase_premium_card(cp, "7D")
 
     derivatives_html = f'''
     {render_section_divider("Derivatives Desk", "📊")}

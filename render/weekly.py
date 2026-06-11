@@ -446,7 +446,7 @@ def render_weekly(data):
     fb_btc = fb.get('btc_basis', 0)
     fb_eth = fb.get('eth_basis', 0)
 
-    cp_card_html = render_coinbase_premium_card(cp)
+    cp_card_html = render_coinbase_premium_card(cp, "180D")
 
     basis_column_html = f'''
     <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">

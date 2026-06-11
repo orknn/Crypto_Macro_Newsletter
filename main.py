@@ -364,6 +364,9 @@ def run_pipeline():
 
     # ── 2. Fetch Weekly Specific Data (if weekly) ──
     if edition == 'weekly':
+        print("  → Coinbase premium (180D Daily)...")
+        data['coinbase_premium'] = get_coinbase_premium_index(interval='1d', limit=180)
+        
         print("  → Net Liquidity historical (3-Year Weekly)...")
         data['net_liquidity_history_data'] = get_net_liquidity()
         

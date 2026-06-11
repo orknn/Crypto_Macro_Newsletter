@@ -585,10 +585,21 @@ def generate_coinbase_premium_chart(trend, current, width=600, height=140):
     # X-axis time labels
     time_labels_svg = []
     label_count = min(6, n)
+    
+    # Auto-detect resolution (daily if time delta between bars > 12 hours)
+    is_daily = False
+    if len(trend) >= 2:
+        diff = (trend[1]['time'] - trend[0]['time']).total_seconds()
+        if diff > 12 * 3600:
+            is_daily = True
+            
     for j in range(label_count):
         idx = int(j * (n - 1) / max(label_count - 1, 1))
         t = trend[idx]['time']
-        time_str = t.strftime('%H:%M') if hasattr(t, 'strftime') else str(t)
+        if is_daily:
+            time_str = t.strftime('%d %b') if hasattr(t, 'strftime') else str(t)
+        else:
+            time_str = t.strftime('%H:%M') if hasattr(t, 'strftime') else str(t)
         lx = idx * (bar_width + bar_gap) + bar_width / 2
         time_labels_svg.append(
             f'<text x="{lx:.0f}" y="{height - 2}" font-size="8" fill="var(--dim)" font-family="var(--mono)" text-anchor="middle">{time_str}</text>'
