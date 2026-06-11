@@ -293,22 +293,45 @@ def get_etf_flows():
     try:
         from bs4 import BeautifulSoup
         import re as _re
+        import cloudscraper
         url = "https://farside.co.uk/btc/"
-        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        scraper = cloudscraper.create_scraper()
+        response = scraper.get(url, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
-        table = soup.find('table')
+        table = soup.find('table', class_='etf')
         if not table:
             return None
 
-        # Header → column index for IBIT / FBTC / Total
-        headers = [th.get_text(strip=True).upper() for th in table.find_all('th')]
-        def col(name):
-            for i, h in enumerate(headers):
-                if name in h:
-                    return i
-            return None
-        i_ibit, i_fbtc, i_total = col('IBIT'), col('FBTC'), col('TOTAL')
+        # Dynamically determine the index of columns
+        header_row = None
+        total_col_idx = 13  # fallback default
+        
+        for tr in table.find_all('tr'):
+            cells = [td.get_text(strip=True).upper() for td in tr.find_all(['td', 'th'])]
+            if 'IBIT' in cells or 'FBTC' in cells:
+                header_row = cells
+                break
+
+        if header_row:
+            i_ibit = None
+            i_fbtc = None
+            for idx, c in enumerate(header_row):
+                if 'IBIT' in c:
+                    i_ibit = idx
+                elif 'FBTC' in c:
+                    i_fbtc = idx
+            
+            # Find the 'Total' column index
+            for tr in table.find_all('tr'):
+                cells = [td.get_text(strip=True).upper() for td in tr.find_all(['td', 'th'])]
+                if 'TOTAL' in cells:
+                    total_col_idx = cells.index('TOTAL')
+                    break
+        else:
+            i_ibit = 1
+            i_fbtc = 2
+            total_col_idx = 13
 
         def to_m(txt):
             txt = txt.replace(',', '').replace('(', '-').replace(')', '').replace('$', '').strip()
@@ -319,18 +342,32 @@ def get_etf_flows():
             except ValueError:
                 return None
 
-        # Last row whose first cell is a real date holds the most recent day.
-        last = None
+        # Gather all valid date rows
+        date_rows = []
         for tr in table.find_all('tr'):
             cells = [td.get_text(strip=True) for td in tr.find_all('td')]
             if cells and _re.match(r'\d{1,2}\s+\w{3}\s+\d{4}', cells[0]):
-                last = cells
+                date_rows.append(cells)
+
+        # Scan backwards to find the latest row with complete IBIT and FBTC data
+        last = None
+        for r in reversed(date_rows):
+            ibit_val = r[i_ibit] if i_ibit is not None and i_ibit < len(r) else '-'
+            fbtc_val = r[i_fbtc] if i_fbtc is not None and i_fbtc < len(r) else '-'
+            if ibit_val != '-' and fbtc_val != '-':
+                last = r
+                break
+
+        if not last and date_rows:
+            last = date_rows[-1]
+
         if not last:
             return None
 
         ibit = to_m(last[i_ibit]) if i_ibit is not None and i_ibit < len(last) else None
         fbtc = to_m(last[i_fbtc]) if i_fbtc is not None and i_fbtc < len(last) else None
-        total = to_m(last[i_total]) if i_total is not None and i_total < len(last) else None
+        total = to_m(last[total_col_idx]) if total_col_idx is not None and total_col_idx < len(last) else None
+        
         if total is None and ibit is None and fbtc is None:
             return None
 
@@ -1222,3 +1259,171 @@ def get_bist_data():
         print(f"      ⚠️  Error fetching USD/TRY: {e}")
 
     return results
+
+
+def get_options_market_data():
+    """
+    Fetch live Options Market data from Deribit API.
+    Calculates Max Pain strike price, Put/Call ratio, Open Interest, and DVOL change.
+    """
+    import time
+    try:
+        # 1. Fetch options summary
+        url_options = "https://deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option"
+        r_opt = requests.get(url_options, timeout=10)
+        r_opt.raise_for_status()
+        opt_data = r_opt.json()
+        results = opt_data.get('result', [])
+        
+        if not results:
+            return None
+            
+        # Calculate Total Open Interest and Put/Call Ratio
+        total_put_oi = 0.0
+        total_call_oi = 0.0
+        total_oi = 0.0
+        expiries = set()
+        
+        for item in results:
+            name = item.get('instrument_name', '')
+            oi = float(item.get('open_interest', 0.0))
+            total_oi += oi
+            
+            parts = name.split('-')
+            if len(parts) == 4:
+                expiries.add(parts[1])
+                opt_type = parts[3]
+                if opt_type == 'C':
+                    total_call_oi += oi
+                elif opt_type == 'P':
+                    total_put_oi += oi
+                    
+        pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 0.0
+        
+        # Helper to find nearest quarterly expiry (last Friday of March, June, September, December)
+        def get_nearest_quarterly_expiry(exps):
+            quarterly_expiries = []
+            for exp in exps:
+                try:
+                    dt = datetime.strptime(exp, "%d%b%y")
+                    if dt.month in [3, 6, 9, 12] and dt.weekday() == 4:
+                        next_week = dt + timedelta(days=7)
+                        if next_week.month != dt.month:
+                            quarterly_expiries.append((exp, dt))
+                except Exception:
+                    continue
+            if not quarterly_expiries:
+                return None
+            quarterly_expiries.sort(key=lambda x: x[1])
+            return quarterly_expiries[0][0]
+
+        # Calculate Max Pain for nearest quarterly expiry
+        target_expiry = get_nearest_quarterly_expiry(expiries)
+        max_pain_strike = None
+        if target_expiry:
+            target_options = []
+            strikes = set()
+            for item in results:
+                name = item.get('instrument_name', '')
+                parts = name.split('-')
+                if len(parts) == 4 and parts[1] == target_expiry:
+                    strike = float(parts[2])
+                    opt_type = parts[3]
+                    oi_val = float(item.get('open_interest', 0.0))
+                    target_options.append({
+                        'strike': strike,
+                        'type': opt_type,
+                        'oi': oi_val
+                    })
+                    strikes.add(strike)
+            
+            min_pain = float('inf')
+            strikes = sorted(list(strikes))
+            for S in strikes:
+                pain = 0.0
+                for opt in target_options:
+                    K = opt['strike']
+                    opt_oi = opt['oi']
+                    if opt['type'] == 'C':
+                        pain += opt_oi * max(0.0, S - K)
+                    elif opt['type'] == 'P':
+                        pain += opt_oi * max(0.0, K - S)
+                if pain < min_pain:
+                    min_pain = pain
+                    max_pain_strike = S
+                    
+        # 2. Fetch DVOL data
+        end_t = int(time.time() * 1000)
+        start_t = end_t - 25 * 3600 * 1000  # 25 hours to ensure 24 points
+        url_dvol = f"https://deribit.com/api/v2/public/get_volatility_index_data?currency=BTC&resolution=3600&start_timestamp={start_t}&end_timestamp={end_t}"
+        r_dvol = requests.get(url_dvol, timeout=10)
+        r_dvol.raise_for_status()
+        dvol_res = r_dvol.json().get('result', {})
+        pts = dvol_res.get('data', [])
+        
+        dvol_val = 0.0
+        dvol_chg = 0.0
+        if len(pts) >= 2:
+            dvol_val = pts[-1][4]
+            first_idx = -24 if len(pts) >= 24 else 0
+            first_val = pts[first_idx][4]
+            dvol_chg = dvol_val - first_val
+            
+        return {
+            'dvol_index': dvol_val,
+            'dvol_change_24h': dvol_chg,
+            'put_call_ratio': pcr,
+            'open_interest_btc': total_oi,
+            'max_pain_price': max_pain_strike
+        }
+    except Exception as e:
+        print(f"      ⚠️  Error fetching options market data: {e}")
+        return None
+
+
+def get_stablecoin_data():
+    """
+    Fetch USDT and USDC market caps from CoinGecko to track stablecoin liquidity.
+    Returns: combined market cap, dominance, and 24h change.
+    """
+    url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=tether,usd-coin&order=market_cap_desc"
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        usdt_mcap = 0.0
+        usdc_mcap = 0.0
+        usdt_mcap_chg = 0.0
+        usdc_mcap_chg = 0.0
+        
+        for item in data:
+            if item.get('id') == 'tether':
+                usdt_mcap = item.get('market_cap', 0.0)
+                usdt_mcap_chg = item.get('market_cap_change_24h', 0.0)
+            elif item.get('id') == 'usd-coin':
+                usdc_mcap = item.get('market_cap', 0.0)
+                usdc_mcap_chg = item.get('market_cap_change_24h', 0.0)
+                
+        total_mcap = usdt_mcap + usdc_mcap
+        # Calculate combined 24h % change
+        prev_total = (usdt_mcap - usdt_mcap_chg) + (usdc_mcap - usdc_mcap_chg)
+        mcap_chg_pct = ((total_mcap - prev_total) / prev_total) * 100 if prev_total > 0 else 0.0
+        
+        return {
+            'usdt_mcap': usdt_mcap,
+            'usdc_mcap': usdc_mcap,
+            'combined_mcap': total_mcap,
+            'change_24h_pct': mcap_chg_pct,
+            'success': True
+        }
+    except Exception as e:
+        print(f"      ⚠️  Error fetching stablecoin data: {e}")
+        return {
+            'usdt_mcap': 0.0,
+            'usdc_mcap': 0.0,
+            'combined_mcap': 0.0,
+            'change_24h_pct': 0.0,
+            'success': False
+        }
+

@@ -49,10 +49,9 @@ A) GENEL DEĞERLENDİRME YAZIMI:
 - HTML tag kullanabilirsin: <strong> (vurgu), <span class='highlight'> (rakamsal vurgu).
 - DİKKAT: Sadece sana JSON içinde verilen verileri kullan. Eğer bir verinin değeri 0.0 veya eksik ise, fiyat veya veri uydurma (hallucination yapma!). O eksik verinin çekilemediğini belirt veya analizden çıkar.
 
-B) HABER YORUMLARI & MANŞET ÇEVİRİSİ:
-- Sana verilen İngilizce (veya karmaşık) haber başlıklarını (original_headline) al ve profesyonel, ciddi, premium bir ekonomi gazetesi (örn. Bloomberg, Aposto) diliyle Türkçe manşete (turkish_headline) çevir.
-- Çevrilen her haber başlığı için profesyonel ve analitik 1-2 cümlelik kısa bir Türkçe yorum (commentary) yaz. Yorum, haberin piyasalar üzerindeki olası etkisini açıklasın.
-- Finansal terimler İngilizce okunsun (örn. yield, market cap), geri kalan her şey Türkçe olsun.
+B) HABER YORUMLARI & MANŞET:
+- Sana verilen İngilizce haber başlıklarını (original_headline) orijinal dili olan İngilizce'de bırak (turkish_headline üretme veya original_headline olarak aynen yaz).
+- Her haber başlığı için 1-2 cümlelik İngilizce profesyonel bir finansal yorum (commentary) yaz. Yorum, haberin piyasalar üzerindeki olası etkisini açıklasın.
 
 C) İÇERİK STRATEJİ ÖNERİLERİ:
 - Bültendeki mevcut bölümleri değerlendir.
@@ -61,14 +60,13 @@ C) İÇERİK STRATEJİ ÖNERİLERİ:
 - Toplam 2-4 öneri yeterli.
 
 E) KPI BÖLÜM ANALİZLERİ (Yeni):
-Aşağıdaki 4 spesifik alan için, o anki verilere bakarak ziyaretçiyi eğiten, kısa ve analitik Türkçe birer "Gösterge Notu" yaz (1-2 cümle):
+Aşağıdaki 3 spesifik alan için, o anki verilere bakarak ziyaretçiyi eğiten, kısa ve analitik Türkçe birer "Gösterge Notu" yaz (1-2 cümle):
 - futures_note: Kripto Vadeli İşlem primleri (Basis) ne anlatıyor?
-- etf_note: Spot Bitcoin ETF akışları (özellikle IBIT ve FBTC) ve Kurumsal İlgi ne durumda?
-- options_note: Deribit Opsiyon piyasasındaki Put/Call Ratio (PCR) ve DVOL (Zımni Volatilite) neye işaret ediyor?
+- etf_note: Spot Bitcoin ETF akışları (özellikle IBIT ve FBTC) ve Kurumsal İlgi ne durumda? Ayrıca bültende bu akışların (IBIT, FBTC) nasıl okunması gerektiğini (pozitif girişlerin kurumsal talebi/alım baskısını, negatif çıkışların ise satış baskısını temsil ettiğini) kısaca ve net bir şekilde açıkla.
 - indicators_note: Ek Piyasa Göstergelerindeki 2Y-10Y Spread, Stablecoin MCAP ve SMH tarafındaki değişimler makro risk iştahını nasıl etkiliyor?
 
-ÖNEMLİ: Yanıtını MUTLAKA aşağıdaki JSON formatında ver, başka format kabul edilmez:
-{"genel_degerlendirme": "...", "korelasyon_notu": "...", "news_commentaries": [{"original_headline": "...", "turkish_headline": "...", "commentary": "..."}], "content_suggestions": [{"type": "ekle/cikar", "title": "...", "reason": "..."}], "futures_note": "...", "etf_note": "...", "options_note": "...", "indicators_note": "..."}"""
+ÖNEMLİ: Yanıtını MUTLAKA aşağıdaki JSON formatında ver, başka format kabul edilmez. JSON değerleri içinde çift tırnak (") kullanmak istersen bunu kesinlikle kaçış karakteriyle (\") yaz veya tek tırnak (') kullan. Asla kaçışsız çift tırnak kullanma.
+{"genel_degerlendirme": "...", "korelasyon_notu": "...", "news_commentaries": [{"original_headline": "...", "commentary": "..."}], "content_suggestions": [{"type": "ekle/cikar", "title": "...", "reason": "..."}], "futures_note": "...", "etf_note": "...", "indicators_note": "..."}"""
 
 EXPERIENCE_DESIGNER_SYSTEM_PROMPT = """Sen, finans sektörüne özel dijital ürün tasarımında 10+ yıl deneyimli, kıdemli bir UX/UI Tasarımcısısın.
 
@@ -162,16 +160,10 @@ def _prepare_data_summary(data):
     if cp:
         summary['coinbase_premium'] = cp.get('current_value', 0)
 
-    # News
-    news = data.get('macro_news', {})
-    if news:
-        # Strip massive base64 image_urls before JSON dump to save tokens
-        summary['news_headlines'] = [{'title': n.get('title', '')} for n in news.get('news', [])]
-
-    # Options data
-    options = data.get('options_data', {})
-    if options:
-        summary['options'] = options
+    # M2 Money Supply
+    m2 = data.get('m2_money_supply', {})
+    if m2:
+        summary['m2_money_supply'] = m2
 
     # Economic calendar
     calendar = data.get('economic_calendar', [])
@@ -193,9 +185,9 @@ def _prepare_data_summary(data):
         'Haftalık Ekonomik Takvim',
         'Günün Öne Çıkan Verileri (KPI)',
         'Coinbase Premium Index',
-        'BTC Support & Resistance Analizi',
-        'Deribit Opsiyon Piyasaları Analizi',
-        'Asset Summary (Commodities, Magnificent 7, Crypto Watchlist)',
+        'Spot Bitcoin ETF Flows',
+        'Extra indicators (Yield Spread, Stablecoin, SMH)',
+        'Asset tables (Commodities, Magnificent 7, Crypto)',
         'Öne Çıkan Haberler',
     ]
 
@@ -251,9 +243,7 @@ body { background: var(--navy); font-family: 'Inter', sans-serif; color: var(--t
             'Haftalık Ekonomik Takvim (table)',
             'KPI cards (6 horizontal)',
             'Coinbase Premium SVG bar chart',
-            'BTC Support & Resistance card',
             'Spot Bitcoin ETF Flows',
-            'Deribit Options KPI cards',
             'Extra indicators (Yield Spread, Stablecoin, SMH)',
             'Asset tables (Commodities, Magnificent 7, Crypto)',
             'News stories with AI Insight commentary',
@@ -300,15 +290,13 @@ Bu verileri analiz ederek aşağıdaki JSON formatında yanıt ver:
 
 2. "korelasyon_notu": Güncel verilere bağlı kalarak varlık korelasyonları ve risk iştahı hakkında 1-2 cümlelik analitik bir söz/not (kısa ve vurucu).
 
-3. "news_commentaries": Aşağıdaki her haber başlığı için JSON içerisinde "original_headline" (orijinal İngilizce başlık), "turkish_headline" (çevrilmiş profesyonel Türkçe manşet) ve "commentary" (1-2 cümlelik Türkçe analiz) alanlarını doldur.
+3. "news_commentaries": Aşağıdaki her haber başlığı için JSON içerisinde "original_headline" (orijinal İngilizce başlık) ve "commentary" (1-2 cümlelik İNGİLİZCE analiz) alanlarını doldur. Haberleri Türkçe'ye çevirme.
 
 4. "futures_note": Crypto Futures Basis (Vadeli İşlem Primleri) anlık verisi üzerine eğitici analitik not (1-2 cümle).
 
-5. "etf_note": Spot Bitcoin ETF Günlük Akış (Özellikle IBIT, FBTC) verisine ve kurumsal ilgiye dair eğitici analitik not (1-2 cümle).
+5. "etf_note": Spot Bitcoin ETF Günlük Akış (Özellikle IBIT, FBTC) verisine, kurumsal ilgiye ve bu akışların nasıl okunacağına (pozitif=talep/alım baskısı, negatif=satış baskısı) dair eğitici analitik not (1-2 cümle).
 
-6. "options_note": Deribit Opsiyon verileri (PCR, DVOL) üzerine eğitici analitik not (1-2 cümle).
-
-7. "indicators_note": Ek Piyasa Göstergeleri (2Y-10Y Spread, Stablecoin, SMH) üzerine eğitici analitik not (1-2 cümle).
+6. "indicators_note": Ek Piyasa Göstergeleri (2Y-10Y Spread, Stablecoin, SMH) üzerine eğitici analitik not (1-2 cümle).
 
 Haber Başlıkları:
 {json.dumps(news_headlines, ensure_ascii=False)}
@@ -318,7 +306,7 @@ Piyasa Verileri:
 {json.dumps(data_summary, ensure_ascii=False, indent=2, default=str)}
 ```
 
-YANITINI SADECE JSON OLARAK VER, başka metin ekleme."""
+YANITINI SADECE JSON OLARAK VER, başka metin ekleme. JSON içindeki metin alanlarında çift tırnak işaretlerini kesinlikle kaçış karakteriyle (\") yaz veya tek tırnak (') kullan."""
 
             raw_response = _call_with_retry(client, CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt)
             
@@ -333,7 +321,6 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme."""
                 'content_suggestions': result.get('content_suggestions', []),
                 'futures_note': result.get('futures_note'),
                 'etf_note': result.get('etf_note'),
-                'options_note': result.get('options_note'),
                 'indicators_note': result.get('indicators_note'),
             }
 

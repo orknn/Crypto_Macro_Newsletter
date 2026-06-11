@@ -987,8 +987,15 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
     smh_chg = macro.get('SMH (Semiconductor ETF)_chg', 0)
     smh_chg_text, smh_chg_cls = _fmt_change(smh_chg)
 
-    stablecoin_mcap = crypto_ov.get('total_market_cap', 0) * (crypto_ov.get('stablecoin_dominance', 0) / 100) if crypto_ov.get('stablecoin_dominance') else 0
+    stablecoin_data = data.get('stablecoin_data', {})
     stablecoin_dom = crypto_ov.get('stablecoin_dominance', 0)
+    if stablecoin_data and stablecoin_data.get('success'):
+        stablecoin_mcap = stablecoin_data.get('combined_mcap', 0.0)
+        stablecoin_chg = stablecoin_data.get('change_24h_pct', 0.0)
+        stablecoin_sub = f"Dom: %{stablecoin_dom:.1f} ({stablecoin_chg:+.2f}%)"
+    else:
+        stablecoin_mcap = crypto_ov.get('total_market_cap', 0) * (stablecoin_dom / 100) if stablecoin_dom else 0
+        stablecoin_sub = f"Dom: %{stablecoin_dom:.1f}"
 
     # Global Liquidity
     gl = data.get('global_liquidity', {})
@@ -1011,7 +1018,7 @@ def generate_newsletter_html(data, output_filename='daily_bulletin.html'):
       <div style="background:var(--bg2); padding:14px 16px;">
         <div style="font-family:var(--sans); font-size:8px; font-weight:500; letter-spacing:1px; text-transform:uppercase; color:var(--dim); margin-bottom:6px;">Stablecoin Mcap</div>
         <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:var(--text);">${stablecoin_mcap/1e9:.1f}B</div>
-        <div style="font-family:var(--mono); font-size:10px; margin-top:4px; color:var(--dim);">Dom: %{stablecoin_dom:.1f}</div>
+        <div style="font-family:var(--mono); font-size:10px; margin-top:4px; color:var(--dim);">{stablecoin_sub}</div>
       </div>
       <div style="background:var(--bg2); padding:14px 16px;">
         <div style="font-family:var(--sans); font-size:8px; font-weight:500; letter-spacing:1px; text-transform:uppercase; color:var(--dim); margin-bottom:6px;">SMH (Semi ETF)</div>
@@ -1179,7 +1186,7 @@ body{background:#1c2026;color:var(--text);font-family:var(--sans);-webkit-font-s
 .neu,.heatmap-table td.neu{color:var(--dim)}
 
 /* ── SECTION ── */
-.section{padding:22px 28px;border-bottom:1px solid var(--border); page-break-inside: avoid; break-inside: avoid;}
+.section{padding:32px 28px;border-bottom:1px solid var(--border); page-break-inside: avoid; break-inside: avoid;}
 .section-label{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:1.8px;color:var(--gold);text-transform:uppercase;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid rgba(201,169,110,.15);display:block}
 
 /* ── SUMMARY ── */
@@ -1199,11 +1206,11 @@ body{background:#1c2026;color:var(--text);font-family:var(--sans);-webkit-font-s
 .score-chg{font-family:var(--mono);font-size:9px;margin-top:3px}
 
 /* ── KPI GRID ── */
-.kpi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--border);border-radius:4px;overflow:hidden}
-.kpi-card{background:var(--bg2);padding:16px 18px;transition:background .2s ease}
+.kpi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;background:transparent;border-radius:4px;overflow:hidden}
+.kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:16px 18px;transition:background .2s ease}
 .kpi-card:hover{background:var(--bg3)}
 .kpi-label{font-family:var(--sans);font-size:9px;font-weight:500;letter-spacing:1px;color:var(--dim);text-transform:uppercase;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.kpi-value{font-family:var(--mono);font-size:22px;font-weight:600;color:var(--text);letter-spacing:-.5px;line-height:1.1}
+.kpi-value{font-family:var(--mono);font-size:24px;font-weight:600;color:var(--text);letter-spacing:-.5px;line-height:1.1}
 .kpi-change{font-family:var(--mono);font-size:9px;margin-top:5px}
 
 /* ── IND GRID ── */
@@ -1237,9 +1244,9 @@ body{background:#1c2026;color:var(--text);font-family:var(--sans);-webkit-font-s
 
 /* ── CALENDAR ── */
 .econ-calendar{width:100%;border-collapse:collapse;table-layout:fixed}
-.econ-calendar th{font-family:var(--sans);font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--gold2);padding:9px 10px;text-align:left;border-bottom:1px solid var(--border2);background:var(--bg2)}
+.econ-calendar th{font-family:var(--sans);font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--gold2);padding:12px 14px;text-align:left;border-bottom:1px solid var(--border2);background:var(--bg2)}
 .econ-calendar th:nth-child(n+5){text-align:right}
-.econ-calendar td{padding:8px 10px;font-family:var(--mono);font-size:10px;border-bottom:1px solid var(--border);color:var(--dim);vertical-align:middle}
+.econ-calendar td{padding:12px 14px;font-family:var(--mono);font-size:10px;border-bottom:1px solid var(--border);color:var(--dim);vertical-align:middle}
 .econ-calendar td:nth-child(n+5){text-align:right;font-size:10px}
 .econ-calendar tr:last-child td{border-bottom:none}
 .econ-calendar tbody tr:nth-child(even){background:rgba(255,255,255,.015)}
@@ -1247,9 +1254,9 @@ body{background:#1c2026;color:var(--text);font-family:var(--sans);-webkit-font-s
 
 /* ── HEATMAP TABLE ── */
 .heatmap-table{width:100%;border-collapse:collapse;table-layout:fixed;font-variant-numeric:tabular-nums}
-.heatmap-table th{font-family:var(--sans);font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--gold2);padding:9px 10px;text-align:right;border-bottom:1px solid var(--border2);background:var(--bg2);white-space:nowrap}
+.heatmap-table th{font-family:var(--sans);font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--gold2);padding:16px 20px;text-align:right;border-bottom:1px solid var(--border2);background:var(--bg2);white-space:nowrap}
 .heatmap-table th:first-child{text-align:left}
-.heatmap-table td{padding:9px 10px;font-family:var(--mono);font-size:11px;border-bottom:1px solid var(--border);vertical-align:middle;text-align:right;color:var(--dim);white-space:nowrap}
+.heatmap-table td{padding:16px 20px;font-family:var(--mono);font-size:11px;border-bottom:1px solid var(--border);vertical-align:middle;text-align:right;color:var(--dim);white-space:nowrap}
 .heatmap-table td:first-child{text-align:left;color:var(--text);font-weight:600;font-family:var(--sans);font-size:13px}
 .heatmap-table td:nth-child(2){color:var(--text);font-weight:500}
 .heatmap-table tr:last-child td{border-bottom:none}
@@ -1294,7 +1301,7 @@ body{background:#1c2026;color:var(--text);font-family:var(--sans);-webkit-font-s
 .story-inner{display:flex;gap:14px}
 .story-num{font-family:var(--mono);font-size:10px;color:var(--gold2);width:20px;flex-shrink:0;padding-top:2px}
 .story-tag{font-family:var(--sans);font-size:8px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:5px}
-.story-headline{font-family:var(--serif);font-size:16px;font-weight:400;color:var(--text);line-height:1.4;margin-bottom:5px}
+.story-headline{font-family:var(--serif);font-size:16px;font-weight:700;color:var(--text);line-height:1.4;margin-bottom:8px}
 .story-insight{background:var(--bg3);border-left:2px solid var(--gold);padding:8px 14px;margin-top:8px;font-family:var(--sans);font-size:11px;color:var(--dim);line-height:1.65;border-radius:0 3px 3px 0}
 .ins-lbl{color:var(--gold);font-family:var(--mono);font-size:8px;letter-spacing:1px;font-weight:600;margin-right:5px}
 

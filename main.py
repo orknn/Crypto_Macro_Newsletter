@@ -5,13 +5,22 @@ import base64
 import urllib.request
 import urllib.error
 from datetime import datetime
+
+# Load .env file if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from data_fetcher import (
     get_crypto_prices, get_macro_indicators, get_fear_and_greed_index,
-    get_macro_news,
-    get_coinbase_premium_index, get_funding_rates, get_crypto_market_overview,
-    get_magnificent_7, get_commodities, get_economic_calendar, get_options_market_data,
+    get_macro_news, get_coinbase_premium_index,
+    get_funding_rates, get_crypto_market_overview,
+    get_magnificent_7, get_commodities, get_economic_calendar,
     get_global_liquidity_index, get_macro_scoreboard, get_sp500_sectors,
-    get_crypto_futures_basis, get_etf_flows, get_bist_data
+    get_crypto_futures_basis, get_etf_flows, get_bist_data, get_m2_money_supply,
+    get_stablecoin_data
 )
 from agents import ContentEditorAgent, ExperienceDesignerAgent
 from html_generator import generate_newsletter_html
@@ -155,11 +164,11 @@ def generate_daily_newsletter():
     print("  → Macro haberler...")
     macro_news = get_macro_news()
 
-    print("  → Opsiyon Piyasaları...")
-    options_data = get_options_market_data()
-
     print("  → Global Liquidity...")
     global_liquidity = get_global_liquidity_index()
+    
+    print("  → M2 Money Supply...")
+    m2_money_supply = get_m2_money_supply()
     
     print("  → Makro Scoreboard...")
     macro_scoreboard = get_macro_scoreboard()
@@ -176,6 +185,9 @@ def generate_daily_newsletter():
     print("  → BIST 100 & USD/TRY...")
     bist_try = get_bist_data()
 
+    print("  → Stablecoin data...")
+    stablecoin_data = get_stablecoin_data()
+
     data = {
         'crypto_prices': crypto_prices,
         'crypto_market_overview': crypto_market_overview,
@@ -188,13 +200,14 @@ def generate_daily_newsletter():
         'economic_calendar': economic_calendar,
         'coinbase_premium': coinbase_premium,
         'macro_news': macro_news,
-        'options_data': options_data,
         'global_liquidity': global_liquidity,
+        'm2_money_supply': m2_money_supply,
         'macro_scoreboard': macro_scoreboard,
         'sp500_sectors': sp500_sectors,
         'crypto_futures_basis': crypto_futures_basis,
         'etf_flows': etf_flows,
         'bist_try': bist_try,
+        'stablecoin_data': stablecoin_data,
     }
 
     # ── AI Agent Analysis ──
@@ -205,11 +218,12 @@ def generate_daily_newsletter():
         data['news_commentaries'] = None
         data['design_improvement_report'] = None
         data['futures_note'] = None
+        data['etf_note'] = None
         data['options_note'] = None
         data['indicators_note'] = None
     else:
         print("\n🤖 AI Agent'lar çalıştırılıyor...")
-
+ 
         print("  → Finansal İçerik Editörü...")
         editor_result = ContentEditorAgent().analyze(data)
         data['ai_summary'] = editor_result.get('genel_degerlendirme')
@@ -217,6 +231,7 @@ def generate_daily_newsletter():
         data['news_commentaries'] = editor_result.get('news_commentaries')
         data['content_suggestions'] = editor_result.get('content_suggestions')
         data['futures_note'] = editor_result.get('futures_note')
+        data['etf_note'] = editor_result.get('etf_note')
         data['options_note'] = editor_result.get('options_note')
         data['indicators_note'] = editor_result.get('indicators_note')
 
