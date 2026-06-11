@@ -423,6 +423,7 @@ def run_pipeline():
             data['correlation_note'] = editor_result.get('correlation_note')
             data['futures_note'] = editor_result.get('futures_note')
             data['week_plan_note'] = editor_result.get('week_plan_note')
+            data['news_note'] = editor_result.get('news_note')
         else:
             data['ai_summary'] = editor_result.get('genel_degerlendirme')
             data['korelasyon_notu'] = editor_result.get('korelasyon_notu')

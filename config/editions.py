@@ -44,6 +44,7 @@ EDITIONS = {
             'cycle_panel',
             'correlation_matrix',
             'futures_positioning_desk',
+            'top_stories',
             'footer'
         ]
     }

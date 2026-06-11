@@ -6,7 +6,8 @@ from render.svg import (
     generate_winners_losers_chart, generate_correlation_matrix_svg,
     generate_cycle_heatmap_svg, generate_net_liquidity_chart,
     generate_inflation_chart, generate_ytd_comparison_chart,
-    generate_stablecoin_mcap_share_chart, generate_etf_flow_chart
+    generate_stablecoin_mcap_share_chart, generate_etf_flow_chart,
+    generate_coinbase_premium_chart
 )
 from render.components import (
     html_wrapper, render_header, render_ticker, render_regime_strip,
@@ -421,6 +422,14 @@ def render_weekly(data):
     fb = data.get('crypto_futures_basis', {}) or {}
     futures_note = data.get('futures_note', 'Vadeli yapı ve konumlanma analizleri kaldıraç durumunu gösterir.')
     
+    # Fear & Greed Speedometer
+    fng = data.get('fear_and_greed', {}) or {}
+    fng_gauge = generate_fear_greed_gauge_svg(fng.get('value', 50), fng.get('classification', 'Neutral'))
+    
+    # Coinbase Premium chart
+    cp = data.get('coinbase_premium', {}) or {}
+    cp_chart = generate_coinbase_premium_chart(cp.get('trend_data', []), cp.get('current_value', 0))
+    
     btc_fr_str, btc_fr_cls = _fmt_change(fr.get('BTC', 0.0))
     eth_fr_str, eth_fr_cls = _fmt_change(fr.get('ETH', 0.0))
     
@@ -438,6 +447,18 @@ def render_weekly(data):
 
     positioning_html = f'''
     {render_section_divider("Vadeli Yapı & Konumlanma", "🎯")}
+    
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:20px;">
+      <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">
+        <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:12px;">Market Sentiment (F&G)</div>
+        {fng_gauge}
+      </div>
+      <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">
+        <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:12px;">Coinbase Premium Index</div>
+        {cp_chart}
+      </div>
+    </div>
+    
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:20px;">
       <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">
         <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:12px;">7D Avg Funding Rates</div>
@@ -479,6 +500,19 @@ def render_weekly(data):
         </div>
         '''
 
+    # 18. Stories (Weekly News)
+    stories_html = ""
+    macro_news = data.get('macro_news', {})
+    news_note = data.get('news_note', 'Haftanın öne çıkan haberleri ve makro etkileri.')
+    if macro_news:
+        stories_html = f'''
+        {render_section_divider("Haftanın Öne Çıkan Haberleri", "📰")}
+        {render_news_section(macro_news, data.get('news_commentaries'))}
+        <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6; margin-bottom:24px; background:var(--bg2); padding:10px 14px; border-left:3px solid var(--gold2); border-radius:0 4px 4px 0;">
+          <strong style="color:var(--text);">Macro News Note:</strong> {news_note}
+        </div>
+        '''
+
     # Footer
     footer_html = render_footer()
 
@@ -502,6 +536,7 @@ def render_weekly(data):
     {cycle_html}
     {correlation_html}
     {positioning_html}
+    {stories_html}
     {footer_html}
     '''
 

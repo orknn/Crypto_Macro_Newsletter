@@ -269,6 +269,7 @@ Görevin, haftalık piyasa verilerini ve son snapshot özetlerini analiz ederek 
 8. "correlation_note": Varlıklar arası korelasyon matrisi üzerine analitik not (1-2 cümle).
 9. "futures_note": Vadeli yapı, funding ve konumlanma üzerine analitik not (1-2 cümle).
 10. "week_plan_note": Önümüzdeki haftanın stratejik planı ve beklentileri üzerine analitik not (1-2 cümle).
+11. "news_note": Haftanın en kritik haber gelişmeleri ve makro piyasa etkileri üzerine analitik özet not (1-2 cümle).
 
 ÖNEMLİ: Yanıtını MUTLAKA aşağıdaki JSON formatında ver, başka format kabul edilmez. JSON içindeki metin alanlarında çift tırnak işaretlerini kesinlikle kaçış karakteriyle (\\") yaz veya tek tırnak (') kullan:
 {
@@ -285,7 +286,8 @@ Görevin, haftalık piyasa verilerini ve son snapshot özetlerini analiz ederek 
   "cycle_note": "...",
   "correlation_note": "...",
   "futures_note": "...",
-  "week_plan_note": "..."
+  "week_plan_note": "...",
+  "news_note": "..."
 }"""
 
 
@@ -307,7 +309,7 @@ class ContentEditorAgent:
                     'success': False, 'weekly_themes': [], 'liquidity_note': None,
                     'inflation_note': None, 'stablecoin_note': None, 'etf_note': None,
                     'rotation_note': None, 'cycle_note': None, 'correlation_note': None,
-                    'futures_note': None, 'week_plan_note': None
+                    'futures_note': None, 'week_plan_note': None, 'news_note': None
                 }
             return {'success': False, 'genel_degerlendirme': None, 'korelasyon_notu': None, 'news_commentaries': None}
 
@@ -343,6 +345,7 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme. JSON içindeki metin alanl
                     'correlation_note': result.get('correlation_note'),
                     'futures_note': result.get('futures_note'),
                     'week_plan_note': result.get('week_plan_note'),
+                    'news_note': result.get('news_note'),
                 }
             else:
                 raw_news = data.get('macro_news', {}).get('news', [])
@@ -389,7 +392,7 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme. JSON içindeki metin alanl
                     'success': False, 'weekly_themes': [], 'liquidity_note': None,
                     'inflation_note': None, 'stablecoin_note': None, 'etf_note': None,
                     'rotation_note': None, 'cycle_note': None, 'correlation_note': None,
-                    'futures_note': None, 'week_plan_note': None
+                    'futures_note': None, 'week_plan_note': None, 'news_note': None
                 }
             return {
                 'success': False, 'genel_degerlendirme': None, 'korelasyon_notu': None, 

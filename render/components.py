@@ -527,17 +527,24 @@ def render_news_section(news_data, ai_commentaries=None):
         title = s.get('title', '')
         summary = s.get('summary', '')
         url = s.get('url', '#')
-        img_url = s.get('image', '')
+        img_url = s.get('image_url') or s.get('image', '')
         source = s.get('source', 'News')
         
         # Fetch matching AI commentary
         ai_commentary = ""
         if ai_commentaries and idx < len(ai_commentaries):
             insight = ai_commentaries[idx]
-            ai_commentary = f'''
-            <div style="margin-top:10px; padding:10px 14px; background:var(--bg3); border-left:3px solid var(--gold2); border-radius:0 4px 4px 0; font-size:11.5px; color:var(--dim); line-height:1.6;">
-              <strong style="color:var(--gold2);">AI Insight:</strong> {insight}
-            </div>'''
+            insight_txt = ""
+            if isinstance(insight, dict):
+                insight_txt = insight.get('commentary', '')
+            else:
+                insight_txt = str(insight)
+                
+            if insight_txt:
+                ai_commentary = f'''
+                <div style="margin-top:10px; padding:10px 14px; background:var(--bg3); border-left:3px solid var(--gold2); border-radius:0 4px 4px 0; font-size:11.5px; color:var(--dim); line-height:1.6;">
+                  <strong style="color:var(--gold2);">AI Insight:</strong> {insight_txt}
+                </div>'''
             
         img_html = ""
         if img_url:

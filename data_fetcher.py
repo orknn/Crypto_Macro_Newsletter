@@ -1220,6 +1220,9 @@ def get_macro_news():
                 
                 news_items.append({
                     "title": item.get('headline', ''),
+                    "summary": item.get('summary', ''),
+                    "url": item.get('url', '#'),
+                    "source": item.get('source', 'News'),
                     "image_url": img_url
                 })
         except Exception as e:
@@ -1230,9 +1233,9 @@ def get_macro_news():
     # Fallback to general if API fails or no key
     if not news_items:
         news_items = [
-            {"title": "Global markets show muted trading amid light economic data.", "image_url": ""},
-            {"title": "Investors await key central bank policy announcements.", "image_url": ""},
-            {"title": "Commodity markets experience continued volatility.", "image_url": ""}
+            {"title": "Global markets show muted trading amid light economic data.", "summary": "Piyasalarda veri takviminin sakin olması nedeniyle yatay ve hacimsiz seyir izleniyor.", "url": "#", "source": "Macro News", "image_url": ""},
+            {"title": "Investors await key central bank policy announcements.", "summary": "Yatırımcılar majör merkez bankalarının faiz kararları ve politika sinyallerini bekliyor.", "url": "#", "source": "Macro News", "image_url": ""},
+            {"title": "Commodity markets experience continued volatility.", "summary": "Emtia fiyatlarında volatilite ve jeopolitik risklerin etkileri sürüyor.", "url": "#", "source": "Commodity News", "image_url": ""}
         ]
         
     return {
