@@ -5,12 +5,34 @@ from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
 import time
 import io
+import os
+import json
 
 # ═══════════════════════════════════════════
 # CACHING & UTILITY FUNCTIONS
 # ═══════════════════════════════════════════
 
 _YF_CACHE = {}
+
+def _normalize_yfinance_df(df, ticker=None):
+    if df is None or df.empty:
+        return pd.DataFrame()
+    # Flatten MultiIndex columns if present
+    if isinstance(df.columns, pd.MultiIndex):
+        for level in range(df.columns.nlevels):
+            level_values = df.columns.get_level_values(level)
+            if ticker and ticker in level_values:
+                df = df.xs(ticker, axis=1, level=level)
+                break
+        else:
+            try:
+                first_level_val = df.columns.get_level_values(0)[0]
+                df = df[first_level_val]
+            except Exception:
+                df.columns = df.columns.get_level_values(-1)
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(-1)
+    return df
 
 def preload_yfinance_data(tickers, period='35d'):
     global _YF_CACHE
@@ -22,11 +44,11 @@ def preload_yfinance_data(tickers, period='35d'):
         data = yf.download(needed, period=period, progress=False, group_by='ticker', threads=True)
         if len(needed) == 1:
             ticker = needed[0]
-            _YF_CACHE[(ticker, period)] = data
+            _YF_CACHE[(ticker, period)] = _normalize_yfinance_df(data, ticker)
         else:
             for t in needed:
                 if t in data:
-                    _YF_CACHE[(t, period)] = data[t]
+                    _YF_CACHE[(t, period)] = _normalize_yfinance_df(data[t], t)
     except Exception as e:
         print(f"      ⚠️  Error preloading yfinance data: {e}")
 
@@ -36,9 +58,10 @@ def get_yfinance_data(ticker, period='5d'):
     if key in _YF_CACHE:
         return _YF_CACHE[key]
     try:
-        data = yf.download(ticker, period=period, progress=False)
-        _YF_CACHE[key] = data
-        return data
+        data = yf.download(ticker, period=period, progress=False, group_by='ticker')
+        norm_data = _normalize_yfinance_df(data, ticker)
+        _YF_CACHE[key] = norm_data
+        return norm_data
     except Exception as e:
         print(f"      ⚠️  Error downloading {ticker} from yfinance: {e}")
         return pd.DataFrame()
@@ -993,17 +1016,20 @@ def get_economic_calendar():
             
             # Parse datetime: '2026-03-13T10:00:00-04:00'
             date_iso = event.get('date', '')
+            ts = None
             try:
                 # python 3.7+ fromisoformat handles simple timezone offsets
                 dt = datetime.fromisoformat(date_iso.replace('Z', '+00:00'))
                 formatted_date = dt.strftime('%d %b %a')
                 time_str = dt.strftime('%I:%M %p').lstrip('0')
+                ts = dt.timestamp()
             except ValueError:
                 formatted_date = date_iso.split('T')[0] if 'T' in date_iso else date_iso
                 time_str = date_iso.split('T')[1][:5] if 'T' in date_iso else '—'
             
             events.append({
                 'date': formatted_date,
+                'timestamp': ts,
                 'time': time_str,
                 'country': country,
                 'event': event_name.strip(),
@@ -1028,21 +1054,97 @@ def get_economic_calendar():
     except Exception as e:
         print(f"      ⚠️  Error fetching FRED actuals: {e}")
     
+    # Surprise guard thresholds: |actual - consensus| must be <= threshold
+    # If exceeded, the actual is rejected (likely a data error)
+    surprise_thresholds = {
+        'cpi y/y': 1.0,      # percentage points
+        'cpi m/m': 0.5,
+        'core cpi m/m': 0.5,
+        'core pce price index m/m': 0.5,
+        'core pce': 0.5,
+        'ism services pmi': 5.0,
+        'final gdp q/q': 2.0,
+        'gdp q/q': 2.0,
+        'advance gdp': 2.0,
+        'preliminary gdp': 2.0,
+    }
+    
+    def _parse_numeric(val_str):
+        """Parse a string like '3.4%' or '54.8' into a float."""
+        if not val_str or val_str == '—':
+            return None
+        try:
+            return float(val_str.replace('%', '').strip())
+        except (ValueError, TypeError):
+            return None
+    
+    def _surprise_check(event_key, actual_str, consensus_str):
+        """Return True if the actual passes the surprise guard (is reasonable)."""
+        threshold = surprise_thresholds.get(event_key.lower().strip())
+        if threshold is None:
+            return True  # No threshold defined, allow it
+        actual_num = _parse_numeric(actual_str)
+        consensus_num = _parse_numeric(consensus_str)
+        if actual_num is None or consensus_num is None:
+            return True  # Can't compare, allow it
+        diff = abs(actual_num - consensus_num)
+        if diff > threshold:
+            print(f"      ⚠️  Surprise guard REJECTED: {event_key} actual={actual_str} consensus={consensus_str} diff={diff:.2f} > threshold={threshold}")
+            # Log to fetch_report.json
+            _log_calendar_rejection(event_key, actual_str, consensus_str, diff, threshold)
+            return False
+        return True
+    
     if fred_actuals:
-        # If we have ForexFactory events, enrich them
+        # If we have ForexFactory events, enrich them with EXACT key matching
+        # CRITICAL: Use exact match on normalized event title to avoid
+        # substring collision (e.g. 'cpi m/m' matching 'core cpi m/m')
         if events:
+            # Build a lookup: normalized event title -> FRED key
+            # Sort FRED keys by length DESC so longer/more specific keys match first
+            sorted_fred_keys = sorted(fred_actuals.keys(), key=len, reverse=True)
+            
             for ev in events:
                 if ev.get('actual', '—') == '—':
                     event_lower = ev.get('event', '').lower().strip()
-                    matched = fred_actuals.get(event_lower)
+                    matched = None
+                    matched_key = None
+                    
+                    # 1. Try exact match first
+                    if event_lower in fred_actuals:
+                        matched = fred_actuals[event_lower]
+                        matched_key = event_lower
+                    
+                    # 2. Try matching where the event title exactly equals a FRED key
+                    #    (after stripping common suffixes like MoM, YoY, QoQ)
                     if not matched:
-                        for pattern, val in fred_actuals.items():
-                            if pattern in event_lower or event_lower in pattern:
-                                matched = val
+                        event_normalized = event_lower.replace('mom', 'm/m').replace('yoy', 'y/y').replace('qoq', 'q/q')
+                        if event_normalized in fred_actuals:
+                            matched = fred_actuals[event_normalized]
+                            matched_key = event_normalized
+                    
+                    # 3. Only fall back to contains-check if the FRED key is a COMPLETE
+                    #    word boundary match within the event title (not just substring)
+                    if not matched:
+                        for fk in sorted_fred_keys:
+                            # The FRED key must match the END of the event title
+                            # to avoid 'cpi m/m' matching 'core cpi m/m'
+                            if event_lower == fk or event_lower.endswith(fk):
+                                # Extra guard: if event has 'core' but key doesn't, skip
+                                if 'core' in event_lower and 'core' not in fk:
+                                    continue
+                                matched = fred_actuals[fk]
+                                matched_key = fk
                                 break
-                    if matched:
-                        ev['actual'] = matched
-                        print(f"      → FRED actual for '{ev['event']}': {matched}")
+                    
+                    if matched and matched_key:
+                        # Apply surprise guard
+                        consensus = ev.get('forecast', '—')
+                        if _surprise_check(matched_key, matched, consensus):
+                            ev['actual'] = matched
+                            print(f"      → FRED actual for '{ev['event']}': {matched}")
+                        else:
+                            print(f"      ⚠️  FRED actual for '{ev['event']}' rejected by surprise guard")
         
         # If FF failed entirely, build calendar from FRED data
         if not events:
@@ -1099,6 +1201,7 @@ def get_economic_calendar():
     if not events:
         events = [{
             'date': datetime.now().strftime('%d %b %a'),
+            'timestamp': datetime.now().timestamp(),
             'time': '—',
             'country': 'USD',
             'event': 'Weekly Data Pending...',
@@ -1214,12 +1317,28 @@ def get_coinbase_premium_index(interval='1h', limit=168):
 # ═══════════════════════════════════════════
 
 def get_macro_news():
-    """Fetch real Macro News from Finnhub API with strict filters, whitelist, blacklist, and scoring fallback."""
+    """
+    Fetch real Macro News from Finnhub API with strict filters, whitelist, blacklist, and scoring fallback.
+    
+    ABSOLUTE RULE (Kural 1): AI MUST NOT generate news. AI's only role regarding news is to write
+    insights for REAL news items that are provided to it. If the news list is empty, the AI prompt
+    must return insights: []. Fabricated, placeholder, or filler news content is NEVER acceptable.
+    """
     import os
     import re
     
     news_items = []
     api_key = os.environ.get('FINNHUB_API_KEY')
+    
+    # Pipeline step counters for fetch_report.json
+    pipeline_log = {
+        "finnhub_raw_count": 0,
+        "after_blacklist": 0,
+        "whitelisted_count": 0,
+        "after_scoring_fallback": 0,
+        "final_count": 0,
+        "api_error": None
+    }
     
     # Whitelist & Blacklist details
     whitelist = {"reuters", "bloomberg", "cnbc", "financial times", "ap", "coindesk", "the block"}
@@ -1251,6 +1370,7 @@ def get_macro_news():
             response = requests.get(url, timeout=10)
             response.raise_for_status()
             data = response.json()
+            pipeline_log["finnhub_raw_count"] = len(data)
             
             clean_items = []
             for item in data:
@@ -1265,6 +1385,8 @@ def get_macro_news():
                 
                 clean_items.append(item)
             
+            pipeline_log["after_blacklist"] = len(clean_items)
+            
             # Separate whitelisted vs others
             whitelisted_items = []
             other_items = []
@@ -1275,38 +1397,111 @@ def get_macro_news():
                 else:
                     other_items.append(item)
             
+            pipeline_log["whitelisted_count"] = len(whitelisted_items)
+            
             # Sort others by score
             other_items.sort(key=score_item, reverse=True)
             
-            # Combine: Whitelisted first, then others
-            final_selection = whitelisted_items + other_items
+            # If whitelist yielded items, use them first; otherwise fall back to scored general pool
+            if whitelisted_items:
+                final_selection = whitelisted_items + other_items
+            else:
+                # Scoring-based fallback: use the top scored general items
+                final_selection = other_items
+                pipeline_log["after_scoring_fallback"] = len(final_selection)
             
-            # Select top 5
+            # Select top 5, but ONLY items with a real URL (not '#' or empty)
             for item in final_selection[:5]:
+                item_url = item.get('url', '')
+                if not item_url or item_url == '#':
+                    continue  # Skip items without real source links
+                
                 img_url = item.get('image', '')
                 
                 news_items.append({
                     "title": item.get('headline', ''),
                     "summary": item.get('summary', ''),
-                    "url": item.get('url', '#'),
+                    "url": item_url,
                     "source": item.get('source', 'News'),
-                    "image_url": img_url
+                    "image_url": img_url,
+                    "datetime": item.get('datetime', 0)
                 })
+            
+            pipeline_log["final_count"] = len(news_items)
+                
         except Exception as e:
             print(f"      ⚠️  Error fetching Macro News from Finnhub: {e}")
-            
-    # Fallback to general if API fails or no key
+            pipeline_log["api_error"] = str(e)
+    else:
+        pipeline_log["api_error"] = "FINNHUB_API_KEY not set"
+
+    # ABSOLUTE RULE: NO fake/placeholder/filler news. If we have 0 items,
+    # the Top Stories section will be completely hidden by the renderer.
+    # NEVER add hardcoded fallback news items here.
+    
+    # Write pipeline log to fetch_report.json
+    _write_news_pipeline_log(pipeline_log)
+    
     if not news_items:
-        news_items = [
-            {"title": "Global markets show muted trading amid light economic data.", "summary": "Piyasalarda veri takviminin sakin olması nedeniyle yatay ve hacimsiz seyir izleniyor.", "url": "#", "source": "Reuters", "image_url": ""},
-            {"title": "Investors await key central bank policy announcements.", "summary": "Yatırımcılar majör merkez bankalarının faiz kararları ve politika sinyallerini bekliyor.", "url": "#", "source": "Bloomberg", "image_url": ""},
-            {"title": "Commodity markets experience continued volatility.", "summary": "Emtia fiyatlarında volatilite ve jeopolitik risklerin etkileri sürüyor.", "url": "#", "source": "CNBC", "image_url": ""}
-        ]
+        print("      ℹ️  No real news items available — Top Stories section will be hidden.")
         
     return {
         "news": news_items,
         "events": []
     }
+
+
+def _write_news_pipeline_log(pipeline_log):
+    """Append news pipeline step counts to fetch_report.json."""
+    report_path = "fetch_report.json"
+    report_data = {}
+    if os.path.exists(report_path):
+        try:
+            with open(report_path, 'r', encoding='utf-8') as f:
+                report_data = json.load(f)
+        except Exception:
+            pass
+    
+    report_data["news_pipeline"] = pipeline_log
+    
+    try:
+        with open(report_path, 'w', encoding='utf-8') as f:
+            json.dump(report_data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"      ⚠️  Error writing news pipeline log: {e}")
+
+# ═══════════════════════════════════════════
+# CALENDAR REJECTION LOG
+# ═══════════════════════════════════════════
+
+def _log_calendar_rejection(event_key, actual, consensus, diff, threshold):
+    """Log a calendar surprise guard rejection to fetch_report.json."""
+    report_path = "fetch_report.json"
+    report_data = {}
+    if os.path.exists(report_path):
+        try:
+            with open(report_path, 'r', encoding='utf-8') as f:
+                report_data = json.load(f)
+        except Exception:
+            pass
+    
+    if "calendar_rejections" not in report_data:
+        report_data["calendar_rejections"] = []
+    
+    report_data["calendar_rejections"].append({
+        "event": event_key,
+        "actual": actual,
+        "consensus": consensus,
+        "diff": round(diff, 2),
+        "threshold": threshold,
+        "timestamp": datetime.now().isoformat()
+    })
+    
+    try:
+        with open(report_path, 'w', encoding='utf-8') as f:
+            json.dump(report_data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 # ═══════════════════════════════════════════
 # M2 MONEY SUPPLY (FRED API)

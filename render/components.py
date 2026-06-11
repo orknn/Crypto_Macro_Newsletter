@@ -13,6 +13,19 @@ from render.i18n import STR, format_bulletin_date
 def _na(v):
     return v is None or (isinstance(v, float) and v != v)
 
+def maybe(template, value):
+    """
+    Layout guard: returns rendered template only if value is truthy and not literal 'None'.
+    Use this to prevent empty blocks or literal 'None' strings from appearing in HTML.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped or stripped == 'None' or stripped == 'null':
+            return ""
+    return template
+
 def _fmt_price(price, fmt="price2"):
     if _na(price) or price == 0:
         return "—"
@@ -45,10 +58,10 @@ def _fmt_change(val):
     arrow = "▲" if val >= 0 else "▼"
     return f"{arrow} {sign}{val:.2f}%", cls
 
-def html_wrapper(title, content, accent_color="#3b82f6"):
+def html_wrapper(title, content, accent_color="#3b82f6", lang="tr"):
     """Wrap content in base HTML template with CSS styling."""
     return f'''<!DOCTYPE html>
-<html>
+<html lang="{lang}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -376,7 +389,7 @@ def render_ticker(data, lang='tr'):
          'chg': gold_chg},
         {'name': '10Y UST', 'price': _fmt_price(macro.get('US 10-Year Treasury Yield', 0), 'pct'),
          'chg': macro.get('US 10-Year Treasury Yield_chg', 0)},
-        {'name': 'VIX', 'price': _fmt_price(macro.get('VIX', 0), 'price2'),
+        {'name': 'VIX', 'price': f"{macro.get('VIX', 0):.1f}" if macro.get('VIX') else '—',
          'chg': macro.get('VIX_chg', 0)},
         {'name': 'BTC', 'price': _fmt_price(btc_price, 'price0'),
          'chg': btc_chg},
@@ -476,9 +489,29 @@ def render_economic_calendar(events, lang='tr'):
             except:
                 pass
 
+        timestamp = ev.get('timestamp')
+        date_str = ev.get('date', '')
+        if timestamp:
+            from datetime import datetime as _dt
+            try:
+                dt_obj = _dt.fromtimestamp(timestamp)
+                if lang == 'tr':
+                    months_tr_abbr = {
+                        1: "Oca", 2: "Şub", 3: "Mar", 4: "Nis", 5: "May", 6: "Haz",
+                        7: "Tem", 8: "Ağu", 9: "Eyl", 10: "Eki", 11: "Kas", 12: "Ara"
+                    }
+                    days_tr_abbr = {
+                        0: "Pzt", 1: "Sal", 2: "Çar", 3: "Per", 4: "Cum", 5: "Cmt", 6: "Paz"
+                    }
+                    date_str = f"{dt_obj.day:02d} {months_tr_abbr[dt_obj.month]} {days_tr_abbr[dt_obj.weekday()]}"
+                else:
+                    date_str = dt_obj.strftime('%d %b %a')
+            except Exception:
+                pass
+
         rows.append(f'''
         <tr>
-          <td style="color:var(--dim); white-space:nowrap; width:12%;">{ev.get('date', '')}</td>
+          <td style="color:var(--dim); white-space:nowrap; width:12%;">{date_str}</td>
           <td class="mono" style="white-space:nowrap; width:12%;">{ev.get('time', '')}</td>
           <td><div class="asset-name"><div class="asset-dot"></div>{ev.get('event', '')}</div></td>
           <td style="color:var(--dim); white-space:nowrap; width:10%;">{ev.get('country', '')}</td>
@@ -605,18 +638,31 @@ def render_asset_table(assets, type_name, lang='tr'):
     '''
 
 def render_news_section(news_data, ai_commentaries=None, lang='tr'):
-    """Render news block list with custom AI insights and remote lazy loaded images."""
+    """
+    Render news block list with custom AI insights and remote lazy loaded images.
+    
+    RENDERER GUARD: Each news card MUST have a real URL (source + href).
+    Items without a valid link are silently dropped. If no valid items remain,
+    the section returns empty string (caller should hide the entire section).
+    """
     stories = news_data.get('news', [])
     if not stories:
-        return f'<div style="color:var(--dim); padding:10px;">{STR["no_stories"][lang]}</div>'
+        return ""  # Section will be completely hidden
         
     html = []
+    rendered_count = 0
     for idx, s in enumerate(stories[:3]): # Max 3 stories
         title = s.get('title', '')
         summary = s.get('summary', '')
-        url = s.get('url', '#')
+        url = s.get('url', '')
         img_url = s.get('image_url') or s.get('image', '')
-        source = s.get('source', 'News')
+        source = s.get('source', '')
+        
+        # RENDERER GUARD: skip news without real URL or source
+        if not url or url == '#' or not source:
+            continue
+        
+        rendered_count += 1
         
         # Fetch matching AI commentary
         ai_commentary = ""
@@ -626,9 +672,10 @@ def render_news_section(news_data, ai_commentaries=None, lang='tr'):
             if isinstance(insight, dict):
                 insight_txt = insight.get('commentary', '')
             else:
-                insight_txt = str(insight)
-                
-            if insight_txt:
+                insight_txt = str(insight) if insight else ""
+            
+            # Guard against literal 'None' strings
+            if insight_txt and insight_txt.strip() and insight_txt.strip() != 'None':
                 ai_commentary = f'''
                 <div style="margin-top:10px; padding:10px 14px; background:var(--bg3); border-left:3px solid var(--gold2); border-radius:0 4px 4px 0; font-size:11.5px; color:var(--dim); line-height:1.6;">
                   <strong style="color:var(--gold2);">AI Insight:</strong> {insight_txt}
@@ -640,13 +687,24 @@ def render_news_section(news_data, ai_commentaries=None, lang='tr'):
             <td width="100" style="vertical-align:top; padding-left:16px;">
               <img src="{img_url}" width="100" height="70" style="border-radius:4px; object-fit:cover; border:1px solid var(--border);" loading="lazy" onerror="this.parentNode.style.display='none';" />
             </td>'''
+        
+        # Format timestamp if available
+        time_html = ""
+        dt_val = s.get('datetime', 0)
+        if dt_val and isinstance(dt_val, (int, float)) and dt_val > 0:
+            from datetime import datetime as _dt
+            try:
+                t = _dt.fromtimestamp(dt_val)
+                time_html = f' · {t.strftime("%H:%M")}'
+            except Exception:
+                pass
             
         html.append(f'''
         <div style="background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:16px; margin-bottom:14px; page-break-inside:avoid; break-inside:avoid;">
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr>
               <td style="vertical-align:top;">
-                <div style="font-size:9px; text-transform:uppercase; color:var(--gold2); font-weight:600; margin-bottom:6px; letter-spacing:0.5px;">{source}</div>
+                <div style="font-size:9px; text-transform:uppercase; color:var(--gold2); font-weight:600; margin-bottom:6px; letter-spacing:0.5px;">{source}{time_html}</div>
                 <h3 style="font-size:14px; font-weight:600; color:var(--text); margin:0 0 6px 0; line-height:1.45;"><a href="{url}" style="color:inherit; text-decoration:none;" target="_blank">{title}</a></h3>
                 <div style="font-size:12px; color:var(--dim); line-height:1.5;">{summary}</div>
               </td>
@@ -655,6 +713,9 @@ def render_news_section(news_data, ai_commentaries=None, lang='tr'):
           </table>
           {ai_commentary}
         </div>''')
+    
+    if not html:
+        return ""  # No valid news items — section will be hidden
         
     return '\n'.join(html)
 
@@ -733,7 +794,10 @@ def render_coinbase_premium_card(cp_data, period_label="7D", lang="tr"):
         signal_cls = 'color: var(--red); font-weight: 600;'
         current_str = f"{current:+.4f}%"
         
-    bar_interval = "24H Bars" if period_label == "180D" else "1H Bars"
+    bar_interval = STR['cp_bars_24h'][lang] if period_label == "180D" else STR['cp_bars_1h'][lang]
+    title_text = STR['cp_title'][lang]
+    high_label = STR['cp_high'][lang]
+    low_label = STR['cp_low'][lang]
     return f'''
     <div style="margin-top:24px; margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:6px;">
       <span style="font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--gold); font-weight:600;">COINBASE PREMIUM INDEX — {period_label}</span>
@@ -741,18 +805,18 @@ def render_coinbase_premium_card(cp_data, period_label="7D", lang="tr"):
     <div class="sparkline-wrap" style="padding:20px 24px; background:var(--bg2); border:1px solid var(--border); border-radius:6px; margin-bottom:20px; page-break-inside: avoid; break-inside: avoid;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
         <div>
-          <div style="font-size:12px; color:var(--dim); margin-bottom:4px;">BTC/USD · Coinbase vs Global Spread ({bar_interval})</div>
+          <div style="font-size:12px; color:var(--dim); margin-bottom:4px;">{title_text} ({bar_interval})</div>
           <div style="font-family:var(--mono); font-size:26px; color:var(--text); font-weight:700;">{current_str}</div>
           <div style="font-size:11px; {signal_cls} margin-top:2px;">{signal_text}</div>
         </div>
         <div style="display:flex; gap:24px; font-size:11px; color:var(--dim);">
           <div style="text-align:right;">
             <div style="font-family:var(--mono); color:var(--text); font-size:13px; font-weight:600;">{max_val:+.3f}%</div>
-            <div style="margin-top:2px;">24h High</div>
+            <div style="margin-top:2px;">{high_label}</div>
           </div>
           <div style="text-align:right;">
             <div style="font-family:var(--mono); color:var(--text); font-size:13px; font-weight:600;">{min_val:+.3f}%</div>
-            <div style="margin-top:2px;">24h Low</div>
+            <div style="margin-top:2px;">{low_label}</div>
           </div>
         </div>
       </div>

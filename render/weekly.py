@@ -13,7 +13,7 @@ from render.components import (
     html_wrapper, render_header, render_ticker, render_regime_strip,
     render_section_divider, render_economic_calendar, render_asset_table,
     render_news_section, render_footer, _fmt_change, _fmt_price,
-    render_coinbase_premium_card
+    render_coinbase_premium_card, maybe
 )
 from render.i18n import STR
 
@@ -40,7 +40,6 @@ def render_weekly(data, lang='tr'):
         title=title,
         sub_title=sub_title,
         accent_color=gold_color, # Gold accent for weekly
-        fng_data=data.get('fear_and_greed'),
         lang=lang
     )
     
@@ -68,12 +67,12 @@ def render_weekly(data, lang='tr'):
     calendar_weekly_html = ""
     events = data.get('economic_calendar', [])
     strategy_note = lang_data.get('notes', {}).get('week_plan_note') or data.get('week_plan_note', '')
-    if events or strategy_note:
+    if events or (strategy_note and str(strategy_note).strip() and str(strategy_note).strip() != 'None'):
         calendar_weekly_html = f'''
         {render_section_divider(STR['section_calendar_weekly'][lang])}
         {render_economic_calendar(events, lang=lang)}'''
         
-        if strategy_note:
+        if strategy_note and str(strategy_note).strip() and str(strategy_note).strip() != 'None':
             calendar_weekly_html += f'''
             <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6; margin-top:16px; background:var(--bg2); padding:14px 18px; border-left:3px solid var(--gold2); border-radius:0 4px 4px 0; page-break-inside: avoid; break-inside: avoid;">
               <strong style="color:var(--text);">{STR['outlook_strategy'][lang]}:</strong> {strategy_note}
@@ -92,7 +91,7 @@ def render_weekly(data, lang='tr'):
           {liq_chart}
         </div>'''
         
-        if liq_note:
+        if liq_note and str(liq_note).strip() and str(liq_note).strip() != 'None':
             liq_html += f'''
             <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6; margin-bottom:24px; background:var(--bg2); padding:10px 14px; border-left:3px solid var(--accent); border-radius:0 4px 4px 0;">
               <strong style="color:var(--text);">{STR['analyst_note'][lang]}:</strong> {liq_note}
@@ -466,7 +465,8 @@ def render_weekly(data, lang='tr'):
     futures_note = lang_data.get('notes', {}).get('futures_note') or data.get('futures_note', '')
     
     # Fear & Greed Speedometer
-    fng_gauge = generate_fear_greed_gauge_svg(fng.get('value', 50), fng.get('classification', 'Neutral'))
+    fng = data.get('fear_and_greed', {}) or {}
+    fng_gauge = generate_fear_greed_gauge_svg(fng.get('value', 50), fng.get('classification', 'Neutral'), lang=lang)
     
     # Coinbase Premium chart
     cp = data.get('coinbase_premium', {}) or {}
@@ -478,6 +478,10 @@ def render_weekly(data, lang='tr'):
     btc_oi = oi.get('BTC', {})
     eth_oi = oi.get('ETH', {})
     
+    def fmt_oi_val(val):
+        if not val: return '—'
+        return f"{val/1000:.1f}K" if val < 1e6 else f"{val/1e6:.2f}M"
+
     btc_oi_str = fmt_oi_val(btc_oi.get('oi'))
     eth_oi_str = fmt_oi_val(eth_oi.get('oi'))
     
@@ -606,16 +610,18 @@ def render_weekly(data, lang='tr'):
     stories_html = ""
     macro_news = data.get('macro_news', {})
     news_note = lang_data.get('notes', {}).get('news_note') or data.get('news_note', '')
-    if macro_news:
-        stories_html = f'''
-        {render_section_divider(STR['section_stories'][lang])}
-        {render_news_section(macro_news, lang_data.get('insights'), lang=lang)}'''
-        
-        if news_note:
-            stories_html += f'''
-            <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6; margin-bottom:24px; background:var(--bg2); padding:10px 14px; border-left:3px solid var(--gold2); border-radius:0 4px 4px 0; page-break-inside:avoid; break-inside:avoid;">
-              <strong style="color:var(--text);">{STR['analyst_note'][lang]}:</strong> {news_note}
-            </div>'''
+    if macro_news and macro_news.get('news'):
+        news_rendered = render_news_section(macro_news, lang_data.get('insights'), lang=lang)
+        if news_rendered:  # Only show section if renderer produced valid content
+            stories_html = f'''
+            {render_section_divider(STR['section_stories'][lang])}
+            {news_rendered}'''
+            
+            if news_note and str(news_note).strip() and str(news_note).strip() != 'None':
+                stories_html += f'''
+                <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6; margin-bottom:24px; background:var(--bg2); padding:10px 14px; border-left:3px solid var(--gold2); border-radius:0 4px 4px 0; page-break-inside:avoid; break-inside:avoid;">
+                  <strong style="color:var(--text);">{STR['analyst_note'][lang]}:</strong> {news_note}
+                </div>'''
 
     # Footer
     footer_html = render_footer(lang=lang, is_weekly=True)
@@ -646,7 +652,8 @@ def render_weekly(data, lang='tr'):
     '''
 
     return html_wrapper(
-        title="Weekly Strategic Analysis" if lang == 'tr' else "Weekly Deep Dive Bulletin",
+        title="Haftalık Stratejik Analiz" if lang == 'tr' else "Weekly Deep Dive Bulletin",
         content=content_html,
-        accent_color=gold_color
+        accent_color=gold_color,
+        lang=lang
     )

@@ -107,7 +107,12 @@ STR = {
     # Fallback and Labels
     "no_events": {"tr": "Planlanmış gelişme yok", "en": "No scheduled events"},
     "no_asset_data": {"tr": "Varlık verisi mevcut değil", "en": "No asset data available"},
-    "no_stories": {"tr": "Bugün derlenmiş haber yok", "en": "No stories compiled today"}
+    "no_stories": {"tr": "Bugün derlenmiş haber yok", "en": "No stories compiled today"},
+    "cp_bars_24h": {"tr": "24s Barlar", "en": "24H Bars"},
+    "cp_bars_1h": {"tr": "1s Barlar", "en": "1H Bars"},
+    "cp_title": {"tr": "BTC/USD · Coinbase - Küresel Borsalar Farkı", "en": "BTC/USD · Coinbase vs Global Spread"},
+    "cp_high": {"tr": "24s Yüksek", "en": "24h High"},
+    "cp_low": {"tr": "24s Düşük", "en": "24h Low"}
 }
 
 def format_bulletin_date(dt, lang):
@@ -116,11 +121,6 @@ def format_bulletin_date(dt, lang):
     TR: 11 Haziran 2026, Perşembe
     EN: Thu, Jun 11 2026
     """
-    months_tr = {
-        1: "Haziran", 2: "Haziran", 3: "Mart", 4: "Nisan", 5: "Mayıs", 6: "Haziran",
-        7: "Temmuz", 8: "Ağustos", 9: "Eylül", 10: "Ekim", 11: "Kasım", 12: "Aralık"
-    }
-    # Wait, 1 is Ocak, 2 is Şubat! Let's write them correctly:
     months_tr = {
         1: "Ocak", 2: "Şubat", 3: "Mart", 4: "Nisan", 5: "Mayıs", 6: "Haziran",
         7: "Temmuz", 8: "Ağustos", 9: "Eylül", 10: "Ekim", 11: "Kasım", 12: "Aralık"

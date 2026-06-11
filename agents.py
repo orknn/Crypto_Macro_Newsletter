@@ -8,7 +8,8 @@ import time
 
 
 def _call_with_retry(client, system_prompt, user_prompt, max_tokens=4000, max_retries=3):
-    """Call Claude API with automatic retry on rate limit errors."""
+    """Call Claude API with automatic retry on rate limit errors and logging."""
+    import os as _os
     for attempt in range(max_retries):
         try:
             response = client.messages.create(
@@ -20,7 +21,18 @@ def _call_with_retry(client, system_prompt, user_prompt, max_tokens=4000, max_re
                     {"role": "user", "content": user_prompt}
                 ]
             )
-            return response.content[0].text.strip()
+            result_text = response.content[0].text.strip()
+            
+            # Log AI call to fetch_report.json
+            _log_ai_call(
+                model="claude-sonnet-4-20250514",
+                max_tokens=max_tokens,
+                prompt_length=len(user_prompt),
+                response_length=len(result_text),
+                status="success"
+            )
+            
+            return result_text
         except Exception as e:
             error_str = str(e)
             if ('429' in error_str or 'rate' in error_str.lower()) and attempt < max_retries - 1:
@@ -28,7 +40,46 @@ def _call_with_retry(client, system_prompt, user_prompt, max_tokens=4000, max_re
                 print(f"    ⏳ Rate limit, {wait_time}s bekleniyor... (deneme {attempt + 2}/{max_retries})")
                 time.sleep(wait_time)
             else:
+                _log_ai_call(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=max_tokens,
+                    prompt_length=len(user_prompt),
+                    response_length=0,
+                    status=f"error: {error_str[:200]}"
+                )
                 raise
+
+
+def _log_ai_call(model, max_tokens, prompt_length, response_length, status):
+    """Log AI API call details to fetch_report.json under 'ai_call' key."""
+    import os as _os
+    report_path = "fetch_report.json"
+    report_data = {}
+    if _os.path.exists(report_path):
+        try:
+            with open(report_path, 'r', encoding='utf-8') as f:
+                report_data = json.load(f)
+        except Exception:
+            pass
+    
+    if "ai_calls" not in report_data:
+        report_data["ai_calls"] = []
+    
+    from datetime import datetime as _dt
+    report_data["ai_calls"].append({
+        "model": model,
+        "max_tokens": max_tokens,
+        "prompt_chars": prompt_length,
+        "response_chars": response_length,
+        "status": status,
+        "timestamp": _dt.now().isoformat()
+    })
+    
+    try:
+        with open(report_path, 'w', encoding='utf-8') as f:
+            json.dump(report_data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 
 # ═══════════════════════════════════════════
@@ -59,6 +110,7 @@ Her dil (tr ve en) için aşağıdaki alanları doldurmalısın:
    - KRİTİK FİLTRE KURALI: Eğer haber zaten genel bir piyasa yorumu veya listicle ise (örneğin "Cramer'ın izlenmesi gereken listesi", "İşte piyasada bilmeniz gerekenler"), bu haber için insight üretme ve listedeki o elemanı boş string ("") olarak bırak.
    - Her geçerli insight, haberi bültendeki diğer verilerle (funding rates, ETF flows, Coinbase premium, macro yields) ilişkilendirmelidir.
    - insights listesindeki eleman sayısı, giriş haber sayısı ile tam olarak aynı olmalıdır.
+   - MUTLAK KURAL: Haber listesi boşsa insights: [] dön. Asla haber UYDURMA. AI'ın haber konusundaki tek görevi, kendisine verilen gerçek haberlere insight yazmaktır.
 
 DİL VE ANLATIM KURALLARI:
 - İki dil aynı analizi anlatmalıdır; birebir motamot çeviri olması gerekmez, her dilde doğal ve akıcı finansal terminoloji kullanılmalıdır. Sayılar ve veriler iki dilde de tamamen aynı olmalıdır.
@@ -116,6 +168,7 @@ Her dil (tr ve en) için aşağıdaki alanları doldurmalısın:
    - KRİTİK FİLTRE KURALI: Eğer haber zaten genel bir piyasa yorumu veya listicle ise (örneğin "Cramer'ın izlenmesi gereken listesi", "İşte piyasada bilmeniz gerekenler"), bu haber için insight üretme ve listedeki o elemanı boş string ("") olarak bırak.
    - Her geçerli insight, haberi bültendeki diğer verilerle ilişkilendirerek analitik bağ kurmalıdır.
    - insights listesindeki eleman sayısı, giriş haber sayısı ile tam olarak aynı olmalıdır.
+   - MUTLAK KURAL: Haber listesi boşsa insights: [] dön. Asla haber UYDURMA. AI'ın haber konusundaki tek görevi, kendisine verilen gerçek haberlere insight yazmaktır.
 
 DİL VE ANLATIM KURALLARI:
 - İki dil aynı analizi anlatmalıdır; birebir motamot çeviri olması gerekmez, her dilde doğal ve akıcı finansal terminoloji kullanılmalıdır. Sayılar ve veriler iki dilde de tamamen aynı olmalıdır.

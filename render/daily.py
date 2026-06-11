@@ -9,7 +9,7 @@ from render.components import (
     html_wrapper, render_header, render_ticker, render_regime_strip,
     render_section_divider, render_economic_calendar, render_asset_table,
     render_news_section, render_footer, _fmt_change, _fmt_price,
-    render_coinbase_premium_card
+    render_coinbase_premium_card, maybe
 )
 from render.i18n import STR
 
@@ -26,7 +26,6 @@ def render_daily(data, lang='tr'):
         title=title,
         sub_title=sub_title,
         accent_color=accent_color,
-        fng_data=data.get('fear_and_greed'),
         lang=lang
     )
     
@@ -35,12 +34,17 @@ def render_daily(data, lang='tr'):
     lang_data = data.get(lang, {}) or {}
     regime = data.get('regime', 'NEUTRAL')
     regime_line = lang_data.get('regime_line', '')
-    regime_html = render_regime_strip(regime, regime_line, lang=lang)
+    # Regime Strip — hide if both regime and regime_line are empty/None
+    regime_html = ""
+    if regime and regime != 'NEUTRAL':
+        regime_html = render_regime_strip(regime, regime_line, lang=lang)
+    elif regime_line and regime_line.strip() and regime_line.strip() != 'None':
+        regime_html = render_regime_strip(regime, regime_line, lang=lang)
     
-    # Overview (Genel Değerlendirme)
+    # Overview (Genel Değerlendirme) — hide if empty or literal 'None'
     overview_html = ""
     overview_text = lang_data.get('overview', '') or data.get('ai_summary', '')
-    if overview_text:
+    if overview_text and str(overview_text).strip() and str(overview_text).strip() != 'None':
         overview_html = f'''
         <div class="summary-card">
           <p class="summary-text">{overview_text}</p>
@@ -139,7 +143,7 @@ def render_daily(data, lang='tr'):
         </div>''')
         
     kpi_note_html = ""
-    if ind_note:
+    if ind_note and str(ind_note).strip() and str(ind_note).strip() != 'None':
         kpi_note_html = f'''
         <div style="font-size:11px; color:var(--dim); line-height:1.5; margin-bottom:24px; background:var(--bg2); padding:10px 14px; border-left:3px solid var(--accent); border-radius:0 4px 4px 0;">
           <strong style="color:var(--text);">{STR['analyst_note'][lang]}:</strong> {ind_note}
@@ -159,7 +163,7 @@ def render_daily(data, lang='tr'):
     options_data = data.get('options_data', {}) or {}
     
     # 1. Fear/Greed Speedometer
-    fng_gauge = generate_fear_greed_gauge_svg(fng.get('value', 50), fng.get('classification', 'Neutral'))
+    fng_gauge = generate_fear_greed_gauge_svg(fng.get('value', 50), fng.get('classification', 'Neutral'), lang=lang)
     
     # 2. Coinbase Premium
     cp = data.get('coinbase_premium', {}) or {}
@@ -241,7 +245,25 @@ def render_daily(data, lang='tr'):
         'Strong Bearish': 'background:rgba(239,68,68,0.12); color:var(--red); border:1px solid rgba(239,68,68,0.3);',
     }
     fb_badge_style = fb_badges.get(fb_sen, fb_badges['Neutral'])
-    futures_note = lang_data.get('notes', {}).get('futures_note') or data.get('futures_note') or fb.get('description', '')
+    futures_note = lang_data.get('notes', {}).get('futures_note') or data.get('futures_note') or ''
+    # Guard: skip if the only available note is the hardcoded English basis description
+    # and we're in TR mode — use i18n template instead
+    fb_desc = fb.get('description', '')
+    if not futures_note and fb_desc:
+        if lang == 'tr':
+            futures_note = f"BTC için mevcut yıllıklandırılmış vadeli prim {fb_btc:.1f}% seviyesinde, piyasa duyarlılığı {fb_sen.lower()}."
+        else:
+            futures_note = fb_desc
+    
+    # Final guard against 'None' string
+    if futures_note and str(futures_note).strip() == 'None':
+        futures_note = ''
+
+    futures_note_html = ""
+    if futures_note:
+        futures_note_html = f'''<div style="font-family:var(--sans); font-size:11px; color:var(--dim); line-height:1.5;">
+        {futures_note}
+      </div>'''
 
     basis_column_html = f'''
     <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">
@@ -259,9 +281,7 @@ def render_daily(data, lang='tr'):
           <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:var(--text);">{fb_eth:.2f}%</div>
         </div>
       </div>
-      <div style="font-family:var(--sans); font-size:11px; color:var(--dim); line-height:1.5;">
-        {futures_note}
-      </div>
+      {futures_note_html}
     </div>
     '''
 
@@ -458,11 +478,13 @@ def render_daily(data, lang='tr'):
     # Stories
     stories_html = ""
     macro_news = data.get('macro_news', {})
-    if macro_news:
-        stories_html = f'''
-        {render_section_divider(STR['section_stories'][lang])}
-        {render_news_section(macro_news, lang_data.get('insights'), lang=lang)}
-        '''
+    if macro_news and macro_news.get('news'):
+        news_rendered = render_news_section(macro_news, lang_data.get('insights'), lang=lang)
+        if news_rendered:  # Only show section if renderer produced valid content
+            stories_html = f'''
+            {render_section_divider(STR['section_stories'][lang])}
+            {news_rendered}
+            '''
         
     # Footer
     footer_html = render_footer(lang=lang, is_weekly=False)
@@ -488,5 +510,6 @@ def render_daily(data, lang='tr'):
     return html_wrapper(
         title="Daily Financial Bulletin" if lang == 'en' else "Günlük Finans Bülteni",
         content=content_html,
-        accent_color=accent_color
+        accent_color=accent_color,
+        lang=lang
     )

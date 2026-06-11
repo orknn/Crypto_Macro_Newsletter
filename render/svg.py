@@ -479,7 +479,7 @@ def generate_cycle_heatmap_svg(heatmap, width=500, height=180):
     '''
     return svg
 
-def generate_fear_greed_gauge_svg(value, label, width=400, height=240):
+def generate_fear_greed_gauge_svg(value, label, width=400, height=240, lang='en'):
     """Generate an SVG speedometer gauge for the Crypto Fear & Greed Index."""
     cx, cy = width / 2, height - 60  # center of the arc
     radius = 110
@@ -487,6 +487,19 @@ def generate_fear_greed_gauge_svg(value, label, width=400, height=240):
     tick_outer = radius + 6
     tick_inner = radius - 3
     label_radius = radius + 22
+
+    # Localize the label for TR edition
+    if lang == 'tr':
+        label_map = {
+            'Neutral': 'NÖTR',
+            'Fear': 'KORKU',
+            'Extreme Fear': 'AŞIRI KORKU',
+            'Greed': 'AÇGÖZLÜLÜK',
+            'Extreme Greed': 'AŞIRI AÇGÖZLÜLÜK',
+        }
+        display_label = label_map.get(label, label.upper())
+    else:
+        display_label = label.upper()
 
     # Angle mapped to value (0=180°, 100=0°)
     needle_angle = 180 - (value / 100) * 180
@@ -559,7 +572,7 @@ def generate_fear_greed_gauge_svg(value, label, width=400, height=240):
       {''.join(ticks_svg)}
       {needle_svg}
       <text x="{cx}" y="{cy - 10}" text-anchor="middle" fill="var(--text)" font-family="var(--mono)" font-size="34" font-weight="700">{value}</text>
-      <text x="{cx}" y="{cy + 15}" text-anchor="middle" fill="var(--dim)" font-family="var(--sans)" font-size="12" font-weight="600" letter-spacing="0.5">{label.upper()}</text>
+      <text x="{cx}" y="{cy + 15}" text-anchor="middle" fill="var(--dim)" font-family="var(--sans)" font-size="12" font-weight="600" letter-spacing="0.5">{display_label}</text>
     </svg>
     '''
     return svg

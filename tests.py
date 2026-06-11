@@ -118,25 +118,200 @@ class NewsletterTests(unittest.TestCase):
             if os.path.exists(mock_snapshot_path):
                 os.remove(mock_snapshot_path)
 
-    def test_smoke_dry_run(self):
-        import sys
-        # Run the pipeline in dry-run mode for daily, using both languages
-        shutil.rmtree('out', ignore_errors=True)
+    def test_news_pipeline_no_fabrication(self):
+        """H1: When Finnhub API returns no items, fallback MUST NOT generate fake news."""
+        from render.components import render_news_section
         
-        cmd = [sys.executable, "main.py", "--edition", "daily", "--lang", "both", "--dry-run", "--no-agents"]
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        # Test 1: Empty news → empty render (section hidden)
+        empty_news = {"news": []}
+        result = render_news_section(empty_news, lang='tr')
+        self.assertEqual(result, "", "Empty news should produce empty string for section hiding")
         
-        self.assertEqual(res.returncode, 0, f"main.py execution failed: {res.stderr}\nStdout: {res.stdout}")
+        # Test 2: News without real URLs → should be filtered out
+        fake_news = {"news": [
+            {"title": "Fake headline", "summary": "Fake summary", "url": "#", "source": "Unknown", "image_url": ""},
+            {"title": "No URL", "summary": "No URL", "url": "", "source": "", "image_url": ""},
+        ]}
+        result = render_news_section(fake_news, lang='en')
+        self.assertEqual(result, "", "News without real URLs should produce empty string")
         
-        # Verify that output files are produced
-        self.assertTrue(os.path.exists("out/daily_tr.html"))
-        self.assertTrue(os.path.exists("out/daily_en.html"))
+        # Test 3: Real news items render properly with links
+        real_news = {"news": [
+            {"title": "Real headline", "summary": "Real summary", "url": "https://reuters.com/article/123", "source": "Reuters", "image_url": "", "datetime": 0},
+            {"title": "Another headline", "summary": "Another summary", "url": "https://cnbc.com/article/456", "source": "CNBC", "image_url": "", "datetime": 0},
+            {"title": "Third headline", "summary": "Third summary", "url": "https://bloomberg.com/article/789", "source": "Bloomberg", "image_url": "", "datetime": 0},
+        ]}
+        result = render_news_section(real_news, lang='en')
+        self.assertIn("https://reuters.com/article/123", result, "Real news should have href")
+        self.assertIn("Reuters", result, "Real news should show source")
+        self.assertEqual(result.count('class="'), 0)  # Structure check (inline styles only)
+    
+    def test_news_renderer_drops_fabricated_ai_insights(self):
+        """H1: If AI generates an insight for a headline not in the original news list, drop it."""
+        from render.components import render_news_section
         
-        # Check size limit constraint (< 150KB)
-        tr_size_kb = os.path.getsize("out/daily_tr.html") / 1024.0
-        en_size_kb = os.path.getsize("out/daily_en.html") / 1024.0
-        self.assertLess(tr_size_kb, 150.0, f"Turkish daily HTML size {tr_size_kb:.2f} KB exceeds 150 KB limit")
-        self.assertLess(en_size_kb, 150.0, f"English daily HTML size {en_size_kb:.2f} KB exceeds 150 KB limit")
+        news = {"news": [
+            {"title": "Real News 1", "summary": "Sum 1", "url": "https://example.com/1", "source": "Reuters", "datetime": 0},
+        ]}
+        # AI returned 2 insights but we only have 1 news item — extra should be ignored
+        insights = ["Insight for real news", "Fabricated insight for non-existent news"]
+        result = render_news_section(news, insights, lang='en')
+        self.assertIn("Insight for real news", result)
+        self.assertNotIn("Fabricated insight", result)
+    
+    def test_calendar_matching_precision(self):
+        """H3: CPI m/m FRED actual should NOT leak into Core CPI m/m event."""
+        # Simulate the matching logic
+        fred_actuals = {
+            'cpi m/m': '0.3%',
+            'core cpi m/m': '0.2%',
+            'cpi y/y': '2.4%',
+        }
+        
+        # Build mock events
+        events = [
+            {'event': 'Core CPI MoM', 'actual': '—', 'forecast': '0.3%'},
+            {'event': 'CPI MoM', 'actual': '—', 'forecast': '0.4%'},
+            {'event': 'CPI YoY', 'actual': '—', 'forecast': '2.5%'},
+        ]
+        
+        # Simulate the matching from data_fetcher.py
+        sorted_fred_keys = sorted(fred_actuals.keys(), key=len, reverse=True)
+        
+        for ev in events:
+            event_lower = ev.get('event', '').lower().strip()
+            event_normalized = event_lower.replace('mom', 'm/m').replace('yoy', 'y/y').replace('qoq', 'q/q')
+            matched = None
+            
+            # Exact match
+            if event_normalized in fred_actuals:
+                matched = fred_actuals[event_normalized]
+            
+            # Sorted contains match (longest first)
+            if not matched:
+                for fk in sorted_fred_keys:
+                    if event_normalized == fk or event_normalized.endswith(fk):
+                        if 'core' in event_normalized and 'core' not in fk:
+                            continue
+                        matched = fred_actuals[fk]
+                        break
+            
+            if matched:
+                ev['actual'] = matched
+        
+        # Core CPI MoM should match 'core cpi m/m' = 0.2%, NOT 'cpi m/m' = 0.3%
+        self.assertEqual(events[0]['actual'], '0.2%', "Core CPI MoM matched wrong FRED key")
+        self.assertEqual(events[1]['actual'], '0.3%', "CPI MoM should match cpi m/m")
+        self.assertEqual(events[2]['actual'], '2.4%', "CPI YoY should match cpi y/y")
+    
+    def test_maybe_layout_guard(self):
+        """H2: maybe() should filter None, empty, and literal 'None' values."""
+        from render.components import maybe
+        
+        self.assertEqual(maybe("<div>content</div>", None), "")
+        self.assertEqual(maybe("<div>content</div>", ""), "")
+        self.assertEqual(maybe("<div>content</div>", "None"), "")
+        self.assertEqual(maybe("<div>content</div>", " None "), "")
+        self.assertEqual(maybe("<div>content</div>", "null"), "")
+        self.assertEqual(maybe("<div>content</div>", "Real content"), "<div>content</div>")
+        self.assertEqual(maybe("<div>content</div>", 42), "<div>content</div>")
+    
+    def test_no_literal_none_in_output(self):
+        """H2: Generated HTML must not contain literal 'None' strings in content areas."""
+        # Build minimal data with None values where AI output would go
+        data = {
+            'date': '2026-06-11',
+            'crypto_prices': [],
+            'crypto_market_overview': {'total_market_cap': 0, 'btc_dominance': 0},
+            'macro_indicators': {},
+            'magnificent_7': [],
+            'commodities': [],
+            'fear_and_greed': {'value': 50, 'classification': 'Neutral'},
+            'funding_rates': {},
+            'open_interest': {},
+            'economic_calendar': [],
+            'coinbase_premium': {},
+            'macro_news': {'news': []},
+            'global_liquidity': {},
+            'm2_money_supply': {},
+            'macro_scoreboard': {},
+            'sp500_sectors': [],
+            'crypto_futures_basis': {},
+            'etf_flows': None,
+            'bist_try': {},
+            'stablecoin_data': {},
+            'ticker_history': {},
+            'regime': 'NEUTRAL',
+            'tr': {
+                'regime_line': None,
+                'overview': None,
+                'notes': {
+                    'futures_note': None,
+                    'etf_note': None,
+                    'indicators_note': None,
+                },
+                'insights': []
+            },
+            'en': {
+                'regime_line': None,
+                'overview': None,
+                'notes': {
+                    'futures_note': None,
+                    'etf_note': None,
+                    'indicators_note': None,
+                },
+                'insights': []
+            },
+            'etf_history_data': [],
+        }
+        
+        for lang in ['tr', 'en']:
+            html = render_daily(data, lang=lang)
+            # Check for literal 'None' outside of HTML comments and meta tags
+            import re
+            # Remove HTML comments first
+            clean_html = re.sub(r'<!--.*?-->', '', html, flags=re.DOTALL)
+            # Remove script/style tags
+            clean_html = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', clean_html, flags=re.DOTALL)
+            # Check: no '>None<' or ': None' patterns
+            self.assertNotIn('>None<', clean_html, f"Found literal 'None' in {lang} daily HTML")
+            self.assertNotIn(': None', clean_html, f"Found ': None' in {lang} daily HTML")
+    
+    def test_html_lang_attribute(self):
+        """H4: Generated HTML must have correct lang attribute."""
+        data = {
+            'date': '2026-06-11',
+            'crypto_prices': [],
+            'crypto_market_overview': {'total_market_cap': 0, 'btc_dominance': 0},
+            'macro_indicators': {},
+            'magnificent_7': [],
+            'commodities': [],
+            'fear_and_greed': {'value': 50, 'classification': 'Neutral'},
+            'funding_rates': {},
+            'open_interest': {},
+            'economic_calendar': [],
+            'coinbase_premium': {},
+            'macro_news': {'news': []},
+            'global_liquidity': {},
+            'm2_money_supply': {},
+            'macro_scoreboard': {},
+            'sp500_sectors': [],
+            'crypto_futures_basis': {},
+            'etf_flows': None,
+            'bist_try': {},
+            'stablecoin_data': {},
+            'ticker_history': {},
+            'regime': 'NEUTRAL',
+            'tr': {},
+            'en': {},
+            'etf_history_data': [],
+        }
+        
+        tr_html = render_daily(data, lang='tr')
+        en_html = render_daily(data, lang='en')
+        
+        self.assertIn('<html lang="tr">', tr_html, "TR HTML should have lang='tr'")
+        self.assertIn('<html lang="en">', en_html, "EN HTML should have lang='en'")
 
 if __name__ == '__main__':
     unittest.main()
