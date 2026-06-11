@@ -28,6 +28,7 @@ EDITIONS = {
         'sections': [
             'header',
             'weekly_themes',
+            'next_week_calendar_unlocks',
             'liquidity_regime',
             'macro_scoreboard',
             'equities_commodities_weekly',
@@ -43,7 +44,6 @@ EDITIONS = {
             'cycle_panel',
             'correlation_matrix',
             'futures_positioning_desk',
-            'next_week_calendar_unlocks',
             'footer'
         ]
     }

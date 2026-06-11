@@ -486,6 +486,7 @@ def render_weekly(data):
     content_html = f'''
     {header_html}
     {themes_html}
+    {calendar_weekly_html}
     {liq_html}
     {macro_scoreboard_html}
     {equities_html}
@@ -501,7 +502,6 @@ def render_weekly(data):
     {cycle_html}
     {correlation_html}
     {positioning_html}
-    {calendar_weekly_html}
     {footer_html}
     '''
 
