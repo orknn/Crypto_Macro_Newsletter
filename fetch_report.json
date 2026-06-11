@@ -1,0 +1,105 @@
+{
+  "rejected": {
+    "funding_8h_BTC": {
+      "value": 0.85,
+      "range": "-0.75 ... +0.75",
+      "timestamp": "2026-06-12T01:01:29.449664"
+    },
+    "btc_basis": {
+      "value": 150.0,
+      "range": "-50 ... +100",
+      "timestamp": "2026-06-12T01:01:29.449664"
+    },
+    "coinbase_premium": {
+      "value": 8.5,
+      "range": "-5 ... +5",
+      "timestamp": "2026-06-12T01:01:29.449664"
+    },
+    "dvol_index": {
+      "value": 300.0,
+      "range": "20 ... 250",
+      "timestamp": "2026-06-12T01:01:29.449664"
+    },
+    "put_call_ratio": {
+      "value": 6.0,
+      "range": "0.1 ... 5",
+      "timestamp": "2026-06-12T01:01:29.449664"
+    },
+    "US 10-Year Treasury Yield": {
+      "value": 15.0,
+      "range": "0 ... 12",
+      "timestamp": "2026-06-12T01:01:29.449664"
+    },
+    "funding_8h_SOL": {
+      "value": -0.99999975,
+      "range": "-0.75 ... +0.75",
+      "timestamp": "2026-06-12T01:04:56.393371"
+    }
+  },
+  "finnhub_calendar": "premium_locked",
+  "news_pipeline": {
+    "finnhub_raw_count": 100,
+    "after_blacklist": 97,
+    "whitelisted_count": 97,
+    "after_scoring_fallback": 0,
+    "final_count": 5,
+    "api_error": null
+  },
+  "ai_calls": [
+    {
+      "model": "claude-sonnet-4-20250514",
+      "max_tokens": 4000,
+      "prompt_chars": 38004,
+      "response_chars": 4490,
+      "status": "success",
+      "timestamp": "2026-06-12T01:03:18.161980"
+    },
+    {
+      "model": "claude-sonnet-4-20250514",
+      "max_tokens": 4000,
+      "prompt_chars": 2811,
+      "response_chars": 1843,
+      "status": "success",
+      "timestamp": "2026-06-12T01:03:37.984475"
+    },
+    {
+      "model": "claude-sonnet-4-20250514",
+      "max_tokens": 4000,
+      "prompt_chars": 117102,
+      "response_chars": 6954,
+      "status": "success",
+      "timestamp": "2026-06-12T01:06:36.781118"
+    },
+    {
+      "model": "claude-sonnet-4-20250514",
+      "max_tokens": 4000,
+      "prompt_chars": 2812,
+      "response_chars": 1609,
+      "status": "success",
+      "timestamp": "2026-06-12T01:06:49.902124"
+    }
+  ],
+  "ai_note_rejected": "value_mismatch",
+  "rejected_ai_notes": [
+    {
+      "lang": "en",
+      "note": "futures_note",
+      "unmatched_value": "0.56%"
+    },
+    {
+      "lang": "en",
+      "note": "indicators_note",
+      "unmatched_value": "6.8%"
+    },
+    {
+      "lang": "en",
+      "note": "stablecoin_note",
+      "unmatched_value": "59.5%"
+    },
+    {
+      "lang": "en",
+      "note": "rotation_note",
+      "unmatched_value": "-1.9%"
+    }
+  ]
+}

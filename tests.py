@@ -303,5 +303,70 @@ class NewsletterTests(unittest.TestCase):
         self.assertIn('<html lang="tr">', tr_html, "TR HTML should have lang='tr'")
         self.assertIn('<html lang="en">', en_html, "EN HTML should have lang='en'")
 
+    def test_tr_upper(self):
+        from render.i18n import tr_upper
+        self.assertEqual(tr_upper("jeopolitik"), "JEOPOLİTİK")
+        self.assertEqual(tr_upper("likidite"), "LİKİDİTE")
+        self.assertEqual(tr_upper("türkiye"), "TÜRKİYE")
+        self.assertEqual(tr_upper("hisseler & emtialar"), "HİSSELER & EMTİALAR")
+
+    def test_clean_calendar_val(self):
+        from data_fetcher import _clean_calendar_val
+        self.assertEqual(_clean_calendar_val(None), "—")
+        self.assertEqual(_clean_calendar_val(""), "—")
+        self.assertEqual(_clean_calendar_val("   "), "—")
+        self.assertEqual(_clean_calendar_val(0), "0")
+        self.assertEqual(_clean_calendar_val(0.0), "0.0")
+        self.assertEqual(_clean_calendar_val(3.5), "3.5")
+        self.assertEqual(_clean_calendar_val(" 2.5% "), "2.5%")
+
+    def test_validate_ai_notes(self):
+        # Prepare sample data
+        data = {
+            'crypto_futures_basis': {
+                'btc_basis': 0.61,
+                'eth_basis': 1.80,
+            },
+            'funding_rates': {
+                'BTC': 0.05,
+            },
+            'tr': {
+                'notes': {
+                    'futures_note': "BTC vadeli primi +0.61% seviyesinde.",  # Valid: matches btc_basis
+                    'etf_note': "ETF akışları -0.27% negatif.",             # Invalid: -0.27 not in snapshot
+                }
+            },
+            'en': {
+                'notes': {
+                    'futures_note': "ETH basis is at 1.80% currently.",     # Valid: matches eth_basis
+                }
+            }
+        }
+        
+        # Clean up fetch_report.json if exists
+        if os.path.exists("fetch_report.json"):
+            try:
+                os.remove("fetch_report.json")
+            except:
+                pass
+                
+        validated = validators.validate_ai_notes(data)
+        
+        # futures_note should be preserved
+        self.assertEqual(validated['tr']['notes']['futures_note'], "BTC vadeli primi +0.61% seviyesinde.")
+        self.assertEqual(validated['en']['notes']['futures_note'], "ETH basis is at 1.80% currently.")
+        
+        # etf_note should be set to None due to mismatch
+        self.assertIsNone(validated['tr']['notes']['etf_note'])
+        
+        # Verify fetch_report.json contains rejections
+        self.assertTrue(os.path.exists("fetch_report.json"))
+        with open("fetch_report.json", "r", encoding="utf-8") as f:
+            report = json.load(f)
+            self.assertEqual(report.get("ai_note_rejected"), "value_mismatch")
+            self.assertEqual(len(report.get("rejected_ai_notes", [])), 1)
+            self.assertEqual(report["rejected_ai_notes"][0]["note"], "etf_note")
+            self.assertEqual(report["rejected_ai_notes"][0]["unmatched_value"], "-0.27%")
+
 if __name__ == '__main__':
     unittest.main()

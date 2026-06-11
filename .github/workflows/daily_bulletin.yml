@@ -46,5 +46,8 @@ jobs:
         with:
           name: daily-bulletin-${{ github.run_number }}
           path: |
-            daily_bulletin.html
+            daily_bulletin_tr.html
+            daily_bulletin_en.html
+            daily_bulletin_tr.pdf
+            daily_bulletin_en.pdf
           retention-days: 30

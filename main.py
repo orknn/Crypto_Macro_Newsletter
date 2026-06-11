@@ -396,10 +396,6 @@ def run_pipeline():
         'ticker_history': ticker_history_data,
     }
 
-    # Run data validation sanity checks
-    print("  → Running metric validation checks...")
-    data = validators.validate_and_sanitize(data)
-
     # ── 2. Fetch Weekly Specific Data (if weekly) ──
     if edition == 'weekly':
         print("  → Coinbase premium (180D Daily)...")
@@ -439,6 +435,10 @@ def run_pipeline():
         print("  → ETF daily history...")
         data['etf_history_data'] = get_etf_flows_history(limit=10)
 
+    # Run data validation sanity checks immediately before AI and rendering
+    print("  → Running metric validation checks...")
+    data = validators.validate_and_sanitize(data)
+
     # ── 3. AI Agent Analysis ──
     if skip_agents:
         print("\n⏭️  AI Agent'lar atlanıyor (--no-agents)")
@@ -463,6 +463,10 @@ def run_pipeline():
             data['regime'] = editor_result.get('regime', 'NEUTRAL')
             data['tr'] = editor_result.get('tr', {})
             data['en'] = editor_result.get('en', {})
+            
+            # Post-generation consistency check for AI notes
+            print("  → Running AI note consistency checks...")
+            data = validators.validate_ai_notes(data)
             
             # Map legacy properties for compatibility
             data['ai_summary'] = data['tr'].get('overview')

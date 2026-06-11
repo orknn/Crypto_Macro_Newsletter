@@ -15,7 +15,7 @@ from render.components import (
     render_news_section, render_footer, _fmt_change, _fmt_price,
     render_coinbase_premium_card, maybe
 )
-from render.i18n import STR
+from render.i18n import STR, tr_upper
 
 def fmt_notional(val):
     if not val: return '—'
@@ -52,9 +52,14 @@ def render_weekly(data, lang='tr'):
         for i, t in enumerate(themes[:3]):
             icons = ["🌍", "💧", "🪙"]
             icon = icons[i] if i < len(icons) else "💡"
+            
+            theme_title = t.get('title', '')
+            if lang == 'tr':
+                theme_title = tr_upper(theme_title)
+                
             theme_items.append(f'''
             <div style="background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:16px; margin-bottom:12px;">
-              <div style="font-family:var(--sans); font-size:11px; font-weight:700; color:var(--gold2); text-transform:uppercase; margin-bottom:6px; letter-spacing:0.5px;">Theme {i+1}: {icon} {t.get('title', '')}</div>
+              <div style="font-family:var(--sans); font-size:11px; font-weight:700; color:var(--gold2); text-transform:uppercase; margin-bottom:6px; letter-spacing:0.5px;">{STR['theme'][lang]} {i+1}: {icon} {theme_title}</div>
               <div style="font-family:var(--sans); font-size:12.5px; color:var(--text); line-height:1.7;">{t.get('description', '')}</div>
             </div>''')
             

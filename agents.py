@@ -250,89 +250,15 @@ Maksimum 5 öneri ver. Her öneri UYGULANABİLİR ve SOMUT olmalı."""
 # ═══════════════════════════════════════════
 
 def _prepare_data_summary(data):
-    """Create a concise JSON summary of the newsletter data for the LLM."""
-    summary = {}
-
-    # Crypto prices (top 5 + notable movers)
-    crypto = data.get('crypto_prices', [])
-    if crypto:
-        summary['crypto_top5'] = [
-            {'symbol': c['Symbol'], 'price': c.get('Current Price USD', 0),
-             '24h': c.get('24h %', 0), '7d': c.get('7d %', 0)}
-            for c in crypto[:5]
-        ]
-        sorted_by_change = sorted(crypto, key=lambda x: abs(x.get('24h %', 0)), reverse=True)
-        summary['biggest_movers'] = [
-            {'symbol': c['Symbol'], '24h': c.get('24h %', 0)}
-            for c in sorted_by_change[:3]
-        ]
-
-    # Market overview
-    overview = data.get('crypto_market_overview', {})
-    if overview:
-        summary['market_overview'] = {
-            'total_market_cap_usd': overview.get('total_market_cap', 0),
-            'btc_dominance': overview.get('btc_dominance', 0),
-            'market_cap_change_24h': overview.get('market_cap_change_24h', 0),
-        }
-
-    # Fear & Greed
-    fng = data.get('fear_and_greed', {})
-    if fng:
-        summary['fear_greed'] = fng
-
-    # Macro indicators
-    macro = data.get('macro_indicators', {})
-    if macro:
-        summary['macro'] = {k: v for k, v in macro.items() if not k.endswith('_chg')}
-        summary['macro_changes'] = {k: v for k, v in macro.items() if k.endswith('_chg')}
-
-    # Commodities
-    commodities = data.get('commodities', [])
-    if commodities:
-        summary['commodities'] = [
-            {'name': c['Name'], 'price': c.get('Price', 0), 'change': c.get('Change %', 0)}
-            for c in commodities
-        ]
-
-    # Magnificent 7
-    mag7 = data.get('magnificent_7', [])
-    if mag7:
-        summary['magnificent_7'] = [
-            {'symbol': s['Symbol'], 'price': s.get('Price', 0), 'change': s.get('Change %', 0)}
-            for s in mag7
-        ]
-
-    # Funding rates
-    funding = data.get('funding_rates', {})
-    if funding:
-        summary['funding_rates'] = funding
-
-    # Coinbase Premium
-    cp = data.get('coinbase_premium', {})
-    if cp:
-        summary['coinbase_premium'] = cp.get('current_value', 0)
-
-    # M2 Money Supply
-    m2 = data.get('m2_money_supply', {})
-    if m2:
-        summary['m2_money_supply'] = m2
-
-    # Economic calendar
-    calendar = data.get('economic_calendar', [])
-    if calendar:
-        summary['economic_calendar'] = [
-            {'event': e.get('event', ''), 'country': e.get('country', ''),
-             'forecast': e.get('forecast', '—'), 'actual': e.get('actual', '—')}
-            for e in calendar[:5]
-        ]
-        
-    # ETF Flows
-    etf = data.get('etf_flows', {})
-    if etf:
-        summary['etf_flows'] = etf
-
+    """Create a clean copy of the newsletter data for the LLM, excluding AI outputs."""
+    exclude_keys = {
+        'tr', 'en', 'ai_summary', 'news_commentaries', 
+        'design_improvement_report', 'futures_note', 
+        'etf_note', 'indicators_note', 'weekly_themes'
+    }
+    summary = {k: v for k, v in data.items() if k not in exclude_keys}
     return summary
+
 
 
 def _prepare_design_context():

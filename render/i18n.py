@@ -3,26 +3,27 @@ from datetime import datetime
 
 STR = {
     # Sections
-    "section_calendar": {"tr": "Bugünün Takvimi", "en": "Today's Calendar"},
-    "section_calendar_weekly": {"tr": "Önümüzdeki Hafta", "en": "Next Week"},
-    "section_equities_commodities": {"tr": "Hisseler & Emtialar", "en": "Equities & Commodities"},
-    "section_sp500_sectors": {"tr": "S&P 500 Sektörleri", "en": "S&P 500 Sectors"},
-    "section_crypto_desk": {"tr": "Kripto Masası", "en": "Crypto Desk"},
-    "section_derivatives_desk": {"tr": "Vadeli İşlem Masası", "en": "Derivatives Desk"},
-    "section_etf_flows": {"tr": "Spot Bitcoin ETF Akışları", "en": "Spot Bitcoin ETF Flows"},
-    "section_watchlist": {"tr": "Kripto İzleme Listesi", "en": "Crypto Watchlist"},
-    "section_stories": {"tr": "Öne Çıkan Haberler", "en": "Top Stories"},
-    "section_themes": {"tr": "Haftanın Üç Teması", "en": "Three Themes of the Week"},
-    "section_liquidity": {"tr": "Likidite Rejimi", "en": "Liquidity Regime"},
-    "section_macro_scoreboard": {"tr": "Makro Skor Tahtası", "en": "Macro Scoreboard"},
-    "section_stablecoin": {"tr": "Stablecoin Arzı & Payı", "en": "Stablecoin Supply & Share"},
-    "section_winners_losers": {"tr": "Haftanın Kazananları & Kaybedenleri", "en": "Winners & Losers of the Week"},
-    "section_rotation": {"tr": "Kripto Sektör Rotasyonu", "en": "Crypto Sector Rotation"},
-    "section_cycle": {"tr": "Bitcoin Döngü Paneli", "en": "Bitcoin Cycle Panel"},
-    "section_correlation": {"tr": "Korelasyon Matrisi", "en": "Correlation Matrix"},
-    "section_positioning": {"tr": "Vadeli Yapı & Konumlanma", "en": "Futures Term Structure & Positioning"},
-    "section_large_expirations": {"tr": "Büyük Opsiyon Vadeleri", "en": "Large Options Expirations"},
-    "section_turkey_desk": {"tr": "Türkiye Masası", "en": "Turkey Desk"},
+    "section_calendar": {"tr": "BUGÜNÜN TAKVİMİ", "en": "Today's Calendar"},
+    "section_calendar_weekly": {"tr": "ÖNÜMÜZDEKİ HAFTA", "en": "Next Week"},
+    "section_equities_commodities": {"tr": "HİSSELER & EMTİALAR", "en": "Equities & Commodities"},
+    "section_sp500_sectors": {"tr": "S&P 500 SEKTÖRLERİ", "en": "S&P 500 Sectors"},
+    "section_crypto_desk": {"tr": "KRİPTO MASASI", "en": "Crypto Desk"},
+    "section_derivatives_desk": {"tr": "VADELİ İŞLEM MASASI", "en": "Derivatives Desk"},
+    "section_etf_flows": {"tr": "SPOT BITCOIN ETF AKIŞLARI", "en": "Spot Bitcoin ETF Flows"},
+    "section_watchlist": {"tr": "KRİPTO İZLEME LİSTESİ", "en": "Crypto Watchlist"},
+    "section_stories": {"tr": "ÖNE ÇIKAN HABERLER", "en": "Top Stories"},
+    "section_themes": {"tr": "HAFTANIN ÜÇ TEMASI", "en": "Three Themes of the Week"},
+    "section_liquidity": {"tr": "LİKİDİTE REJİMİ", "en": "Liquidity Regime"},
+    "section_macro_scoreboard": {"tr": "MAKRO SKOR TAHTASI", "en": "Macro Scoreboard"},
+    "section_stablecoin": {"tr": "STABLECOIN ARZI & PAYI", "en": "Stablecoin Supply & Share"},
+    "section_winners_losers": {"tr": "HAFTANIN KAZANANLARI & KAYBEDENLERİ", "en": "Winners & Losers of the Week"},
+    "section_rotation": {"tr": "KRİPTO SEKTÖR ROTASYONU", "en": "Crypto Sector Rotation"},
+    "section_cycle": {"tr": "BITCOIN DÖNGÜ PANELİ", "en": "Bitcoin Cycle Panel"},
+    "section_correlation": {"tr": "KORELASYON MATRİSİ", "en": "Correlation Matrix"},
+    "section_positioning": {"tr": "VADELİ YAPI & KONUMLANMA", "en": "Futures Term Structure & Positioning"},
+    "section_large_expirations": {"tr": "BÜYÜK OPSİYON VADELERİ", "en": "Large Options Expirations"},
+    "section_turkey_desk": {"tr": "TÜRKİYE MASASI", "en": "Turkey Desk"},
+    "theme": {"tr": "TEMA", "en": "THEME"},
 
     # Columns
     "col_date": {"tr": "Tarih", "en": "Date"},
@@ -137,3 +138,20 @@ def format_bulletin_date(dt, lang):
         day_name = dt.strftime("%a")
         month_name = dt.strftime("%b")
         return f"{day_name}, {month_name} {dt.day} {dt.year}"
+
+def tr_upper(s):
+    """Turkish locale-safe uppercase transformation (e.g. i -> İ, ı -> I)."""
+    if not s:
+        return ""
+    # Map lowercase to uppercase specifically for Turkish letters first, then use .upper()
+    trans = {
+        'i': 'İ',
+        'ı': 'I',
+        'ğ': 'Ğ',
+        'ü': 'Ü',
+        'ş': 'Ş',
+        'ö': 'Ö',
+        'ç': 'Ç'
+    }
+    res = "".join(trans.get(c, c.upper()) for c in s)
+    return res

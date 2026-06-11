@@ -875,6 +875,14 @@ def _log_finnhub_calendar_lock():
     except Exception:
         pass
 
+def _clean_calendar_val(v):
+    if v is None:
+        return '—'
+    if isinstance(v, (int, float)):
+        return str(v)
+    v_str = str(v).strip()
+    return v_str if v_str else '—'
+
 def get_economic_calendar():
     """
     Fetch Economic Calendar events from ForexFactory JSON API.
@@ -962,6 +970,7 @@ def get_economic_calendar():
             if actual_num is None or consensus_num is None:
                 return True  # Can't compare, allow it
             diff = abs(actual_num - consensus_num)
+            print(f"      ℹ️  Calendar checking surprise guard for {event_key}: actual={actual_str} consensus={consensus_str} diff={diff:.2f} vs threshold={threshold}")
             if diff > threshold:
                 print(f"      ⚠️  Surprise guard REJECTED: {event_key} actual={actual_str} consensus={consensus_str} diff={diff:.2f} > threshold={threshold}")
                 # Log to fetch_report.json
@@ -985,14 +994,10 @@ def get_economic_calendar():
             if any(kw in event_lower for kw in exclude_keywords):
                 continue
                 
-            forecast = event.get('forecast', '—')
-            previous = event.get('previous', '—')
-            actual = event.get('actual', '—')
-            
-            # Clean values
-            actual = actual.strip() if actual and actual.strip() else '—'
-            forecast = forecast.strip() if forecast and forecast.strip() else '—'
-            previous = previous.strip() if previous and previous.strip() else '—'
+            # Clean values safely using module-level helper
+            actual = _clean_calendar_val(event.get('actual'))
+            forecast = _clean_calendar_val(event.get('forecast'))
+            previous = _clean_calendar_val(event.get('previous'))
             
             # Parse datetime: '2026-03-13T10:00:00-04:00'
             date_iso = event.get('date', '')
