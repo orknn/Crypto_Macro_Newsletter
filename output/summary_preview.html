@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Executive Summary — Design Preview</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f1114;color:#e8e4df;font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;font-size:13px;line-height:1.6;padding:40px 20px}
+
+.bul{max-width:720px;margin:0 auto;background:#0f1114;border-left:1px solid rgba(0,0,0,0.3);border-right:1px solid rgba(0,0,0,0.3);box-shadow:0 0 30px rgba(0,0,0,0.6)}
+
+.section{padding:22px 28px;border-bottom:1px solid rgba(255,255,255,.07)}
+.section-label{font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:600;letter-spacing:1.8px;color:#c9a96e;text-transform:uppercase;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid rgba(201,169,110,.15);display:block}
+
+/* ── CURRENT DESIGN ── */
+.summary-card-old{background:#161a1e;border-left:3px solid #c9a96e;padding:16px 20px;border-radius:0 4px 4px 0}
+.summary-text-old{font-family:'Inter',system-ui,sans-serif;font-size:13px;line-height:1.85;color:#9a9590}
+.summary-text-old strong{color:#e8e4df;font-weight:600}
+.summary-text-old .highlight{color:#c9a96e;font-weight:600}
+
+/* ── NEW DESIGN ── */
+.summary-block{background:#161a1e;border-left:3px solid #c9a96e;padding:18px 22px;border-radius:0 4px 4px 0;margin-bottom:12px}
+.summary-block:last-child{margin-bottom:0}
+.summary-block.tension{border-left-color:#d4a853}
+.summary-block.risk{border-left-color:#cd5c5c}
+
+.summary-block-text{font-family:'Inter',system-ui,sans-serif;font-size:13.5px;line-height:1.85;color:#b0aba5}
+.summary-block-text strong{color:#e8e4df;font-weight:600}
+.summary-block-text .highlight{color:#c9a96e;font-weight:600}
+.summary-block-text .highlight-green{color:#4aba7a;font-weight:600}
+.summary-block-text .highlight-red{color:#cd5c5c;font-weight:600}
+
+.badge{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:9px;padding:4px 12px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;border-radius:3px;margin-top:10px}
+.badge-bullish{background:rgba(74,186,122,.1);color:#4aba7a;border:1px solid rgba(74,186,122,.25)}
+.badge-watch{background:rgba(212,168,83,.1);color:#d4a853;border:1px solid rgba(212,168,83,.25)}
+.badge-hawkish{background:rgba(205,92,92,.1);color:#cd5c5c;border:1px solid rgba(205,92,92,.25)}
+.badge-dovish{background:rgba(122,175,207,.1);color:#7aafcf;border:1px solid rgba(122,175,207,.25)}
+
+/* ── LABELS ── */
+.design-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:#6a6f7a;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;padding:6px 0}
+.design-label span{color:#c9a96e}
+
+.divider{height:1px;background:rgba(255,255,255,.05);margin:32px 0}
+
+/* Risk icon */
+.risk-icon{color:#cd5c5c;font-size:14px;margin-right:2px}
+
+/* Scoreboard */
+.scores{display:flex;background:#161a1e;border:1px solid rgba(255,255,255,.07);border-radius:4px;overflow:hidden;margin-top:14px}
+.score{flex:1;padding:11px 14px;border-right:1px solid rgba(255,255,255,.07);text-align:center}
+.score:last-child{border-right:none}
+.score-lbl{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1px;color:#9a9590;text-transform:uppercase;margin-bottom:4px}
+.score-val{font-family:'JetBrains Mono',monospace;font-size:15px;color:#e8e4df;font-weight:600}
+.score-chg{font-family:'JetBrains Mono',monospace;font-size:9px;margin-top:3px}
+.up{color:#4aba7a;font-weight:500}
+.down{color:#cd5c5c;font-weight:500}
+</style>
+</head>
+<body>
+
+<div class="bul">
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- CURRENT DESIGN                         -->
+  <!-- ═══════════════════════════════════════ -->
+  <div class="section">
+    <div class="design-label">⬇ Current Design — <span>Single Paragraph</span></div>
+    <div class="section-label">Market Overview</div>
+    <div class="summary-card-old">
+      <p class="summary-text-old">
+        Bugün piyasalarda öne çıkan tema <strong>dolar zayıflığı ve alternatif varlıklara yönelim</strong>. <strong>DXY</strong> <span class="highlight">98.22</span> seviyesine gerileyerek çok yıllık düşük seviyesini test ederken, <strong>altın</strong> ATH bölgesinde $4,810'a temas etti. <strong>BTC</strong> ise <span class="highlight">+%5.63</span> yükselişle $74,701 seviyesinde işlem görüyor. <strong>Fear & Greed Index</strong> <span class="highlight">21</span> (Extreme Fear) okumasıyla teknik yükseliş ile sentiment arasında belirgin bir ayrışma dikkat çekiyor. Bugün açıklanacak <strong>PPI MoM</strong> verisi (beklenti: %1.1, önceki: %0.7) seans içi risk iştahını belirleyecek en kritik veri noktası olacak.
+      </p>
+    </div>
+    <div style="margin-top:10px;background:#161a1e;border-left:2px solid #d4a853;padding:10px 14px;font-family:'Inter',system-ui,sans-serif;font-size:11px;color:#9a9590;line-height:1.7">
+      <span style="color:#d4a853;font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1px;font-weight:700;margin-right:6px">OBSERVATION</span>
+      DXY'deki düşüş, altın ve BTC'nin eş zamanlı yükselişi ile kurumsal sermayenin dolar denominasyonlu varlıklardan çıkışına işaret ediyor.
+    </div>
+
+    <div class="scores">
+      <div class="score">
+        <div class="score-lbl">DXY</div>
+        <div class="score-val">98.22</div>
+        <div class="score-chg down">▼ −1.42%</div>
+      </div>
+      <div class="score">
+        <div class="score-lbl">M2 Supply</div>
+        <div class="score-val">$21.8T</div>
+        <div class="score-chg up">▲ +0.3%</div>
+      </div>
+      <div class="score">
+        <div class="score-lbl">US PMI</div>
+        <div class="score-val">50.2</div>
+        <div class="score-chg down">▼ −0.8</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ -->
+  <!-- NEW DESIGN                             -->
+  <!-- ═══════════════════════════════════════ -->
+  <div class="section">
+    <div class="design-label">⬆ Proposed Design — <span>Multi-Block Narrative</span></div>
+    <div class="section-label">Market Overview</div>
+
+    <!-- Block 1: Dominant Theme -->
+    <div class="summary-block">
+      <p class="summary-block-text">
+        Bugün piyasalarda baskın tema <strong>koordineli bir dolar zayıflığı işlemi</strong>. DXY'nin 99 seviyesinin altına kırılarak <strong class="highlight">98.22</strong>'ye gerilemesi — çok yıllık düşük — altının <strong class="highlight-green">$4,810</strong> ile ATH bölgesine temas etmesi ve BTC'nin <strong class="highlight-green">+%5.63</strong> yükselişle $74,701'e sıçraması tesadüf değil: kurumsal sermaye eş zamanlı olarak dolar denominasyonlu varlıklardan sert ve dijital varlıklara dönüyor.
+      </p>
+      <span class="badge badge-bullish">Bullish Signal</span>
+    </div>
+
+    <!-- Block 2: Key Tension -->
+    <div class="summary-block tension">
+      <p class="summary-block-text">
+        Günün kritik gerilimi: <strong>Fear & Greed Index</strong>'in <strong class="highlight">21</strong> <strong>(Extreme Fear)</strong> okuması, teknik olarak sert bir toparlanma yaşayan piyasayla çelişen bir contrarian sinyal veriyor. Extreme Fear ile güçlü fiyat aksiyonunun bir arada görülmesi tarihsel olarak kısa vadeli rahatlama rallilerine öncülük etmiş, ancak makro veri netleşene kadar yapısal güven kırılgan kalmaya devam ediyor.
+      </p>
+      <span class="badge badge-watch">Watch Closely</span>
+    </div>
+
+    <!-- Block 3: Key Risk -->
+    <div class="summary-block risk">
+      <p class="summary-block-text">
+        <span class="risk-icon">⚠</span> <strong>Günün anahtar riski:</strong> PPI MoM konsensüsü <strong class="highlight">%1.1</strong> ile önceki <strong class="highlight">%0.7</strong> okumasının üzerinde — anlamlı bir yukarı yönlü sürpriz riski taşıyor. Sıcak bir baskı hawkish olur ve sabahın risk-on tonunu hızla tersine çevirebilir, özellikle faize duyarlı teknoloji pozisyonları için. <strong>08:30 AM EST</strong>'deki açıklama seansın en önemli tek olayı.
+      </p>
+      <span class="badge badge-hawkish">Hawkish Risk</span>
+    </div>
+
+    <div class="scores">
+      <div class="score">
+        <div class="score-lbl">DXY</div>
+        <div class="score-val">98.22</div>
+        <div class="score-chg down">▼ −1.42%</div>
+      </div>
+      <div class="score">
+        <div class="score-lbl">M2 Supply</div>
+        <div class="score-val">$21.8T</div>
+        <div class="score-chg up">▲ +0.3%</div>
+      </div>
+      <div class="score">
+        <div class="score-lbl">US PMI</div>
+        <div class="score-val">50.2</div>
+        <div class="score-chg down">▼ −0.8</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

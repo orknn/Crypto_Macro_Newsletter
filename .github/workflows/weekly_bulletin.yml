@@ -1,12 +1,10 @@
-name: Daily Bulletin
+name: Weekly Bulletin
 
 on:
   schedule:
-    # 08:00 CET = 07:00 UTC (winter) / 06:00 UTC (summer)
-    # GitHub Actions'ta tam saat başı (0) yoğunluktan dolayı gecikmeler yaşandığı için
-    # 15 dakika erken (05:45 UTC) tetiklenmesi ayarlandı. (Yaz saati için 07:45 Avrupa)
-    - cron: '45 5 * * *'
-  workflow_dispatch:  # Manuel tetikleme — test için
+    # Every Sunday at 16:00 UTC
+    - cron: '0 16 * * 0'
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
   generate-and-send:
@@ -30,15 +28,16 @@ jobs:
         run: |
           python -m playwright install chromium --with-deps
 
-      - name: Generate bulletin & send
+      - name: Generate weekly bulletin & send
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.WEBSITE_PUSH_TOKEN }}
           SEND_EMAIL: "true"
           CI: "true"
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          python main.py --send-email
+          python main.py --edition weekly --send-email
 
       - name: Push to website repository
         env:
@@ -47,49 +46,50 @@ jobs:
           # 1. Clone website repo
           git clone https://x-token-auth:${WEBSITE_PUSH_TOKEN}@github.com/orknn/nocashflow.net.git website
           
-          # 2. Get date
+          # 2. Get ISO week number and today's date
+          WEEK=$(date +%Y-W%V)
           TODAY=$(date +%Y-%m-%d)
-          echo "Processing daily bulletin for date: $TODAY"
+          echo "Processing weekly bulletin for week: $WEEK (today: $TODAY)"
           
           # 3. Create target directory
-          mkdir -p website/bulletins/daily
+          mkdir -p website/bulletins/weekly
           
           # 4. Copy latest files
-          cp daily_bulletin_tr.html website/bulletins/daily/latest.tr.html
-          cp daily_bulletin_en.html website/bulletins/daily/latest.en.html
+          cp weekly_bulletin_tr.html website/bulletins/weekly/latest.tr.html
+          cp weekly_bulletin_en.html website/bulletins/weekly/latest.en.html
           
-          # 5. Copy dated files
-          cp daily_bulletin_tr.html website/bulletins/daily/${TODAY}.tr.html
-          cp daily_bulletin_en.html website/bulletins/daily/${TODAY}.en.html
+          # 5. Copy dated/weekly files
+          cp weekly_bulletin_tr.html website/bulletins/weekly/${WEEK}.tr.html
+          cp weekly_bulletin_en.html website/bulletins/weekly/${WEEK}.en.html
           
-          # 6. Apply hreflang alternate URL replacements for dated files
-          # tr file alternate link points to dated en file
-          sed -i "s|/bulletins/daily/latest.en.html|/bulletins/daily/${TODAY}.en.html|g" website/bulletins/daily/${TODAY}.tr.html
-          # en file alternate link points to dated tr file
-          sed -i "s|/bulletins/daily/latest.tr.html|/bulletins/daily/${TODAY}.tr.html|g" website/bulletins/daily/${TODAY}.en.html
+          # 6. Apply hreflang alternate URL replacements for weekly files
+          # tr file alternate link points to weekly en file
+          sed -i "s|/bulletins/weekly/latest.en.html|/bulletins/weekly/${WEEK}.en.html|g" website/bulletins/weekly/${WEEK}.tr.html
+          # en file alternate link points to weekly tr file
+          sed -i "s|/bulletins/weekly/latest.tr.html|/bulletins/weekly/${WEEK}.tr.html|g" website/bulletins/weekly/${WEEK}.en.html
           
           # 7. Commit & Push
           cd website
           git config user.name "nocashflow-bulletin-bot"
           git config user.email "bot@nocashflow.net"
-          git add bulletins/daily/
+          git add bulletins/weekly/
           
           # Check changes and commit
           if ! git diff-index --quiet HEAD; then
-            git commit -m "bulletin: daily ${TODAY}"
+            git commit -m "bulletin: weekly ${TODAY}"
             git push origin main
           else
             echo "No changes to commit."
           fi
 
-      - name: Upload bulletin as artifact
+      - name: Upload weekly bulletin as artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: daily-bulletin-${{ github.run_number }}
+          name: weekly-bulletin-${{ github.run_number }}
           path: |
-            daily_bulletin_tr.html
-            daily_bulletin_en.html
-            daily_bulletin_tr.pdf
-            daily_bulletin_en.pdf
+            weekly_bulletin_tr.html
+            weekly_bulletin_en.html
+            weekly_bulletin_tr.pdf
+            weekly_bulletin_en.pdf
           retention-days: 30

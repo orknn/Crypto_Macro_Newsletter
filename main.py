@@ -4,82 +4,35 @@ import json
 import base64
 import urllib.request
 import urllib.error
-from datetime import datetime
+from datetime import datetime, timedelta
+
+# Load .env file if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from data_fetcher import (
-    get_crypto_prices, get_macro_indicators, get_fear_and_greed_index,
-    get_macro_news,
-    get_coinbase_premium_index, get_funding_rates, get_crypto_market_overview,
-    get_magnificent_7, get_commodities, get_economic_calendar, get_options_market_data,
-    get_global_liquidity_index, get_macro_scoreboard, get_sp500_sectors,
-    get_crypto_futures_basis, get_etf_flows, get_bist_data
+    preload_yfinance_data, get_crypto_prices, get_macro_indicators, 
+    get_fear_and_greed_index, get_macro_news, get_coinbase_premium_index,
+    get_funding_rates, get_crypto_market_overview, get_magnificent_7, 
+    get_commodities, get_economic_calendar, get_global_liquidity_index, 
+    get_macro_scoreboard, get_sp500_sectors, get_crypto_futures_basis, 
+    get_etf_flows, get_bist_data, get_m2_money_supply, get_stablecoin_data,
+    get_net_liquidity, get_stablecoin_history, get_inflation_path, 
+    get_btc_cycle_metrics, get_correlation_matrix, get_etf_flows_history,
+    get_yfinance_data, calculate_oi_change_from_snapshots
 )
 from agents import ContentEditorAgent, ExperienceDesignerAgent
-from html_generator import generate_newsletter_html
+import validators
+from render.daily import render_daily
+from render.weekly import render_weekly
 from ai_report_generator import generate_ai_report
-from design_preview_generator import generate_design_preview
 from email_sender import send_newsletter_email
 
 
 
-def push_file_to_website(local_path, repo_path):
-    """
-    Push a file to nocashflow.net repo.
-    Requires GITHUB_TOKEN env variable (set as GitHub Secret).
-    """
-    token = os.environ.get("GITHUB_TOKEN")
-    if not token:
-        print("⚠️  GITHUB_TOKEN not set — skipping website push.")
-        return False
-
-    if not os.path.isfile(local_path):
-        print(f"❌ File not found: {local_path}")
-        return False
-
-    with open(local_path, "rb") as f:
-        content_b64 = base64.b64encode(f.read()).decode("utf-8")
-
-    api_url = f"https://api.github.com/repos/orknn/nocashflow.net/contents/{repo_path}"
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "nocashflow-bulletin-bot",
-    }
-
-    try:
-        req = urllib.request.Request(api_url, headers=headers)
-        with urllib.request.urlopen(req) as resp:
-            file_info = json.loads(resp.read().decode("utf-8"))
-        sha = file_info.get("sha")
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            sha = None  # File doesn't exist yet
-        else:
-            print(f"❌ GitHub API error getting SHA for {repo_path}: {e.code}")
-            return False
-
-    # Commit message with today's date
-    today = datetime.now().strftime("%Y-%m-%d")
-    payload = {
-        "message": f"bulletin: auto-update {repo_path} {today}",
-        "content": content_b64,
-        "branch": "main",
-    }
-    if sha:
-        payload["sha"] = sha
-
-    try:
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            api_url, data=data, headers={**headers, "Content-Type": "application/json"},
-            method="PUT"
-        )
-        with urllib.request.urlopen(req) as resp:
-            print(f"  ✅ Website updated: {repo_path}")
-            return True
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8")
-        print(f"  ❌ GitHub push failed for {repo_path}: {e.code} — {body}")
-        return False
 
 
 def html_to_pdf(html_path, pdf_path):
@@ -92,7 +45,6 @@ def html_to_pdf(html_path, pdf_path):
             abs_path = os.path.abspath(html_path)
             page.goto(f'file://{abs_path}')
             page.wait_for_load_state('networkidle')
-            # Wait a bit for fonts to load
             page.wait_for_timeout(2000)
             page.pdf(
                 path=pdf_path,
@@ -105,78 +57,265 @@ def html_to_pdf(html_path, pdf_path):
         return True
     except ImportError:
         print("  ⚠️  playwright yüklü değil. Yalnızca HTML oluşturuldu.")
-        print("     PDF için: pip install playwright && python -m playwright install chromium")
         return False
     except Exception as e:
         print(f"  ⚠️  PDF dönüştürme hatası: {e}")
         return False
 
 
-def generate_daily_newsletter():
-    print("Veriler çekiliyor...")
+def validate_snapshot(snapshot_data):
+    """Validate daily snapshot JSON against schema."""
+    try:
+        import jsonschema
+        schema_path = 'schemas/snapshot.schema.json'
+        if os.path.exists(schema_path):
+            with open(schema_path, 'r', encoding='utf-8') as f:
+                schema = json.load(f)
+            jsonschema.validate(instance=snapshot_data, schema=schema)
+            print("  ✅ Snapshot schema validation SUCCESS.")
+            return True
+        else:
+            print("  ⚠️  Schema file schemas/snapshot.schema.json not found — skipping validation.")
+            return True
+    except ImportError:
+        print("  ⚠️  jsonschema not installed — skipping snapshot validation.")
+        return True
+    except Exception as e:
+        print(f"  ❌ Snapshot schema validation FAILED: {e}")
+        return False
+
+
+def get_ytd_comparison_data():
+    """Calculate YTD returns starting from Jan 1st of the current year."""
+    tickers = {
+        'BTC': 'BTC-USD',
+        'NDX': '^NDX',
+        'GOLD': 'GC=F'
+    }
+    
+    current_year = datetime.now().year
+    start_of_year = f"{current_year}-01-01"
+    
+    res = {}
+    for name, ticker in tickers.items():
+        try:
+            df = get_yfinance_data(ticker, period='2y')
+            if not df.empty and 'Close' in df:
+                # Drop rows where Close is NaN (e.g. holidays aligned during batch download)
+                df_clean = df.dropna(subset=['Close'])
+                df_ytd = df_clean[df_clean.index >= start_of_year].copy()
+                if not df_ytd.empty:
+                    first_close = float(df_ytd['Close'].iloc[0])
+                    df_ytd['ytd_return'] = ((df_ytd['Close'] - first_close) / first_close) * 100
+                    res[name] = [
+                        {'date': idx.strftime('%Y-%m-%d'), 'value': float(row['ytd_return'])}
+                        for idx, row in df_ytd.iterrows()
+                    ]
+        except Exception as e:
+            print(f"      ⚠️  Error calculating YTD for {name}: {e}")
+            res[name] = []
+    return res
+
+
+def calculate_crypto_sector_rotation(crypto_prices):
+    """Calculate average 7D returns for representative crypto categories."""
+    sectors = {
+        'Layer 1 Protocols': ['ETH', 'SOL', 'AVAX', 'SUI', 'TON'],
+        'DeFi Protocols': ['UNI', 'AAVE', 'LINK'],
+        'AI & Decentralized Compute': ['RENDER'],
+        'Meme Tokens': ['DOGE', 'PEPE']
+    }
+    
+    price_by_sym = {c['Symbol']: c for c in crypto_prices}
+    
+    results = {}
+    for sector, symbols in sectors.items():
+        vals = []
+        for sym in symbols:
+            if sym in price_by_sym:
+                val = price_by_sym[sym].get('7d %')
+                if val is not None:
+                    vals.append(val)
+        if vals:
+            results[sector] = sum(vals) / len(vals)
+        else:
+            results[sector] = 0.0
+            
+    return results
+
+
+def get_weekly_etf_flows(etf_daily_history):
+    """Aggregate daily ETF flows into weekly sums by Sunday."""
+    import pandas as pd
+    if not etf_daily_history:
+        return []
+        
+    try:
+        df = pd.DataFrame(etf_daily_history)
+        df['parsed_date'] = pd.to_datetime(df['date'], errors='coerce')
+        df = df.dropna(subset=['parsed_date'])
+        df.set_index('parsed_date', inplace=True)
+        
+        # Resample weekly and sum
+        weekly = df.resample('W-SUN').sum()
+        
+        results = []
+        for d, row in weekly.iterrows():
+            results.append({
+                'date': d.strftime('%Y-%m-%d'),
+                'Total_flow_m': float(row['Total_flow_m']),
+                'IBIT_flow_m': float(row['IBIT_flow_m']),
+                'FBTC_flow_m': float(row['FBTC_flow_m'])
+            })
+        return results
+    except Exception as e:
+        print(f"      ⚠️  Error aggregating weekly ETF flows: {e}")
+        return []
+
+
+def get_winners_losers(crypto_prices):
+    """Calculate the 5 biggest gainers and losers in the crypto watchlist over 7 days."""
+    sorted_assets = sorted(crypto_prices, key=lambda x: x.get('7d %', 0.0), reverse=True)
+    
+    winners = []
+    for c in sorted_assets[:5]:
+        winners.append({
+            'Symbol': c['Symbol'],
+            'Change %': c.get('7d %', 0.0)
+        })
+        
+    losers = []
+    for c in reversed(sorted_assets[-5:]):
+        losers.append({
+            'Symbol': c['Symbol'],
+            'Change %': c.get('7d %', 0.0)
+        })
+        
+    return winners, losers
+
+
+def run_pipeline():
+    # Parse CLI Arguments
+    edition = 'daily'
+    if '--edition' in sys.argv:
+        idx = sys.argv.index('--edition')
+        if idx + 1 < len(sys.argv):
+            edition = sys.argv[idx + 1].lower()
+            
+    lang_arg = 'both'
+    if '--lang' in sys.argv:
+        idx = sys.argv.index('--lang')
+        if idx + 1 < len(sys.argv):
+            lang_arg = sys.argv[idx + 1].lower()
+            if lang_arg not in ['tr', 'en', 'both']:
+                lang_arg = 'both'
+            
+    dry_run = '--dry-run' in sys.argv
+    skip_agents = '--no-agents' in sys.argv
+    send_email_arg = '--send-email' in sys.argv
+    
+    print(f"Running pipeline in {edition.upper()} edition (Language: {lang_arg.upper()})...")
+    if dry_run:
+        print("  ⚠️  DRY RUN mode active — no emails, no web push.")
+        
     watchlist = [
         'BTC', 'ETH', 'XRP', 'SOL', 'TRX', 'DOGE', 'HYPE', 'LINK',
         'AVAX', 'SUI', 'TON', 'UNI', 'AAVE', 'PEPE', 'RENDER', 'JUP'
     ]
 
-    # ── Fetch all data ──
-    print("  → Crypto fiyatları...")
+    # Preload yfinance data to cache
+    yf_tickers = [
+        '^TNX', '^IRX', '^VIX', 'DX-Y.NYB', 'NQ=F', 'SMH', '^MOVE',
+        'XLE', 'XLF', 'XLK', 'XLY', 'XLP', 'XLV', 'XLI', 'XLC', 'XLB', 'XLRE', 'XLU',
+        'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA',
+        'GC=F', 'SI=F', 'CL=F', 'HG=F', 'XU100.IS', 'USDTRY=X',
+        'BTC-USD', '^NDX'
+    ]
+    preload_period = '2y' if edition == 'weekly' else '35d'
+    preload_yfinance_data(yf_tickers, period=preload_period)
+
+    # ── 1. Fetch Shared Core Data ──
+    print("  → Crypto prices...")
     crypto_prices = get_crypto_prices(watchlist)
-    btc_price = 0
-    for c in crypto_prices:
-        if c['Symbol'] == 'BTC':
-            btc_price = c.get('Current Price USD', 0)
-            break
-
-    print("  → Crypto piyasa özeti...")
+    
+    print("  → Crypto market overview...")
     crypto_market_overview = get_crypto_market_overview()
-
-    print("  → Makro göstergeler...")
+    
+    print("  → Macro indicators...")
     macro_indicators = get_macro_indicators()
-
+    
     print("  → Magnificent 7...")
     magnificent_7 = get_magnificent_7()
-
-    print("  → Emtialar...")
+    
+    print("  → Commodities...")
     commodities = get_commodities()
-
+    
     print("  → Fear & Greed Index...")
     fear_and_greed = get_fear_and_greed_index()
-
-    print("  → Funding rates and OI...")
+    
+    print("  → Funding rates and Open Interest...")
     funding_rates, open_interest = get_funding_rates()
-
-    print("  → Ekonomik takvim...")
+    try:
+        open_interest = calculate_oi_change_from_snapshots(open_interest, edition=edition)
+    except Exception as e:
+        print(f"      ⚠️  Error calculating snapshot-based OI change: {e}")
+    
+    print("  → Economic calendar...")
     economic_calendar = get_economic_calendar()
-
+    
     print("  → Coinbase premium...")
     coinbase_premium = get_coinbase_premium_index()
-
-    print("  → Macro haberler...")
+    
+    print("  → Macro news...")
     macro_news = get_macro_news()
-
-    print("  → Opsiyon Piyasaları...")
-    options_data = get_options_market_data()
-
+    
     print("  → Global Liquidity...")
     global_liquidity = get_global_liquidity_index()
     
-    print("  → Makro Scoreboard...")
+    print("  → M2 Money Supply...")
+    m2_money_supply = get_m2_money_supply()
+    
+    print("  → Macro Scoreboard...")
     macro_scoreboard = get_macro_scoreboard()
-
-    print("  → S&P 500 Sektörleri...")
+    
+    print("  → S&P 500 Sectors...")
     sp500_sectors = get_sp500_sectors()
-
+    
     print("  → Crypto Futures Basis...")
     crypto_futures_basis = get_crypto_futures_basis()
-
+    
     print("  → Spot Bitcoin ETF Flows...")
     etf_flows = get_etf_flows()
-
+    
     print("  → BIST 100 & USD/TRY...")
     bist_try = get_bist_data()
+    
+    print("  → Stablecoin data...")
+    stablecoin_data = get_stablecoin_data()
 
+    # Fetch sparkline histories
+    print("  → Ticker history (sparklines)...")
+    ticker_history_data = {}
+    ticker_mappings = {
+        'NASDAQ 100': 'NQ=F',
+        'DXY': 'DX-Y.NYB',
+        'GOLD': 'GC=F',
+        '10Y UST': '^TNX',
+        'VIX': '^VIX',
+        'BTC': 'BTC-USD'
+    }
+    for name, sym in ticker_mappings.items():
+        try:
+            df = get_yfinance_data(sym, period='35d')
+            if not df.empty and 'Close' in df:
+                closes = df['Close'].dropna().tolist()
+                ticker_history_data[name] = [float(x) for x in closes[-7:]]
+        except Exception as e:
+            print(f"      ⚠️  Error fetching history for ticker sparkline {name}: {e}")
+
+    # Combine into core data dict
     data = {
+        'date': datetime.now().strftime('%Y-%m-%d'),
         'crypto_prices': crypto_prices,
         'crypto_market_overview': crypto_market_overview,
         'macro_indicators': macro_indicators,
@@ -188,106 +327,205 @@ def generate_daily_newsletter():
         'economic_calendar': economic_calendar,
         'coinbase_premium': coinbase_premium,
         'macro_news': macro_news,
-        'options_data': options_data,
         'global_liquidity': global_liquidity,
+        'm2_money_supply': m2_money_supply,
         'macro_scoreboard': macro_scoreboard,
         'sp500_sectors': sp500_sectors,
         'crypto_futures_basis': crypto_futures_basis,
         'etf_flows': etf_flows,
         'bist_try': bist_try,
+        'stablecoin_data': stablecoin_data,
+        'ticker_history': ticker_history_data,
     }
 
-    # ── AI Agent Analysis ──
-    skip_agents = "--no-agents" in sys.argv
+    # ── 2. Fetch Weekly Specific Data (if weekly) ──
+    if edition == 'weekly':
+        print("  → Coinbase premium (180D Daily)...")
+        data['coinbase_premium'] = get_coinbase_premium_index(interval='1d', limit=180)
+        
+        print("  → Net Liquidity historical (3-Year Weekly)...")
+        data['net_liquidity_history_data'] = get_net_liquidity()
+        
+        print("  → Stablecoin history (3-Year Weekly)...")
+        data['stablecoin_history_data'] = get_stablecoin_history()
+        
+        print("  → Inflation path history (5-Year)...")
+        data['inflation_history_data'] = get_inflation_path()
+        
+        print("  → BTC cycle metrics...")
+        data['btc_cycle_metrics'] = get_btc_cycle_metrics()
+        
+        print("  → Correlation matrix (30D daily returns)...")
+        data['correlation_matrix'] = get_correlation_matrix()
+        
+        print("  → YTD asset comparison...")
+        data['ytd_comparison_data'] = get_ytd_comparison_data()
+        
+        print("  → Weekly ETF flows...")
+        etf_history = get_etf_flows_history(limit=30)
+        data['etf_weekly_history_data'] = get_weekly_etf_flows(etf_history)
+        
+        print("  → Winners & Losers (7D)...")
+        winners, losers = get_winners_losers(crypto_prices)
+        data['winners'] = winners
+        data['losers'] = losers
+        
+        print("  → Crypto sector rotation...")
+        data['crypto_sector_rotation_data'] = calculate_crypto_sector_rotation(crypto_prices)
+    else:
+        # For daily ETF bar chart (last 10 days)
+        print("  → ETF daily history...")
+        data['etf_history_data'] = get_etf_flows_history(limit=10)
+
+    # Run data validation sanity checks immediately before AI and rendering
+    print("  → Running metric validation checks...")
+    data = validators.validate_and_sanitize(data)
+
+    # ── 3. AI Agent Analysis ──
     if skip_agents:
         print("\n⏭️  AI Agent'lar atlanıyor (--no-agents)")
+        data['regime'] = 'NEUTRAL'
+        data['tr'] = {}
+        data['en'] = {}
+        # Legacies for backward compatibility
         data['ai_summary'] = None
         data['news_commentaries'] = None
         data['design_improvement_report'] = None
         data['futures_note'] = None
+        data['etf_note'] = None
         data['options_note'] = None
         data['indicators_note'] = None
+        data['weekly_themes'] = []
     else:
         print("\n🤖 AI Agent'lar çalıştırılıyor...")
-
         print("  → Finansal İçerik Editörü...")
-        editor_result = ContentEditorAgent().analyze(data)
-        data['ai_summary'] = editor_result.get('genel_degerlendirme')
-        data['korelasyon_notu'] = editor_result.get('korelasyon_notu')
-        data['news_commentaries'] = editor_result.get('news_commentaries')
-        data['content_suggestions'] = editor_result.get('content_suggestions')
-        data['futures_note'] = editor_result.get('futures_note')
-        data['options_note'] = editor_result.get('options_note')
-        data['indicators_note'] = editor_result.get('indicators_note')
+        editor_result = ContentEditorAgent().analyze(data, edition=edition)
+        
+        if editor_result.get('success'):
+            data['regime'] = editor_result.get('regime', 'NEUTRAL')
+            data['tr'] = editor_result.get('tr', {})
+            data['en'] = editor_result.get('en', {})
+            
+            # Post-generation consistency check for AI notes
+            print("  → Running AI note consistency checks...")
+            data = validators.validate_ai_notes(data)
+            
+            # Map legacy properties for compatibility
+            data['ai_summary'] = data['tr'].get('overview')
+            data['futures_note'] = data['tr'].get('notes', {}).get('futures_note')
+            data['etf_note'] = data['tr'].get('notes', {}).get('etf_note')
+            data['indicators_note'] = data['tr'].get('notes', {}).get('indicators_note')
+            data['weekly_themes'] = data['tr'].get('themes', [])
+            
+            data['news_commentaries'] = []
+            raw_news = data.get('macro_news', {}).get('news', [])
+            tr_insights = data['tr'].get('insights', [])
+            for idx, n in enumerate(raw_news):
+                headline = n.get('title', '')
+                comm = tr_insights[idx] if idx < len(tr_insights) else ""
+                data['news_commentaries'].append({
+                    "headline": headline,
+                    "commentary": comm
+                })
+        else:
+            data['regime'] = 'NEUTRAL'
+            data['tr'] = {}
+            data['en'] = {}
+            data['ai_summary'] = None
+            data['news_commentaries'] = None
+            data['futures_note'] = None
+            data['etf_note'] = None
+            data['indicators_note'] = None
+            data['weekly_themes'] = []
 
-        # Kota aşımını önlemek için kısa bekleme
+        # Short sleep to prevent Anthropic rate limiting
         import time
-        time.sleep(5)
+        time.sleep(2)
 
         print("  → Bülten Deneyim Tasarımcısı...")
         design_report = ExperienceDesignerAgent().analyze(data)
         data['design_improvement_report'] = design_report
 
-    # ── Generate HTML ──
-    print("\nHTML bülten oluşturuluyor...")
-    html_filename = 'daily_bulletin.html'
-    generate_newsletter_html(data, html_filename)
+    # ── 4. Save Daily Snapshot and Validate (if daily run) ──
+    if edition == 'daily' and not dry_run:
+        print("\n💾 Daily Snapshot kaydediliyor...")
+        os.makedirs('snapshots', exist_ok=True)
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        snapshot_path = f"snapshots/{today_str}.json"
+        
+        # Strip complex/non-serializable types if any
+        serializable_data = json.loads(json.dumps(data, default=str))
+        
+        with open(snapshot_path, 'w', encoding='utf-8') as f:
+            json.dump(serializable_data, f, ensure_ascii=False, indent=2)
+        print(f"  ✅ Snapshot saved to {snapshot_path}")
+        
+        # Validate snapshot schema
+        validate_snapshot(serializable_data)
 
-    # ── Convert to PDF ──
-    print("\nPDF'e dönüştürülüyor...")
-    pdf_filename = 'daily_bulletin.pdf'
-    html_to_pdf(html_filename, pdf_filename)
+    # ── 5. Generate HTML and PDFs for requested languages ──
+    languages = []
+    if lang_arg == 'both':
+        languages = ['tr', 'en']
+    else:
+        languages = [lang_arg]
 
-    # ── Push to nocashflow.net website ──
-    print("\nWebsite güncelleniyor...")
-    push_file_to_website(html_filename, "daily_bulletin.html")
-    if os.path.exists(pdf_filename):
-        push_file_to_website(pdf_filename, "daily_bulletin.pdf")
+    os.makedirs('out', exist_ok=True)
 
-    # ── Generate private AI report ──
+    for lang in languages:
+        print(f"\nHTML bülten oluşturuluyor ({edition} - {lang.upper()})...")
+        
+        html_filename = f'{edition}_bulletin_{lang}.html'
+        pdf_filename = f'{edition}_bulletin_{lang}.pdf'
+        
+        if edition == 'weekly':
+            html_content = render_weekly(data, lang=lang)
+        else:
+            html_content = render_daily(data, lang=lang)
+            
+        with open(html_filename, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        print(f"  ✅ HTML bülten oluşturuldu: {os.path.abspath(html_filename)}")
+
+        # Convert to PDF
+        html_to_pdf(html_filename, pdf_filename)
+
+
+
+        # ── 7. Send Email ──
+        is_ci = os.environ.get("CI", "").lower() == "true"
+        env_send = os.environ.get("SEND_EMAIL", "").lower() == "true"
+        should_email = (is_ci or env_send or send_email_arg) and not dry_run
+        
+        if should_email:
+            print(f"\n📧 E-posta gönderimi başlatılıyor ({lang.upper()})...")
+            try:
+                send_newsletter_email(html_path=html_filename, pdf_path=pdf_filename, lang=lang, edition=edition, data=data)
+            except Exception as e:
+                print(f"  ❌ E-posta gönderimi sırasında beklenmedik hata: {e}")
+        else:
+            print(f"\n💡 E-posta gönderimi atlandı ({lang.upper()}).")
+
+    # ── 8. Generate Private AI Report ──
     print("\nAI raporları oluşturuluyor (sadece editör için)...")
     ai_report_file = generate_ai_report(data, output_filename="ai_reports.html")
 
-    # ── Generate design preview ──
-    design_report = data.get('design_improvement_report', {})
-    design_preview_file = None
-    if design_report and design_report.get('success') and design_report.get('report'):
-        design_preview_file = generate_design_preview(design_report['report'], output_filename="design_preview.html")
-
     print(f"\n{'='*50}")
-    print(f"  ✅ Bülten hazır!")
-    print(f"  HTML: {os.path.abspath(html_filename)}")
-    if os.path.exists(pdf_filename):
-        print(f"  PDF:  {os.path.abspath(pdf_filename)}")
+    print(f"  ✅ Bülten(ler) hazır!")
+    for lang in languages:
+        html_filename = f'{edition}_bulletin_{lang}.html'
+        pdf_filename = f'{edition}_bulletin_{lang}.pdf'
+        print(f"  [{lang.upper()}] HTML: {os.path.abspath(html_filename)}")
+        if os.path.exists(pdf_filename):
+            print(f"  [{lang.upper()}] PDF:  {os.path.abspath(pdf_filename)}")
     if ai_report_file:
         print(f"  📋 AI Rapor: {os.path.abspath(ai_report_file)}")
-    if design_preview_file:
-        print(f"  🎨 Tasarım Önizleme: {os.path.abspath(design_preview_file)}")
     print(f"{'='*50}")
-
-    # ── Send email (if configured) ──
-    is_ci = os.environ.get("CI", "").lower() == "true"
-    env_send = os.environ.get("SEND_EMAIL", "").lower() == "true"
-    arg_send = "--send-email" in sys.argv
-
-    print(f"\nEmail config: CI={is_ci}, SEND_EMAIL={env_send}, --send-email={arg_send}")
-
-    should_email = is_ci or env_send or arg_send
-
-    if should_email:
-        print("\n📧 E-posta gönderimi başlatılıyor...")
-        try:
-            send_newsletter_email(html_filename, data=data)
-        except Exception as e:
-            print(f"  ❌ E-posta gönderimi sırasında beklenmedik hata: {e}")
-    else:
-        print("\n💡 E-posta gönderimi atlandı (yapılandırma gereği).")
-        print("   Göndermek için: python main.py --send-email veya SEND_EMAIL=true set edin.")
 
 
 if __name__ == "__main__":
     print("=" * 50)
-    print("  Orkun Biçen — Daily Financial Bulletin")
+    print("  Orkun Biçen — Financial Bulletin Pipeline")
     print("=" * 50)
     print()
-    generate_daily_newsletter()
+    run_pipeline()

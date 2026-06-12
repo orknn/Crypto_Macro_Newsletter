@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DailySnapshot",
+  "type": "object",
+  "required": ["date", "crypto_prices", "macro_indicators", "etf_flows"],
+  "properties": {
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "crypto_prices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["Symbol", "Current Price USD", "24h %"],
+        "properties": {
+          "Symbol": { "type": "string" },
+          "Current Price USD": { "type": "number" },
+          "1h %": { "type": "number" },
+          "24h %": { "type": "number" },
+          "7d %": { "type": "number" },
+          "30d %": { "type": "number" }
+        }
+      }
+    },
+    "macro_indicators": {
+      "type": "object"
+    },
+    "fear_and_greed": {
+      "type": "object",
+      "properties": {
+        "value": { "type": "integer" },
+        "classification": { "type": "string" }
+      }
+    },
+    "funding_rates": {
+      "type": "object"
+    },
+    "open_interest": {
+      "type": "object"
+    },
+    "economic_calendar": {
+      "type": "array"
+    },
+    "etf_flows": {
+      "type": ["object", "null"]
+    },
+    "stablecoin_data": {
+      "type": "object"
+    }
+  }
+}

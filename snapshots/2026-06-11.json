@@ -1,0 +1,47 @@
+{
+  "date": "2026-06-11",
+  "crypto_prices": [
+    {
+      "Symbol": "BTC",
+      "Current Price USD": 67000.0,
+      "24h %": 1.2
+    }
+  ],
+  "macro_indicators": {},
+  "etf_flows": null,
+  "economic_calendar": [
+    {
+      "date": "12 Jun Fri",
+      "timestamp": 1781260800,
+      "time": "3:30 PM",
+      "country": "USD",
+      "event": "Core CPI YoY",
+      "importance": 3,
+      "previous": "3.4%",
+      "forecast": "3.3%",
+      "actual": "3.3%"
+    },
+    {
+      "date": "12 Jun Fri",
+      "timestamp": 1781260800,
+      "time": "3:30 PM",
+      "country": "USD",
+      "event": "Core CPI MoM",
+      "importance": 3,
+      "previous": "0.3%",
+      "forecast": "0.2%",
+      "actual": ""
+    },
+    {
+      "date": "17 Jun Wed",
+      "timestamp": 1781692800,
+      "time": "9:00 PM",
+      "country": "USD",
+      "event": "FOMC Press Conference",
+      "importance": 3,
+      "previous": "—",
+      "forecast": "—",
+      "actual": null
+    }
+  ]
+}

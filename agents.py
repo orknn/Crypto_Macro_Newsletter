@@ -7,20 +7,32 @@ import json
 import time
 
 
-def _call_with_retry(client, system_prompt, user_prompt, max_retries=3):
-    """Call Claude API with automatic retry on rate limit errors."""
+def _call_with_retry(client, system_prompt, user_prompt, max_tokens=4000, max_retries=3):
+    """Call Claude API with automatic retry on rate limit errors and logging."""
+    import os as _os
     for attempt in range(max_retries):
         try:
             response = client.messages.create(
                 model="claude-sonnet-4-20250514",
-                max_tokens=1500,
+                max_tokens=max_tokens,
                 temperature=0.7,
                 system=system_prompt,
                 messages=[
                     {"role": "user", "content": user_prompt}
                 ]
             )
-            return response.content[0].text.strip()
+            result_text = response.content[0].text.strip()
+            
+            # Log AI call to fetch_report.json
+            _log_ai_call(
+                model="claude-sonnet-4-20250514",
+                max_tokens=max_tokens,
+                prompt_length=len(user_prompt),
+                response_length=len(result_text),
+                status="success"
+            )
+            
+            return result_text
         except Exception as e:
             error_str = str(e)
             if ('429' in error_str or 'rate' in error_str.lower()) and attempt < max_retries - 1:
@@ -28,7 +40,46 @@ def _call_with_retry(client, system_prompt, user_prompt, max_retries=3):
                 print(f"    ⏳ Rate limit, {wait_time}s bekleniyor... (deneme {attempt + 2}/{max_retries})")
                 time.sleep(wait_time)
             else:
+                _log_ai_call(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=max_tokens,
+                    prompt_length=len(user_prompt),
+                    response_length=0,
+                    status=f"error: {error_str[:200]}"
+                )
                 raise
+
+
+def _log_ai_call(model, max_tokens, prompt_length, response_length, status):
+    """Log AI API call details to fetch_report.json under 'ai_call' key."""
+    import os as _os
+    report_path = "fetch_report.json"
+    report_data = {}
+    if _os.path.exists(report_path):
+        try:
+            with open(report_path, 'r', encoding='utf-8') as f:
+                report_data = json.load(f)
+        except Exception:
+            pass
+    
+    if "ai_calls" not in report_data:
+        report_data["ai_calls"] = []
+    
+    from datetime import datetime as _dt
+    report_data["ai_calls"].append({
+        "model": model,
+        "max_tokens": max_tokens,
+        "prompt_chars": prompt_length,
+        "response_chars": response_length,
+        "status": status,
+        "timestamp": _dt.now().isoformat()
+    })
+    
+    try:
+        with open(report_path, 'w', encoding='utf-8') as f:
+            json.dump(report_data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 
 # ═══════════════════════════════════════════
@@ -37,38 +88,138 @@ def _call_with_retry(client, system_prompt, user_prompt, max_retries=3):
 
 CONTENT_EDITOR_SYSTEM_PROMPT = """Sen, küresel piyasa analizi ve dijital yayıncılık konusunda uzmanlaşmış bir Kıdemli Finansal İçerik Editörüsün.
 
-Görevin üçlü:
+Görevin, günlük piyasa verilerini ve haber gelişmelerini analiz ederek hem Türkçe (tr) hem de İngilizce (en) dillerinde bülten içeriğini tek bir JSON nesnesinde üretmektir.
 
-A) GENEL DEĞERLENDİRME YAZIMI:
-- Günün piyasa verilerini analiz ederek profesyonel bir Türkçe "Genel Değerlendirme" paragrafı yaz.
-- Paragraf 4-6 cümle olsun. Okuyucuya günün piyasa resmini çizsin.
-- Makroekonomik göstergeler (VIX, DXY, 10Y Yield), kripto piyasası (Fear & Greed, BTC Dominance, Total Market Cap) ve varsa günün öne çıkan ekonomik verilerini kapsasın.
-- ÖNEMLİ KURAL: Eğer o hafta açıklanmış veya açıklanacak olan enflasyon (CPI, PPI, PCE) veya ABD Merkez Bankası (Fed / FOMC) faiz kararı verisi varsa, BUNU KESİNLİKLE genel değerlendirmenin içine dahil edip yorumla.
-- Finansal terimler İngilizce olsun (market cap, Fear & Greed Index, VIX, DXY, yield spread vb.).
-- Açıklamalar akıcı Türkçe olsun. Kuru veri listesi değil, analitik bir yorum olsun.
-- HTML tag kullanabilirsin: <strong> (vurgu), <span class='highlight'> (rakamsal vurgu).
-- DİKKAT: Sadece sana JSON içinde verilen verileri kullan. Eğer bir verinin değeri 0.0 veya eksik ise, fiyat veya veri uydurma (hallucination yapma!). O eksik verinin çekilemediğini belirt veya analizden çıkar.
+Piyasa Durumu Rejimi (regime):
+Piyasa verilerine ve risk duyarlılığına dayanarak şu üç rejimden birini seç: "RISK_ON", "NEUTRAL" veya "RISK_OFF".
 
-B) HABER YORUMLARI & MANŞET ÇEVİRİSİ:
-- Sana verilen İngilizce (veya karmaşık) haber başlıklarını (original_headline) al ve profesyonel, ciddi, premium bir ekonomi gazetesi (örn. Bloomberg, Aposto) diliyle Türkçe manşete (turkish_headline) çevir.
-- Çevrilen her haber başlığı için profesyonel ve analitik 1-2 cümlelik kısa bir Türkçe yorum (commentary) yaz. Yorum, haberin piyasalar üzerindeki olası etkisini açıklasın.
-- Finansal terimler İngilizce okunsun (örn. yield, market cap), geri kalan her şey Türkçe olsun.
+Her dil (tr ve en) için aşağıdaki alanları doldurmalısın:
+1. "regime_line": Seçilen rejim için tek cümlelik, vurucu bir piyasa hükmü (Örn: TR: "Hisse senetlerindeki ralli ve ETF girişleri risk iştahını destekliyor." / EN: "Stock rally and ETF inflows support risk appetite.")
+2. "overview" (Genel Değerlendirme):
+   - Günün piyasa verilerini analiz eden profesyonel bir özet paragrafı (4-6 cümle).
+   - Makroekonomik göstergeleri (VIX, DXY, 10Y Yield), kripto piyasasını (Fear & Greed, BTC Dominance, Total Market Cap) ve varsa günün öne çıkan ekonomik verilerini içermelidir.
+   - ÖNEMLİ: Eğer o hafta açıklanmış veya açıklanacak olan enflasyon (CPI, PPI, PCE) veya Fed / FOMC faiz kararı verisi varsa, bunu kesinlikle genel değerlendirme içine dahil edip yorumla.
+   - HTML etiketleri kullanabilirsin: <strong> (vurgu), <span class='highlight'> (rakamsal vurgu).
+   - Fiyat veya veri uydurma (hallucinate yapma!). Eksik veya 0.0 olan verileri analizden çıkar.
+3. "notes" (Gösterge Notları):
+   - "futures_note": Kripto vadeli işlem primleri (Basis) ve funding rate'ler hakkında 1-2 cümlelik analitik not.
+   - "etf_note": Spot Bitcoin ETF akışları (özellikle IBIT ve FBTC) ve bu akışların nasıl okunması gerektiğine dair (pozitif girişler = alım baskısı, negatif çıkışlar = satış baskısı) 1-2 cümlelik eğitici not.
+   - "indicators_note": Ek piyasa göstergelerindeki (2Y-10Y Spread, Stablecoin MCAP, SMH) değişimlerin risk iştahı üzerindeki etkisi hakkında 1-2 cümlelik analitik not.
+4. "insights":
+   - Sana verilen her haber maddesi için sırasıyla 1-2 cümlelik profesyonel bir finansal yorum (commentary).
+   - KRİTİK FİLTRE KURALI: Eğer haber zaten genel bir piyasa yorumu veya listicle ise (örneğin "Cramer'ın izlenmesi gereken listesi", "İşte piyasada bilmeniz gerekenler"), bu haber için insight üretme ve listedeki o elemanı boş string ("") olarak bırak.
+   - Her geçerli insight, haberi bültendeki diğer verilerle (funding rates, ETF flows, Coinbase premium, macro yields) ilişkilendirmelidir.
+   - insights listesindeki eleman sayısı, giriş haber sayısı ile tam olarak aynı olmalıdır.
+   - MUTLAK KURAL: Haber listesi boşsa insights: [] dön. Asla haber UYDURMA. AI'ın haber konusundaki tek görevi, kendisine verilen gerçek haberlere insight yazmaktır.
 
-C) İÇERİK STRATEJİ ÖNERİLERİ:
-- Bültendeki mevcut bölümleri değerlendir.
-- Çıkarılması gereken gereksiz bölümler varsa öner (type: "cikar").
-- Eklenmesi gereken yeni veri veya bölüm varsa öner (type: "ekle"). Ücretsiz API kaynağı da belirt.
-- Toplam 2-4 öneri yeterli.
+DİL VE ANLATIM KURALLARI:
+- İki dil aynı analizi anlatmalıdır; birebir motamot çeviri olması gerekmez, her dilde doğal ve akıcı finansal terminoloji kullanılmalıdır. Sayılar ve veriler iki dilde de tamamen aynı olmalıdır.
 
-E) KPI BÖLÜM ANALİZLERİ (Yeni):
-Aşağıdaki 4 spesifik alan için, o anki verilere bakarak ziyaretçiyi eğiten, kısa ve analitik Türkçe birer "Gösterge Notu" yaz (1-2 cümle):
-- futures_note: Kripto Vadeli İşlem primleri (Basis) ne anlatıyor?
-- etf_note: Spot Bitcoin ETF akışları (özellikle IBIT ve FBTC) ve Kurumsal İlgi ne durumda?
-- options_note: Deribit Opsiyon piyasasındaki Put/Call Ratio (PCR) ve DVOL (Zımni Volatilite) neye işaret ediyor?
-- indicators_note: Ek Piyasa Göstergelerindeki 2Y-10Y Spread, Stablecoin MCAP ve SMH tarafındaki değişimler makro risk iştahını nasıl etkiliyor?
+ÇIKTI JSON ŞEMASI (MUTLAKA BU FORMATTA OLMALIDIR):
+{
+  "regime": "RISK_ON" | "NEUTRAL" | "RISK_OFF",
+  "tr": {
+    "regime_line": "...",
+    "overview": "...",
+    "notes": {
+      "futures_note": "...",
+      "etf_note": "...",
+      "indicators_note": "..."
+    },
+    "insights": ["...", "..."]
+  },
+  "en": {
+    "regime_line": "...",
+    "overview": "...",
+    "notes": {
+      "futures_note": "...",
+      "etf_note": "...",
+      "indicators_note": "..."
+    },
+    "insights": ["...", "..."]
+  }
+}
+"""
 
-ÖNEMLİ: Yanıtını MUTLAKA aşağıdaki JSON formatında ver, başka format kabul edilmez:
-{"genel_degerlendirme": "...", "korelasyon_notu": "...", "news_commentaries": [{"original_headline": "...", "turkish_headline": "...", "commentary": "..."}], "content_suggestions": [{"type": "ekle/cikar", "title": "...", "reason": "..."}], "futures_note": "...", "etf_note": "...", "options_note": "...", "indicators_note": "..."}"""
+WEEKLY_CONTENT_EDITOR_SYSTEM_PROMPT = """Sen, küresel piyasa analizi ve stratejik finansal yayıncılık konusunda uzmanlaşmış bir Kıdemli Finansal İçerik Editörüsün.
+
+Görevin, haftalık piyasa verilerini ve haber gelişmelerini analiz ederek hem Türkçe (tr) hem de İngilizce (en) dillerinde bülten içeriğini tek bir JSON nesnesinde üretmektir.
+
+Piyasa Durumu Rejimi (regime):
+Piyasa verilerine ve risk duyarlılığına dayanarak şu üç rejimden birini seç: "RISK_ON", "NEUTRAL" veya "RISK_OFF".
+
+Her dil (tr ve en) için aşağıdaki alanları doldurmalısın:
+1. "regime_line": Seçilen rejim için tek cümlelik, vurucu bir piyasa hükmü (Örn: TR: "Likidite daralması ve artan tahvil faizleri risk iştahını gölgeliyor." / EN: "Liquidity contraction and rising bond yields shadow risk appetite.")
+2. "themes":
+   - Haftanın en önemli 3 makro/kripto teması. Her tema bir başlık ("title", en fazla 2-3 kelime, örn: "LIKIDITE RUZGARI" veya "JEOPOLITIK GERILIM") ve 2-3 cümlelik açıklama ("description") içermelidir.
+3. "notes":
+   - "liquidity_note": Haftalık Fed Net Likiditesi ve para arzı (M2) üzerine analitik not (1-2 cümle).
+   - "inflation_note": ABD enflasyon patikası (CPI/PCE) üzerine analitik not (1-2 cümle).
+   - "stablecoin_note": Stablecoin arzlarındaki değişim ve pazar payı savaşı üzerine analitik not (1-2 cümle).
+   - "etf_note": Haftalık spot ETF akışları (IBIT, FBTC) ve kurumsal ilginin nasıl okunacağına dair (pozitif akış = alım baskısı, negatif akış = satış baskısı) eğitici analitik not (1-2 cümle).
+   - "rotation_note": Sektör rotasyon eğilimleri üzerine analitik not (1-2 cümle).
+   - "cycle_note": Bitcoin döngüsel göstergeleri (Mayer, 200WMA, drawdown) üzerine analitik not (1-2 cümle).
+   - "correlation_note": Varlıklar arası korelasyon matrisi üzerine analitik not (1-2 cümle).
+   - "futures_note": Vadeli yapı, funding ve konumlanma üzerine analitik not (1-2 cümle).
+   - "week_plan_note": Önümüzdeki haftanın stratejik planı ve beklentileri üzerine analitik not (1-2 cümle).
+   - "news_note": Haftanın en kritik haber gelişmelerinin makro etkileri üzerine analitik özet not (1-2 cümle).
+4. "insights":
+   - Sana verilen her haber maddesi için sırasıyla 1-2 cümlelik profesyonel bir finansal yorum (commentary).
+   - KRİTİK FİLTRE KURALI: Eğer haber zaten genel bir piyasa yorumu veya listicle ise (örneğin "Cramer'ın izlenmesi gereken listesi", "İşte piyasada bilmeniz gerekenler"), bu haber için insight üretme ve listedeki o elemanı boş string ("") olarak bırak.
+   - Her geçerli insight, haberi bültendeki diğer verilerle ilişkilendirerek analitik bağ kurmalıdır.
+   - insights listesindeki eleman sayısı, giriş haber sayısı ile tam olarak aynı olmalıdır.
+   - MUTLAK KURAL: Haber listesi boşsa insights: [] dön. Asla haber UYDURMA. AI'ın haber konusundaki tek görevi, kendisine verilen gerçek haberlere insight yazmaktır.
+
+DİL VE ANLATIM KURALLARI:
+- İki dil aynı analizi anlatmalıdır; birebir motamot çeviri olması gerekmez, her dilde doğal ve akıcı finansal terminoloji kullanılmalıdır. Sayılar ve veriler iki dilde de tamamen aynı olmalıdır.
+
+ÇIKTI JSON ŞEMASI (MUTLAKA BU FORMATTA OLMALIDIR):
+{
+  "regime": "RISK_ON" | "NEUTRAL" | "RISK_OFF",
+  "tr": {
+    "regime_line": "...",
+    "themes": [
+      {"title": "...", "description": "..."},
+      {"title": "...", "description": "..."},
+      {"title": "..." ,"description": "..."}
+    ],
+    "notes": {
+      "liquidity_note": "...",
+      "inflation_note": "...",
+      "stablecoin_note": "...",
+      "etf_note": "...",
+      "rotation_note": "...",
+      "cycle_note": "...",
+      "correlation_note": "...",
+      "futures_note": "...",
+      "week_plan_note": "...",
+      "news_note": "..."
+    },
+    "insights": ["...", "..."]
+  },
+  "en": {
+    "regime_line": "...",
+    "themes": [
+      {"title": "...", "description": "..."},
+      {"title": "...", "description": "..."},
+      {"title": "...", "description": "..."}
+    ],
+    "notes": {
+      "liquidity_note": "...",
+      "inflation_note": "...",
+      "stablecoin_note": "...",
+      "etf_note": "...",
+      "rotation_note": "...",
+      "cycle_note": "...",
+      "correlation_note": "...",
+      "futures_note": "...",
+      "week_plan_note": "...",
+      "news_note": "..."
+    },
+    "insights": ["...", "..."]
+  }
+}
+"""
 
 EXPERIENCE_DESIGNER_SYSTEM_PROMPT = """Sen, finans sektörüne özel dijital ürün tasarımında 10+ yıl deneyimli, kıdemli bir UX/UI Tasarımcısısın.
 
@@ -99,107 +250,15 @@ Maksimum 5 öneri ver. Her öneri UYGULANABİLİR ve SOMUT olmalı."""
 # ═══════════════════════════════════════════
 
 def _prepare_data_summary(data):
-    """Create a concise JSON summary of the newsletter data for the LLM."""
-    summary = {}
-
-    # Crypto prices (top 5 + notable movers)
-    crypto = data.get('crypto_prices', [])
-    if crypto:
-        summary['crypto_top5'] = [
-            {'symbol': c['Symbol'], 'price': c.get('Current Price USD', 0),
-             '24h': c.get('24h %', 0), '7d': c.get('7d %', 0)}
-            for c in crypto[:5]
-        ]
-        sorted_by_change = sorted(crypto, key=lambda x: abs(x.get('24h %', 0)), reverse=True)
-        summary['biggest_movers'] = [
-            {'symbol': c['Symbol'], '24h': c.get('24h %', 0)}
-            for c in sorted_by_change[:3]
-        ]
-
-    # Market overview
-    overview = data.get('crypto_market_overview', {})
-    if overview:
-        summary['market_overview'] = {
-            'total_market_cap_usd': overview.get('total_market_cap', 0),
-            'btc_dominance': overview.get('btc_dominance', 0),
-            'market_cap_change_24h': overview.get('market_cap_change_24h', 0),
-        }
-
-    # Fear & Greed
-    fng = data.get('fear_and_greed', {})
-    if fng:
-        summary['fear_greed'] = fng
-
-    # Macro indicators
-    macro = data.get('macro_indicators', {})
-    if macro:
-        summary['macro'] = {k: v for k, v in macro.items() if not k.endswith('_chg')}
-        summary['macro_changes'] = {k: v for k, v in macro.items() if k.endswith('_chg')}
-
-    # Commodities
-    commodities = data.get('commodities', [])
-    if commodities:
-        summary['commodities'] = [
-            {'name': c['Name'], 'price': c.get('Price', 0), 'change': c.get('Change %', 0)}
-            for c in commodities
-        ]
-
-    # Magnificent 7
-    mag7 = data.get('magnificent_7', [])
-    if mag7:
-        summary['magnificent_7'] = [
-            {'symbol': s['Symbol'], 'price': s.get('Price', 0), 'change': s.get('Change %', 0)}
-            for s in mag7
-        ]
-
-    # Funding rates
-    funding = data.get('funding_rates', {})
-    if funding:
-        summary['funding_rates'] = funding
-
-    # Coinbase Premium
-    cp = data.get('coinbase_premium', {})
-    if cp:
-        summary['coinbase_premium'] = cp.get('current_value', 0)
-
-    # News
-    news = data.get('macro_news', {})
-    if news:
-        # Strip massive base64 image_urls before JSON dump to save tokens
-        summary['news_headlines'] = [{'title': n.get('title', '')} for n in news.get('news', [])]
-
-    # Options data
-    options = data.get('options_data', {})
-    if options:
-        summary['options'] = options
-
-    # Economic calendar
-    calendar = data.get('economic_calendar', [])
-    if calendar:
-        summary['economic_calendar'] = [
-            {'event': e.get('event', ''), 'country': e.get('country', ''),
-             'forecast': e.get('forecast', '—'), 'actual': e.get('actual', '—')}
-            for e in calendar[:5]
-        ]
-        
-    # ETF Flows
-    etf = data.get('etf_flows', {})
-    if etf:
-        summary['etf_flows'] = etf
-
-    # Current newsletter sections
-    summary['current_sections'] = [
-        'Genel Değerlendirme',
-        'Haftalık Ekonomik Takvim',
-        'Günün Öne Çıkan Verileri (KPI)',
-        'Coinbase Premium Index',
-        'BTC Support & Resistance Analizi',
-        'Deribit Opsiyon Piyasaları Analizi',
-        'Asset Summary (Commodities, Magnificent 7, Crypto Watchlist)',
-        'Öne Çıkan Haberler',
-    ]
-
+    """Create a clean copy of the newsletter data for the LLM, excluding AI outputs."""
+    exclude_keys = {
+        'tr', 'en', 'ai_summary', 'news_commentaries', 
+        'design_improvement_report', 'futures_note', 
+        'etf_note', 'indicators_note', 'weekly_themes'
+    }
+    summary = {k: v for k, v in data.items() if k not in exclude_keys}
     return summary
+
 
 
 def _prepare_design_context():
@@ -251,9 +310,7 @@ body { background: var(--navy); font-family: 'Inter', sans-serif; color: var(--t
             'Haftalık Ekonomik Takvim (table)',
             'KPI cards (6 horizontal)',
             'Coinbase Premium SVG bar chart',
-            'BTC Support & Resistance card',
             'Spot Bitcoin ETF Flows',
-            'Deribit Options KPI cards',
             'Extra indicators (Yield Spread, Stablecoin, SMH)',
             'Asset tables (Commodities, Magnificent 7, Crypto)',
             'News stories with AI Insight commentary',
@@ -268,81 +325,86 @@ body { background: var(--navy); font-family: 'Inter', sans-serif; color: var(--t
 class ContentEditorAgent:
     """
     Finansal İçerik Editörü Agent.
-    Bülten içeriğini analiz edip İçerik Strateji Raporu üretir.
+    Bülten içeriğini analiz edip hem Türkçe hem İngilizce bülten çıktısı üretir.
     """
 
-    def analyze(self, data):
+    def analyze(self, data, edition='daily'):
         """
-        Analyze newsletter data and produce:
-        - genel_degerlendirme: AI-written Turkish market summary
-        - news_commentaries: AI commentary for each news headline
-        Returns a dict with structured output.
+        Analyze newsletter data and produce structured commentary.
         """
         api_key = os.environ.get('ANTHROPIC_API_KEY', '')
         if not api_key:
-            print("    ⚠️  ANTHROPIC_API_KEY tanımlı değil — İçerik Editörü atlanıyor.")
-            return {'success': False, 'genel_degerlendirme': None, 'korelasyon_notu': None, 'news_commentaries': None}
+            print(f"    ⚠️  ANTHROPIC_API_KEY tanımlı değil — İçerik Editörü atlanıyor ({edition}).")
+            return {
+                'success': False,
+                'regime': 'NEUTRAL',
+                'tr': {},
+                'en': {}
+            }
 
         try:
             from anthropic import Anthropic
             client = Anthropic(api_key=api_key)
 
             data_summary = _prepare_data_summary(data)
+            
             raw_news = data.get('macro_news', {}).get('news', [])
-            # Extract just the titles so the AI doesn't get confused by image URLs
-            news_headlines = [n['title'] if isinstance(n, dict) else n for n in raw_news]
+            news_inputs = [{"title": n.get('title'), "summary": n.get('summary')} for n in raw_news]
 
-            user_prompt = f"""Aşağıda bugünkü finans bülteninin tüm canlı piyasa verileri yer almaktadır.
+            if edition == 'weekly':
+                user_prompt = f"""Aşağıda bu haftanın bülten verileri ve haber gelişmeleri yer almaktadır.
+Bu verileri analiz ederek haftalık bülten için tek bir dual-language JSON çıktısı oluştur:
 
-Bu verileri analiz ederek aşağıdaki JSON formatında yanıt ver:
-
-1. "genel_degerlendirme": Bültenin "Genel Değerlendirme" bölümü için profesyonel bir Türkçe piyasa özeti paragrafı (4-6 cümle). HTML tag kullanabilirsin (<strong>, <span class='highlight'>).
-
-2. "korelasyon_notu": Güncel verilere bağlı kalarak varlık korelasyonları ve risk iştahı hakkında 1-2 cümlelik analitik bir söz/not (kısa ve vurucu).
-
-3. "news_commentaries": Aşağıdaki her haber başlığı için JSON içerisinde "original_headline" (orijinal İngilizce başlık), "turkish_headline" (çevrilmiş profesyonel Türkçe manşet) ve "commentary" (1-2 cümlelik Türkçe analiz) alanlarını doldur.
-
-4. "futures_note": Crypto Futures Basis (Vadeli İşlem Primleri) anlık verisi üzerine eğitici analitik not (1-2 cümle).
-
-5. "etf_note": Spot Bitcoin ETF Günlük Akış (Özellikle IBIT, FBTC) verisine ve kurumsal ilgiye dair eğitici analitik not (1-2 cümle).
-
-6. "options_note": Deribit Opsiyon verileri (PCR, DVOL) üzerine eğitici analitik not (1-2 cümle).
-
-7. "indicators_note": Ek Piyasa Göstergeleri (2Y-10Y Spread, Stablecoin, SMH) üzerine eğitici analitik not (1-2 cümle).
-
-Haber Başlıkları:
-{json.dumps(news_headlines, ensure_ascii=False)}
+Haber Maddeleri:
+{json.dumps(news_inputs, ensure_ascii=False, indent=2)}
 
 Piyasa Verileri:
 ```json
 {json.dumps(data_summary, ensure_ascii=False, indent=2, default=str)}
 ```
 
-YANITINI SADECE JSON OLARAK VER, başka metin ekleme."""
+YANITINI SADECE JSON OLARAK VER, başka metin ekleme. JSON içindeki metin alanlarında çift tırnak işaretlerini kesinlikle kaçış karakteriyle (\\") yaz veya tek tırnak (') kullan."""
+                
+                raw_response = _call_with_retry(client, WEEKLY_CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt, max_tokens=4000)
+                result = self._parse_response(raw_response)
+                print("    ✅ Haftalık Temalar ve Dinamik KPI Notları (TR/EN) üretildi.")
+                return {
+                    'success': True,
+                    'regime': result.get('regime', 'NEUTRAL'),
+                    'tr': result.get('tr', {}),
+                    'en': result.get('en', {})
+                }
+            else:
+                user_prompt = f"""Aşağıda bugünkü finans bülteninin tüm canlı piyasa verileri ve haber gelişmeleri yer almaktadır.
+Bu verileri analiz ederek günlük bülten için tek bir dual-language JSON çıktısı oluştur:
 
-            raw_response = _call_with_retry(client, CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt)
-            
-            # Parse JSON from response
-            result = self._parse_response(raw_response)
-            print("    ✅ Genel Değerlendirme, Haber Yorumları ve Dinamik KPI Notları üretildi.")
-            return {
-                'success': True,
-                'genel_degerlendirme': result.get('genel_degerlendirme'),
-                'korelasyon_notu': result.get('korelasyon_notu'),
-                'news_commentaries': result.get('news_commentaries', []),
-                'content_suggestions': result.get('content_suggestions', []),
-                'futures_note': result.get('futures_note'),
-                'etf_note': result.get('etf_note'),
-                'options_note': result.get('options_note'),
-                'indicators_note': result.get('indicators_note'),
-            }
+Haber Maddeleri:
+{json.dumps(news_inputs, ensure_ascii=False, indent=2)}
+
+Piyasa Verileri:
+```json
+{json.dumps(data_summary, ensure_ascii=False, indent=2, default=str)}
+```
+
+YANITINI SADECE JSON OLARAK VER, başka metin ekleme. JSON içindeki metin alanlarında çift tırnak işaretlerini kesinlikle kaçış karakteriyle (\\") yaz veya tek tırnak (') kullan."""
+
+                raw_response = _call_with_retry(client, CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt, max_tokens=4000)
+                result = self._parse_response(raw_response)
+                print("    ✅ Genel Değerlendirme, Haber Yorumları ve Dinamik KPI Notları (TR/EN) üretildi.")
+                return {
+                    'success': True,
+                    'regime': result.get('regime', 'NEUTRAL'),
+                    'tr': result.get('tr', {}),
+                    'en': result.get('en', {})
+                }
 
         except Exception as e:
             print(f"    ⚠️  İçerik Editörü hatası: {e}")
             return {
-                'success': False, 'genel_degerlendirme': None, 'korelasyon_notu': None, 
-                'news_commentaries': None, 'content_suggestions': None,
-                'futures_note': None, 'etf_note': None, 'options_note': None, 'indicators_note': None
+                'success': False,
+                'regime': 'NEUTRAL',
+                'tr': {},
+                'en': {}
             }
 
     def _parse_response(self, raw):
@@ -357,17 +419,15 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme."""
                 if "```json" in raw:
                     json_str = raw.split("```json")[1].split("```")[0].strip()
                 elif "```" in raw:
-                    # Fallback for generic code block
                     json_str = raw.split("```")[1].split("```")[0].strip()
                 else:
-                    json_str = text # Should not happen if it starts with ```
+                    json_str = text
                 
                 try:
                     parsed = json.loads(json_str)
                     return parsed
                 except json.JSONDecodeError as e_inner:
                     print(f"JSON Parse Error (from markdown block): {e_inner}")
-                    print(f"RAW TEXT WAS: {raw}")
                     return {}
             
             # If not a markdown block and direct parse failed, try to find JSON object in the text
