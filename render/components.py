@@ -58,14 +58,19 @@ def _fmt_change(val):
     arrow = "▲" if val >= 0 else "▼"
     return f"{arrow} {sign}{val:.2f}%", cls
 
-def html_wrapper(title, content, accent_color="#3b82f6", lang="tr"):
+def html_wrapper(title, content, accent_color="#3b82f6", lang="tr", is_weekly=False):
     """Wrap content in base HTML template with CSS styling."""
+    other_lang = "en" if lang == "tr" else "tr"
+    type_path = "weekly" if is_weekly else "daily"
+    alt_url = f"https://nocashflow.net/bulletins/{type_path}/latest.{other_lang}.html"
+    
     return f'''<!DOCTYPE html>
 <html lang="{lang}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{title}</title>
+  <link rel="alternate" hreflang="{other_lang}" href="{alt_url}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
@@ -730,7 +735,8 @@ def render_footer(lang='tr', date_str='', is_weekly=False):
     
     # Web read link
     if is_weekly:
-        week_str = now.strftime("%Y-W%U")
+        iso_year, iso_week, _ = now.isocalendar()
+        week_str = f"{iso_year}-W{iso_week:02d}"
         archive_url = f"https://nocashflow.net/bulletins/weekly/{week_str}.{lang}.html"
     else:
         today_str = now.strftime("%Y-%m-%d")

@@ -39,6 +39,49 @@ jobs:
         run: |
           python main.py --edition weekly --send-email
 
+      - name: Push to website repository
+        env:
+          WEBSITE_PUSH_TOKEN: ${{ secrets.WEBSITE_PUSH_TOKEN }}
+        run: |
+          # 1. Clone website repo
+          git clone https://x-token-auth:${WEBSITE_PUSH_TOKEN}@github.com/orknn/nocashflow.net.git website
+          
+          # 2. Get ISO week number and today's date
+          WEEK=$(date +%Y-W%V)
+          TODAY=$(date +%Y-%m-%d)
+          echo "Processing weekly bulletin for week: $WEEK (today: $TODAY)"
+          
+          # 3. Create target directory
+          mkdir -p website/bulletins/weekly
+          
+          # 4. Copy latest files
+          cp weekly_bulletin_tr.html website/bulletins/weekly/latest.tr.html
+          cp weekly_bulletin_en.html website/bulletins/weekly/latest.en.html
+          
+          # 5. Copy dated/weekly files
+          cp weekly_bulletin_tr.html website/bulletins/weekly/${WEEK}.tr.html
+          cp weekly_bulletin_en.html website/bulletins/weekly/${WEEK}.en.html
+          
+          # 6. Apply hreflang alternate URL replacements for weekly files
+          # tr file alternate link points to weekly en file
+          sed -i "s|/bulletins/weekly/latest.en.html|/bulletins/weekly/${WEEK}.en.html|g" website/bulletins/weekly/${WEEK}.tr.html
+          # en file alternate link points to weekly tr file
+          sed -i "s|/bulletins/weekly/latest.tr.html|/bulletins/weekly/${WEEK}.tr.html|g" website/bulletins/weekly/${WEEK}.en.html
+          
+          # 7. Commit & Push
+          cd website
+          git config user.name "nocashflow-bulletin-bot"
+          git config user.email "bot@nocashflow.net"
+          git add bulletins/weekly/
+          
+          # Check changes and commit
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "bulletin: weekly ${TODAY}"
+            git push origin main
+          else
+            echo "No changes to commit."
+          fi
+
       - name: Upload weekly bulletin as artifact
         uses: actions/upload-artifact@v4
         if: always()

@@ -673,5 +673,6 @@ def render_weekly(data, lang='tr'):
         title="Haftalık Stratejik Analiz" if lang == 'tr' else "Weekly Deep Dive Bulletin",
         content=content_html,
         accent_color=gold_color,
-        lang=lang
+        lang=lang,
+        is_weekly=True
     )

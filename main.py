@@ -32,65 +32,7 @@ from ai_report_generator import generate_ai_report
 from email_sender import send_newsletter_email
 
 
-def push_file_to_website(local_path, repo_path):
-    """
-    Push a file to nocashflow.net repo.
-    Requires GITHUB_TOKEN env variable (set as GitHub Secret).
-    """
-    token = os.environ.get("GITHUB_TOKEN")
-    if not token:
-        print("⚠️  GITHUB_TOKEN not set — skipping website push.")
-        return False
 
-    if not os.path.isfile(local_path):
-        print(f"❌ File not found: {local_path}")
-        return False
-
-    with open(local_path, "rb") as f:
-        content_b64 = base64.b64encode(f.read()).decode("utf-8")
-
-    api_url = f"https://api.github.com/repos/orknn/nocashflow.net/contents/{repo_path}"
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "nocashflow-bulletin-bot",
-    }
-
-    try:
-        req = urllib.request.Request(api_url, headers=headers)
-        with urllib.request.urlopen(req) as resp:
-            file_info = json.loads(resp.read().decode("utf-8"))
-        sha = file_info.get("sha")
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            sha = None  # File doesn't exist yet
-        else:
-            print(f"❌ GitHub API error getting SHA for {repo_path}: {e.code}")
-            return False
-
-    # Commit message with today's date
-    today = datetime.now().strftime("%Y-%m-%d")
-    payload = {
-        "message": f"bulletin: auto-update {repo_path} {today}",
-        "content": content_b64,
-        "branch": "main",
-    }
-    if sha:
-        payload["sha"] = sha
-
-    try:
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            api_url, data=data, headers={**headers, "Content-Type": "application/json"},
-            method="PUT"
-        )
-        with urllib.request.urlopen(req) as resp:
-            print(f"  ✅ Website updated: {repo_path}")
-            return True
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8")
-        print(f"  ❌ GitHub push failed for {repo_path}: {e.code} — {body}")
-        return False
 
 
 def html_to_pdf(html_path, pdf_path):
@@ -548,24 +490,7 @@ def run_pipeline():
         # Convert to PDF
         html_to_pdf(html_filename, pdf_filename)
 
-        # ── 6. Push to website (if not dry run) ──
-        if not dry_run:
-            print(f"\nWebsite güncelleniyor ({lang.upper()})...")
-            today_str = datetime.now().strftime("%Y-%m-%d")
-            week_str = datetime.now().strftime("%Y-W%U")
-            
-            if edition == 'weekly':
-                push_file_to_website(html_filename, f"bulletins/weekly/{week_str}.{lang}.html")
-                push_file_to_website(html_filename, f"bulletins/weekly/latest.{lang}.html")
-                if os.path.exists(pdf_filename):
-                    push_file_to_website(pdf_filename, f"bulletins/weekly/{week_str}.{lang}.pdf")
-                    push_file_to_website(pdf_filename, f"bulletins/weekly/latest.{lang}.pdf")
-            else:
-                push_file_to_website(html_filename, f"bulletins/daily/{today_str}.{lang}.html")
-                push_file_to_website(html_filename, f"bulletins/daily/latest.{lang}.html")
-                if os.path.exists(pdf_filename):
-                    push_file_to_website(pdf_filename, f"bulletins/daily/{today_str}.{lang}.pdf")
-                    push_file_to_website(pdf_filename, f"bulletins/daily/latest.{lang}.pdf")
+
 
         # ── 7. Send Email ──
         is_ci = os.environ.get("CI", "").lower() == "true"

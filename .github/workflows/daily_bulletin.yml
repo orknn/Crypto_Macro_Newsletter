@@ -40,6 +40,48 @@ jobs:
         run: |
           python main.py --send-email
 
+      - name: Push to website repository
+        env:
+          WEBSITE_PUSH_TOKEN: ${{ secrets.WEBSITE_PUSH_TOKEN }}
+        run: |
+          # 1. Clone website repo
+          git clone https://x-token-auth:${WEBSITE_PUSH_TOKEN}@github.com/orknn/nocashflow.net.git website
+          
+          # 2. Get date
+          TODAY=$(date +%Y-%m-%d)
+          echo "Processing daily bulletin for date: $TODAY"
+          
+          # 3. Create target directory
+          mkdir -p website/bulletins/daily
+          
+          # 4. Copy latest files
+          cp daily_bulletin_tr.html website/bulletins/daily/latest.tr.html
+          cp daily_bulletin_en.html website/bulletins/daily/latest.en.html
+          
+          # 5. Copy dated files
+          cp daily_bulletin_tr.html website/bulletins/daily/${TODAY}.tr.html
+          cp daily_bulletin_en.html website/bulletins/daily/${TODAY}.en.html
+          
+          # 6. Apply hreflang alternate URL replacements for dated files
+          # tr file alternate link points to dated en file
+          sed -i "s|/bulletins/daily/latest.en.html|/bulletins/daily/${TODAY}.en.html|g" website/bulletins/daily/${TODAY}.tr.html
+          # en file alternate link points to dated tr file
+          sed -i "s|/bulletins/daily/latest.tr.html|/bulletins/daily/${TODAY}.tr.html|g" website/bulletins/daily/${TODAY}.en.html
+          
+          # 7. Commit & Push
+          cd website
+          git config user.name "nocashflow-bulletin-bot"
+          git config user.email "bot@nocashflow.net"
+          git add bulletins/daily/
+          
+          # Check changes and commit
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "bulletin: daily ${TODAY}"
+            git push origin main
+          else
+            echo "No changes to commit."
+          fi
+
       - name: Upload bulletin as artifact
         uses: actions/upload-artifact@v4
         if: always()

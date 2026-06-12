@@ -3,108 +3,88 @@
     "funding_8h_BTC": {
       "value": 0.85,
       "range": "-0.75 ... +0.75",
-      "timestamp": "2026-06-12T01:26:25.499485"
+      "timestamp": "2026-06-12T09:10:49.141496"
     },
     "btc_basis": {
       "value": 150.0,
       "range": "-50 ... +100",
-      "timestamp": "2026-06-12T01:26:25.499485"
+      "timestamp": "2026-06-12T09:10:49.141496"
     },
     "coinbase_premium": {
       "value": 8.5,
       "range": "-5 ... +5",
-      "timestamp": "2026-06-12T01:26:25.499485"
+      "timestamp": "2026-06-12T09:10:49.141496"
     },
     "dvol_index": {
       "value": 300.0,
       "range": "20 ... 250",
-      "timestamp": "2026-06-12T01:26:25.499485"
+      "timestamp": "2026-06-12T09:10:49.141496"
     },
     "put_call_ratio": {
       "value": 6.0,
       "range": "0.1 ... 5",
-      "timestamp": "2026-06-12T01:26:25.499485"
+      "timestamp": "2026-06-12T09:10:49.141496"
     },
     "US 10-Year Treasury Yield": {
       "value": 15.0,
       "range": "0 ... 12",
-      "timestamp": "2026-06-12T01:26:25.499485"
-    },
-    "funding_8h_SOL": {
-      "value": -1.4999878413333512,
-      "range": "-0.75 ... +0.75",
-      "timestamp": "2026-06-12T01:29:50.001552"
+      "timestamp": "2026-06-12T09:10:49.141496"
     }
   },
   "finnhub_calendar": "premium_locked",
   "news_pipeline": {
-    "finnhub_raw_count": 0,
-    "after_blacklist": 0,
-    "whitelisted_count": 0,
+    "finnhub_raw_count": 100,
+    "after_blacklist": 97,
+    "whitelisted_count": 97,
     "after_scoring_fallback": 0,
-    "final_count": 0,
-    "api_error": "HTTPSConnectionPool(host='finnhub.io', port=443): Read timed out. (read timeout=10)"
+    "final_count": 5,
+    "api_error": null
   },
   "ai_calls": [
     {
       "model": "claude-sonnet-4-20250514",
       "max_tokens": 4000,
-      "prompt_chars": 38886,
-      "response_chars": 4811,
+      "prompt_chars": 40680,
+      "response_chars": 4651,
       "status": "success",
-      "timestamp": "2026-06-12T01:28:23.774127"
-    },
-    {
-      "model": "claude-sonnet-4-20250514",
-      "max_tokens": 4000,
-      "prompt_chars": 2811,
-      "response_chars": 1572,
-      "status": "success",
-      "timestamp": "2026-06-12T01:28:35.509537"
-    },
-    {
-      "model": "claude-sonnet-4-20250514",
-      "max_tokens": 4000,
-      "prompt_chars": 112718,
-      "response_chars": 4953,
-      "status": "success",
-      "timestamp": "2026-06-12T01:30:32.977042"
+      "timestamp": "2026-06-12T09:12:11.646666"
     },
     {
       "model": "claude-sonnet-4-20250514",
       "max_tokens": 4000,
       "prompt_chars": 2812,
-      "response_chars": 2016,
+      "response_chars": 1721,
       "status": "success",
-      "timestamp": "2026-06-12T01:30:48.008883"
+      "timestamp": "2026-06-12T09:12:27.865502"
+    },
+    {
+      "model": "claude-sonnet-4-20250514",
+      "max_tokens": 4000,
+      "prompt_chars": 117103,
+      "response_chars": 6725,
+      "status": "success",
+      "timestamp": "2026-06-12T09:14:27.640639"
+    },
+    {
+      "model": "claude-sonnet-4-20250514",
+      "max_tokens": 4000,
+      "prompt_chars": 2812,
+      "response_chars": 1644,
+      "status": "success",
+      "timestamp": "2026-06-12T09:14:41.972002"
     }
   ],
   "ai_note_rejected": "value_mismatch",
   "rejected_ai_notes": [
     {
       "lang": "tr",
-      "note": "futures_note",
+      "note": "indicators_note",
       "unmatched_value": "%0.06"
     },
     {
-      "lang": "tr",
-      "note": "indicators_note",
-      "unmatched_value": "%0.04"
-    },
-    {
       "lang": "en",
-      "note": "futures_note",
+      "note": "indicators_note",
       "unmatched_value": "0.06%"
-    },
-    {
-      "lang": "en",
-      "note": "indicators_note",
-      "unmatched_value": "0.04%"
-    },
-    {
-      "lang": "tr",
-      "note": "stablecoin_note",
-      "unmatched_value": "%59.5"
     },
     {
       "lang": "tr",
@@ -114,17 +94,22 @@
     {
       "lang": "tr",
       "note": "cycle_note",
-      "unmatched_value": "%49.2"
+      "unmatched_value": "%49.5"
+    },
+    {
+      "lang": "tr",
+      "note": "futures_note",
+      "unmatched_value": "%0.66"
     },
     {
       "lang": "en",
-      "note": "stablecoin_note",
-      "unmatched_value": "59.5%"
+      "note": "rotation_note",
+      "unmatched_value": "-1.9%"
     },
     {
       "lang": "en",
       "note": "cycle_note",
-      "unmatched_value": "-49.2%"
+      "unmatched_value": "-49.5%"
     }
   ]
 }
