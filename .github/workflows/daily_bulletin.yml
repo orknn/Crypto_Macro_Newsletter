@@ -37,6 +37,7 @@ jobs:
           SEND_EMAIL: "true"
           CI: "true"
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
         run: |
           python main.py --send-email
 
