@@ -13,7 +13,7 @@ def _call_with_retry(client, system_prompt, user_prompt, max_tokens=4000, max_re
     for attempt in range(max_retries):
         try:
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=max_tokens,
                 temperature=0.7,
                 system=system_prompt,
@@ -25,7 +25,7 @@ def _call_with_retry(client, system_prompt, user_prompt, max_tokens=4000, max_re
             
             # Log AI call to fetch_report.json
             _log_ai_call(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=max_tokens,
                 prompt_length=len(user_prompt),
                 response_length=len(result_text),
@@ -41,7 +41,7 @@ def _call_with_retry(client, system_prompt, user_prompt, max_tokens=4000, max_re
                 time.sleep(wait_time)
             else:
                 _log_ai_call(
-                    model="claude-sonnet-4-20250514",
+                    model="claude-sonnet-4-6",
                     max_tokens=max_tokens,
                     prompt_length=len(user_prompt),
                     response_length=0,
