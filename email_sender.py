@@ -1,6 +1,15 @@
 """
 Email Sender — Send the daily/weekly bulletin via Resend API.
-Reads credentials and audience IDs from environment variables / GitHub Secrets.
+
+Recipients come ONLY from the site's confirmed-subscriber API (Cloudflare
+Worker + D1). Subscriber emails are never stored in this repo (EU/GDPR).
+
+Required env vars:
+  RESEND_API_KEY   — Resend transactional key (sends the bulletin)
+  NCF_ADMIN_TOKEN  — Bearer for GET /api/subscribers
+Optional:
+  WORKER_BASE         — Worker origin, defaults to the workers.dev host
+  SUBSCRIBERS_API_URL — overrides the full subscribers endpoint URL
 """
 import os
 import json
@@ -11,13 +20,15 @@ import base64
 import re
 from render.i18n import STR, format_bulletin_date
 
-SUBSCRIBERS = [
-    "arzucesur00@gmail.com",
-    "bicenhalil17@gmail.com",
-    "mbalbay23@gmail.com",
-    "Cuneyt_y@yahoo.com",
-    "bicenorkun@gmail.com",
-]
+# nocashflow.net is DNS-only (unproxied) on Cloudflare, so /api/* does not route
+# to the Worker — it must be reached on the workers.dev host instead.
+WORKER_BASE = os.environ.get(
+    "WORKER_BASE", "https://ncf-subscribe.bicenorkun.workers.dev"
+)
+SUBSCRIBERS_API_URL = os.environ.get(
+    "SUBSCRIBERS_API_URL", f"{WORKER_BASE}/api/subscribers"
+)
+UNSUBSCRIBE_URL = f"{WORKER_BASE}/api/unsubscribe"
 
 EMAIL_STR = {
     "market_overview": {
@@ -31,43 +42,47 @@ EMAIL_STR = {
     "fallback_overview": {
         "tr": "Piyasa değerlendirmesi ve tüm veriler için lütfen ekteki PDF dosyasını inceleyin.",
         "en": "Please refer to the attached PDF for today's market overview and full data."
-    }
+    },
+    "unsubscribe": {
+        "tr": "Bu bülteni almak istemiyor musun? Abonelikten çık",
+        "en": "Don't want these emails? Unsubscribe"
+    },
 }
 
 
-def fetch_resend_audience_contacts(audience_id, api_key):
+def fetch_confirmed_subscribers(lang, admin_token):
     """
-    Fetch contacts from Resend Audience GET /audiences/{audience_id}/contacts
-    Returns list of dicts: [{'email': '...', 'unsubscribed': bool}, ...]
+    Fetch confirmed subscribers for `lang` from the site API.
+    Returns list of dicts: [{'email': '...', 'token': '...'}, ...]
+    Raises on auth/transport failure so the caller can refuse to send blind.
     """
-    url = f"https://api.resend.com/audiences/{audience_id}/contacts?limit=100"
+    url = f"{SUBSCRIBERS_API_URL}?lang={lang}"
     req = urllib.request.Request(
         url,
         headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "User-Agent": "NoCashFlow-Bulletin/1.0"
+            "Authorization": f"Bearer {admin_token}",
+            "User-Agent": "NoCashFlow-Bulletin/1.0",
         },
-        method="GET"
+        method="GET",
     )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            res = json.loads(resp.read().decode("utf-8"))
-            return res.get("data", [])
-    except Exception as e:
-        print(f"  ❌ Error fetching contacts from Resend audience {audience_id}: {e}")
-        return []
+    with urllib.request.urlopen(req) as resp:
+        res = json.loads(resp.read().decode("utf-8"))
+    return res.get("subscribers", [])
 
 
 def send_newsletter_email(html_path="daily_bulletin.html", pdf_path="daily_bulletin.pdf", lang='tr', edition='daily', data=None):
     """
-    Send the bulletin HTML to subscribers via Resend API.
-    Required env var: RESEND_API_KEY
-    Audience env var: RESEND_AUDIENCE_TR or RESEND_AUDIENCE_EN
+    Send the bulletin HTML to confirmed subscribers via Resend API.
+    Required env: RESEND_API_KEY, NCF_ADMIN_TOKEN
     """
     api_key = os.environ.get("RESEND_API_KEY")
     if not api_key:
         print("❌ RESEND_API_KEY env variable not set. Skipping email.")
+        return False
+
+    admin_token = os.environ.get("NCF_ADMIN_TOKEN")
+    if not admin_token:
+        print("❌ NCF_ADMIN_TOKEN not set — cannot fetch subscriber list. Skipping email.")
         return False
 
     if not os.path.isfile(html_path):
@@ -81,30 +96,34 @@ def send_newsletter_email(html_path="daily_bulletin.html", pdf_path="daily_bulle
     match = re.search(r'<p class="summary-text">(.*?)</p>', full_html, re.DOTALL)
     market_overview = match.group(1).strip() if match else EMAIL_STR["fallback_overview"][lang]
 
-    # Build minimalist Email UI
+    # Build minimalist Email UI. {{UNSUB_URL}} is replaced per-recipient below —
+    # every send carries a working, token-scoped unsubscribe link (mandatory).
     html_content = f"""
     <html>
     <body style="background-color: #0b0d10; color: #e8e4df; font-family: 'Inter', Helvetica, sans-serif; padding: 40px 20px; line-height: 1.6; margin: 0;">
         <div style="max-width: 600px; margin: 0 auto; background: #121418; padding: 30px; border-top: 3px solid #d4a853; border-radius: 6px;">
-            
+
             <h2 style="color: #d4a853; font-size: 14px; letter-spacing: 2px; text-transform: uppercase; margin-top: 0; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 10px;">
                 {EMAIL_STR["market_overview"][lang]}
             </h2>
-            
+
             <p style="font-size: 14px; color: #9aa0a6; line-height: 1.8; margin-bottom: 30px;">
                 {market_overview}
             </p>
-            
+
             <div style="margin-top: 30px; padding: 20px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; text-align: center;">
                 <p style="font-size: 16px; font-weight: 600; color: #e8e4df; margin: 0; line-height: 1.5;">
                     {EMAIL_STR["pdf_notice"][lang]}
                 </p>
             </div>
-            
+
             <div style="margin-top: 40px; font-size: 11px; color: #6b7280; text-align: center;">
                 <p>© {datetime.now().year} nocashflow.net · Orkun Biçen</p>
+                <p style="margin-top: 8px;">
+                    <a href="{{{{UNSUB_URL}}}}" style="color: #6b7280; text-decoration: underline;">{EMAIL_STR["unsubscribe"][lang]}</a>
+                </p>
             </div>
-            
+
         </div>
     </body>
     </html>
@@ -114,53 +133,61 @@ def send_newsletter_email(html_path="daily_bulletin.html", pdf_path="daily_bulle
     subject_tmpl = STR[f"email_subject_{edition}"][lang]
     subject = subject_tmpl.format(date=formatted_date)
 
-    # Determine recipients based on audience
-    audience_env_key = f"RESEND_AUDIENCE_{lang.upper()}"
-    audience_id = os.environ.get(audience_env_key)
+    # Recipients: confirmed subscribers for this language, from the site API only.
+    print(f"  → Fetching confirmed {lang.upper()} subscribers from {SUBSCRIBERS_API_URL}...")
+    try:
+        recipients = fetch_confirmed_subscribers(lang, admin_token)
+    except urllib.error.HTTPError as e:
+        print(f"  ❌ Subscriber API error: {e.code} {e.read().decode('utf-8', 'replace')}")
+        return False
+    except Exception as e:
+        print(f"  ❌ Could not reach subscriber API: {e}")
+        return False
 
-    recipients = []
-    if audience_id:
-        print(f"  → Fetching subscribers for audience {audience_env_key} ({audience_id})...")
-        contacts = fetch_resend_audience_contacts(audience_id, api_key)
-        for c in contacts:
-            if not c.get("unsubscribed", False):
-                email_addr = c.get("email")
-                if email_addr:
-                    recipients.append(email_addr)
-        print(f"  → Found {len(recipients)} active subscribers in Resend.")
-    else:
-        print(f"  ⚠️ {audience_env_key} not set. Falling back to hardcoded SUBSCRIBERS.")
-        recipients = SUBSCRIBERS
-
+    print(f"  → Found {len(recipients)} confirmed subscriber(s).")
     if not recipients:
-        print("  ⚠️ No active recipients to send email to.")
+        print("  ⚠️ No confirmed recipients to send to.")
         return True
 
     print(f"\n📧 Sending {edition.upper()} ({lang.upper()}) bulletin to {len(recipients)} subscribers via Resend...")
 
+    # PDF attachment (same for everyone) — read once.
+    attachments = None
+    if os.path.isfile(pdf_path):
+        with open(pdf_path, "rb") as pdf_file:
+            pdf_b64 = base64.b64encode(pdf_file.read()).decode("utf-8")
+        attachments = [{"filename": os.path.basename(pdf_path), "content": pdf_b64}]
+
+    from_addr = (
+        "NoCashFlow Daily Bulletin <dailyfinancialbulletin@nocashflow.net>"
+        if edition == 'daily'
+        else "NoCashFlow Weekly Deep Dive <dailyfinancialbulletin@nocashflow.net>"
+    )
+
     success_count = 0
     fail_count = 0
 
-    for recipient in recipients:
+    for sub in recipients:
+        recipient = sub.get("email")
+        token = sub.get("token", "")
+        if not recipient:
+            continue
+
+        # Mandatory per-recipient unsubscribe link (token-scoped).
+        unsub_url = f"{UNSUBSCRIBE_URL}?token={token}"
+        personalized_html = html_content.replace("{{UNSUB_URL}}", unsub_url)
+
         try:
             email_payload = {
-                "from": "NoCashFlow Daily Bulletin <dailyfinancialbulletin@nocashflow.net>" if edition == 'daily' else "NoCashFlow Weekly Deep Dive <dailyfinancialbulletin@nocashflow.net>",
+                "from": from_addr,
                 "to": [recipient],
                 "subject": subject,
-                "html": html_content,
+                "html": personalized_html,
                 "reply_to": "orkun@nocashflow.net",
+                "headers": {"List-Unsubscribe": f"<{unsub_url}>"},
             }
-            
-            # PDF ekle
-            if os.path.isfile(pdf_path):
-                with open(pdf_path, "rb") as pdf_file:
-                    pdf_b64 = base64.b64encode(pdf_file.read()).decode("utf-8")
-                email_payload["attachments"] = [
-                    {
-                        "filename": os.path.basename(pdf_path),
-                        "content": pdf_b64
-                    }
-                ]
+            if attachments:
+                email_payload["attachments"] = attachments
 
             payload = json.dumps(email_payload).encode("utf-8")
 

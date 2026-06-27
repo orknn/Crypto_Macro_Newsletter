@@ -33,6 +33,7 @@ jobs:
       - name: Generate bulletin & send
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          NCF_ADMIN_TOKEN: ${{ secrets.NCF_ADMIN_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.WEBSITE_PUSH_TOKEN }}
           SEND_EMAIL: "true"
           CI: "true"
