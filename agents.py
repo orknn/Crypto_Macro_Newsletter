@@ -22,7 +22,10 @@ def _call_with_retry(client, system_prompt, user_prompt, max_tokens=4000, max_re
                 ]
             )
             result_text = response.content[0].text.strip()
-            
+
+            if getattr(response, 'stop_reason', None) == 'max_tokens':
+                print(f"    ⚠️  AI yanıtı max_tokens={max_tokens} sınırında KESİLDİ — JSON büyük ihtimalle bozuk.")
+
             # Log AI call to fetch_report.json
             _log_ai_call(
                 model="claude-sonnet-4-6",
@@ -373,8 +376,11 @@ Piyasa Verileri:
 
 YANITINI SADECE JSON OLARAK VER, başka metin ekleme. JSON içindeki metin alanlarında çift tırnak işaretlerini kesinlikle kaçış karakteriyle (\\") yaz veya tek tırnak (') kullan."""
                 
-                raw_response = _call_with_retry(client, WEEKLY_CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt, max_tokens=4000)
+                raw_response = _call_with_retry(client, WEEKLY_CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt, max_tokens=10000)
                 result = self._parse_response(raw_response)
+                if not result.get('tr') and not result.get('en'):
+                    print("    ❌ Haftalık editör yanıtı parse edilemedi — AI bölümleri gizlenecek.")
+                    return {'success': False, 'regime': 'NEUTRAL', 'tr': {}, 'en': {}}
                 print("    ✅ Haftalık Temalar ve Dinamik KPI Notları (TR/EN) üretildi.")
                 return {
                     'success': True,
@@ -396,8 +402,11 @@ Piyasa Verileri:
 
 YANITINI SADECE JSON OLARAK VER, başka metin ekleme. JSON içindeki metin alanlarında çift tırnak işaretlerini kesinlikle kaçış karakteriyle (\\") yaz veya tek tırnak (') kullan."""
 
-                raw_response = _call_with_retry(client, CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt, max_tokens=4000)
+                raw_response = _call_with_retry(client, CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt, max_tokens=6000)
                 result = self._parse_response(raw_response)
+                if not result.get('tr') and not result.get('en'):
+                    print("    ❌ Günlük editör yanıtı parse edilemedi — AI bölümleri gizlenecek.")
+                    return {'success': False, 'regime': 'NEUTRAL', 'tr': {}, 'en': {}}
                 print("    ✅ Genel Değerlendirme, Haber Yorumları ve Dinamik KPI Notları (TR/EN) üretildi.")
                 return {
                     'success': True,

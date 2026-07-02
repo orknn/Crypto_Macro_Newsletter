@@ -31,16 +31,16 @@
       "timestamp": "2026-06-12T09:10:49.141496"
     },
     "funding_8h_SOL": {
-      "value": 4.501641534,
+      "value": -4.181666142666688,
       "range": "-0.75 ... +0.75",
-      "timestamp": "2026-07-02T14:07:57.913917"
+      "timestamp": "2026-07-02T18:45:33.022703"
     }
   },
   "finnhub_calendar": "premium_locked",
   "news_pipeline": {
     "finnhub_raw_count": 100,
-    "after_blacklist": 97,
-    "whitelisted_count": 97,
+    "after_blacklist": 95,
+    "whitelisted_count": 95,
     "after_scoring_fallback": 0,
     "final_count": 5,
     "api_error": null
@@ -77,6 +77,70 @@
       "response_chars": 1644,
       "status": "success",
       "timestamp": "2026-06-12T09:14:41.972002"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "max_tokens": 4000,
+      "prompt_chars": 49217,
+      "response_chars": 0,
+      "status": "error: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purcha",
+      "timestamp": "2026-07-02T14:14:17.435022"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "max_tokens": 4000,
+      "prompt_chars": 2812,
+      "response_chars": 0,
+      "status": "error: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purcha",
+      "timestamp": "2026-07-02T14:14:19.783098"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "max_tokens": 4000,
+      "prompt_chars": 151177,
+      "response_chars": 10796,
+      "status": "success",
+      "timestamp": "2026-07-02T15:25:37.778594"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "max_tokens": 4000,
+      "prompt_chars": 2812,
+      "response_chars": 3396,
+      "status": "success",
+      "timestamp": "2026-07-02T15:26:06.598278"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "max_tokens": 4000,
+      "prompt_chars": 157021,
+      "response_chars": 11060,
+      "status": "success",
+      "timestamp": "2026-07-02T18:42:24.460984"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "max_tokens": 4000,
+      "prompt_chars": 2812,
+      "response_chars": 3553,
+      "status": "success",
+      "timestamp": "2026-07-02T18:42:54.837517"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "max_tokens": 10000,
+      "prompt_chars": 157007,
+      "response_chars": 14289,
+      "status": "success",
+      "timestamp": "2026-07-02T18:47:24.915885"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "max_tokens": 4000,
+      "prompt_chars": 2812,
+      "response_chars": 3437,
+      "status": "success",
+      "timestamp": "2026-07-02T18:47:51.534412"
     }
   ],
   "ai_note_rejected": "value_mismatch",
@@ -115,6 +179,11 @@
       "lang": "en",
       "note": "cycle_note",
       "unmatched_value": "-49.5%"
+    },
+    {
+      "lang": "en",
+      "note": "rotation_note",
+      "unmatched_value": "+11.1%"
     }
   ]
 }
