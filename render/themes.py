@@ -22,18 +22,21 @@ import re
 
 _FONT_RE = re.compile(r'<link href="https://fonts\.googleapis[^>]*>')
 
-# ──────────────────────────────────────────────────── PREMIUM (koyu, rafine)
+# ─────────────────────────────────────────── PREMIUM (koyu, rafine, Brand Gold)
+# Palet 2026-07-03'te siteyle hizalandı: nocashflow.net'in altını (#d4a853) tek
+# vurucu renk; maviler sakin çeliğe, zemin site siyahına (#0b0d10) çekildi.
 _PREMIUM = dict(
     font='<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">',
     cmap={
-        "#ef4444": "#f0556b", "#10b981": "#22c79a", "#f59e0b": "#f0b429", "#3b82f6": "#5b8cff",
-        "#94a3b8": "#8b9bb4", "#fbbf24": "#f0b429", "#f87171": "#f0728a", "#f0f4f9": "#f2f6fb",
-        "#4ade80": "#4be3b0", "#26344d": "#243049", "#22c55e": "#22c79a",
-        "#1c2436": "#1a2336", "#121824": "#111726", "#0b0f17": "#0a0e16",
+        "#ef4444": "#f0556b", "#10b981": "#22c79a", "#f59e0b": "#d4a853", "#3b82f6": "#9aabc9",
+        "#94a3b8": "#9aa0a6", "#fbbf24": "#d4a853", "#fb923c": "#c89448", "#f87171": "#f0728a",
+        "#f0f4f9": "#f2f6fb",
+        "#4ade80": "#4be3b0", "#26344d": "#2a2d36", "#22c55e": "#22c79a",
+        "#1c2436": "#1d2027", "#121824": "#14161b", "#0b0f17": "#0b0d10",
     },
     css="""
-:root{--bg:#0a0e16;--bg2:#111726;--bg3:#1a2336;--border:#243049;--text:#f2f6fb;--dim:#8b9bb4;--gold:#f0b429;--gold2:#fb923c;--green:#22c79a;--red:#f0556b;--accent:#5b8cff;}
-body{background-color:#0a0e16;background:radial-gradient(1100px 560px at 50% -240px,#16203a 0%,#0a0e16 55%) !important;}
+:root{--bg:#0b0d10;--bg2:#14161b;--bg3:#1d2027;--border:#2a2d36;--text:#f2f6fb;--dim:#9aa0a6;--gold:#d4a853;--gold2:#c89448;--green:#22c79a;--red:#f0556b;--accent:#9aabc9;}
+body{background-color:#0b0d10;background:radial-gradient(1100px 560px at 50% -240px,#1a1c22 0%,#0b0d10 55%) !important;}
 .container{max-width:700px;padding:36px 22px;}
 .container > table:first-of-type{border-bottom:1px solid var(--border);}
 h1{font-size:34px !important;letter-spacing:-1px !important;}

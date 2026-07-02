@@ -31,9 +31,9 @@
       "timestamp": "2026-06-12T09:10:49.141496"
     },
     "funding_8h_SOL": {
-      "value": -4.181666142666688,
+      "value": 2.3366856205,
       "range": "-0.75 ... +0.75",
-      "timestamp": "2026-07-02T18:45:33.022703"
+      "timestamp": "2026-07-03T00:36:43.268576"
     }
   },
   "finnhub_calendar": "premium_locked",
@@ -141,6 +141,22 @@
       "response_chars": 3437,
       "status": "success",
       "timestamp": "2026-07-02T18:47:51.534412"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "max_tokens": 10000,
+      "prompt_chars": 157386,
+      "response_chars": 15592,
+      "status": "success",
+      "timestamp": "2026-07-03T00:38:35.706604"
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "max_tokens": 4000,
+      "prompt_chars": 2812,
+      "response_chars": 3362,
+      "status": "success",
+      "timestamp": "2026-07-03T00:39:01.816565"
     }
   ],
   "ai_note_rejected": "value_mismatch",
@@ -184,6 +200,16 @@
       "lang": "en",
       "note": "rotation_note",
       "unmatched_value": "+11.1%"
+    },
+    {
+      "lang": "en",
+      "note": "rotation_note",
+      "unmatched_value": "+9.3%"
+    },
+    {
+      "lang": "en",
+      "note": "cycle_note",
+      "unmatched_value": "-50.7%"
     }
   ]
 }
