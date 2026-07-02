@@ -44,9 +44,27 @@ def render_weekly(data, lang='tr', theme=None):
         lang=lang
     )
     
+    # 1b. Regime Strip + Executive Summary (AI Generated)
+    lang_data = data.get(lang, {}) or {}
+    regime = data.get('regime', 'NEUTRAL')
+    regime_line = lang_data.get('regime_line', '')
+    regime_html = ""
+    if regime and regime != 'NEUTRAL':
+        regime_html = render_regime_strip(regime, regime_line, lang=lang)
+    elif regime_line and regime_line.strip() and regime_line.strip() != 'None':
+        regime_html = render_regime_strip(regime, regime_line, lang=lang)
+
+    overview_html = ""
+    overview_text = lang_data.get('overview', '')
+    if overview_text and str(overview_text).strip() and str(overview_text).strip() != 'None':
+        overview_html = f'''
+        <div class="summary-card">
+          <p class="summary-text">{overview_text}</p>
+        </div>
+        '''
+
     # 2. Weekly Themes (AI Generated)
     themes_html = ""
-    lang_data = data.get(lang, {}) or {}
     themes = lang_data.get('themes', []) or data.get('weekly_themes', [])
     if themes:
         theme_items = []
@@ -791,6 +809,8 @@ def render_weekly(data, lang='tr', theme=None):
     # Combine everything
     content_html = f'''
     {header_html}
+    {regime_html}
+    {overview_html}
     {themes_html}
     {calendar_weekly_html}
     {liq_html}

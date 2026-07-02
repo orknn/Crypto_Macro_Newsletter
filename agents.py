@@ -150,6 +150,7 @@ Piyasa verilerine ve risk duyarlılığına dayanarak şu üç rejimden birini s
 
 Her dil (tr ve en) için aşağıdaki alanları doldurmalısın:
 1. "regime_line": Seçilen rejim için tek cümlelik, vurucu bir piyasa hükmü (Örn: TR: "Likidite daralması ve artan tahvil faizleri risk iştahını gölgeliyor." / EN: "Liquidity contraction and rising bond yields shadow risk appetite.")
+1b. "overview": Haftanın YÖNETİCİ ÖZETİ (executive summary) — 3-4 cümle. Haftanın en önemli makro gelişmesi, kripto piyasasının genel yönü, ETF/kurumsal akım resmi ve önümüzdeki haftanın en kritik katalizörünü tek paragrafta birleştir. Bültenin tamamını okumayan birinin haftayı anlaması için yeterli olmalı. Önemli sayıları <strong> etiketiyle vurgulayabilirsin.
 2. "themes":
    - Haftanın en önemli 3 makro/kripto teması. Her tema bir başlık ("title", en fazla 2-3 kelime, örn: "LIKIDITE RUZGARI" veya "JEOPOLITIK GERILIM") ve 2-3 cümlelik açıklama ("description") içermelidir.
 3. "notes":
@@ -178,6 +179,7 @@ DİL VE ANLATIM KURALLARI:
   "regime": "RISK_ON" | "NEUTRAL" | "RISK_OFF",
   "tr": {
     "regime_line": "...",
+    "overview": "...",
     "themes": [
       {"title": "...", "description": "..."},
       {"title": "...", "description": "..."},
@@ -199,6 +201,7 @@ DİL VE ANLATIM KURALLARI:
   },
   "en": {
     "regime_line": "...",
+    "overview": "...",
     "themes": [
       {"title": "...", "description": "..."},
       {"title": "...", "description": "..."},
