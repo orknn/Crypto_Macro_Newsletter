@@ -27,7 +27,7 @@ STR = {
 
     # Columns
     "col_date": {"tr": "Tarih", "en": "Date"},
-    "col_time": {"tr": "Saat", "en": "Time"},
+    "col_time": {"tr": "Saat (TSİ)", "en": "Time (TRT)"},
     "col_event": {"tr": "Gelişme", "en": "Event"},
     "col_country": {"tr": "Ülke", "en": "Country"},
     "col_prev": {"tr": "Önceki", "en": "Prev"},
@@ -113,8 +113,55 @@ STR = {
     "cp_bars_1h": {"tr": "1s Barlar", "en": "1H Bars"},
     "cp_title": {"tr": "BTC/USD · Coinbase - Küresel Borsalar Farkı", "en": "BTC/USD · Coinbase vs Global Spread"},
     "cp_high": {"tr": "24s Yüksek", "en": "24h High"},
-    "cp_low": {"tr": "24s Düşük", "en": "24h Low"}
+    "cp_low": {"tr": "24s Düşük", "en": "24h Low"},
+
+    # Chart titles & sub-labels
+    "week_ending": {"tr": "Hafta kapanışı", "en": "Week ending"},
+    "chart_net_liq_title": {"tr": "ABD Fed Net Likiditesi (3 Yıllık, Haftalık)", "en": "US Federal Reserve Net Liquidity (3-Year Weekly)"},
+    "chart_stablecoin_title": {"tr": "Stablecoin Toplam Piyasa Değeri & USDT/USDC Payları (3 Yıllık, Haftalık)", "en": "Total Stablecoin Market Cap & USDT/USDC Shares (3-Year Weekly)"},
+    "chart_inflation_title": {"tr": "ABD Enflasyon Patikası (CPI, Çekirdek CPI, Çekirdek PCE YoY — 5 Yıl)", "en": "US Inflation Path (CPI, Core CPI, Core PCE YoY — 5-Year)"},
+    "chart_heatmap_title": {"tr": "Bitcoin Aylık Getiri Isı Haritası (2024–2026)", "en": "Bitcoin Monthly Return Heatmap (2024–2026)"},
+    "heatmap_footnote": {"tr": "* İçinde bulunulan ay işaretlidir.", "en": "* Current month is marked."},
+    "chart_correlation_title": {"tr": "Makro & Kripto Varlık Korelasyon Matrisi (30 Günlük Getiriler)", "en": "Macro & Crypto Assets Correlation Matrix (30-Day Rolling Daily Returns)"},
+    "chart_ytd_title": {"tr": "BTC vs NDX vs ALTIN (Yılbaşından Bugüne Getiri)", "en": "BTC vs NDX vs GOLD (YTD Performance)"},
+    "label_realtime": {"tr": "Anlık", "en": "Real-time"},
+    "card_volume": {"tr": "24s TOPLAM HACİM", "en": "24H TOTAL VOLUME"},
+
+    # Phase 4: new data points
+    "card_real_yield": {"tr": "10Y REEL FAİZ (TIPS)", "en": "10Y REAL YIELD (TIPS)"},
+    "card_breakeven": {"tr": "10Y ENFLASYON BEKLENTİSİ", "en": "10Y BREAKEVEN INFLATION"},
+    "card_copper_gold": {"tr": "BAKIR/ALTIN ORANI", "en": "COPPER/GOLD RATIO"},
+    "card_eth_btc": {"tr": "ETH/BTC ORANI", "en": "ETH/BTC RATIO"},
+    "chart_nfci_title": {"tr": "Chicago Fed Finansal Koşullar Endeksi — NFCI (3 Yıl, Haftalık)", "en": "Chicago Fed Financial Conditions Index — NFCI (3-Year Weekly)"},
+    "nfci_hint": {"tr": "0 üzeri = ortalamadan sıkı koşullar, 0 altı = gevşek koşullar.", "en": "Above 0 = tighter-than-average conditions, below 0 = looser."},
+    "chart_cumulative_title": {"tr": "Kümülatif Spot BTC ETF Net Akışı (Lansmandan Bugüne)", "en": "Cumulative Spot BTC ETF Net Flows (Since Launch)"},
+    "card_eth_etf_title": {"tr": "ETH Spot ETF Günlük Net Akış", "en": "ETH Spot ETF Daily Net Flows"},
+    "fed_next_meeting": {"tr": "Sıradaki FOMC", "en": "Next FOMC"},
+    "fed_days_left": {"tr": "gün kaldı", "en": "days away"},
+    "fed_dots": {"tr": "Medyan Nokta Tahmini", "en": "Median Dot"},
+    "fed_cut_odds": {"tr": "Faiz İndirim İhtimali", "en": "Rate Cut Odds"},
+    "growth_signal": {"tr": "büyüme sinyali", "en": "growth signal"},
 }
+
+# Sentiment badges (data layer produces English labels)
+SENTIMENT_TR = {
+    "Strong Bullish": "GÜÇLÜ BOĞA",
+    "Bullish": "BOĞA",
+    "Neutral": "NÖTR",
+    "Bearish": "AYI",
+    "Strong Bearish": "GÜÇLÜ AYI",
+    "Strong Inflow": "GÜÇLÜ GİRİŞ",
+    "Moderate Inflow": "ILIMLI GİRİŞ",
+    "Outflow": "ÇIKIŞ",
+}
+
+def fmt_sentiment(sentiment, lang='tr'):
+    """Localize an English sentiment label for display."""
+    if not sentiment:
+        return ""
+    if lang == 'tr':
+        return SENTIMENT_TR.get(sentiment, sentiment)
+    return sentiment
 
 def format_bulletin_date(dt, lang):
     """

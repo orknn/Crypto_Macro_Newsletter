@@ -8,12 +8,12 @@ from render.svg import (
 from render.components import (
     html_wrapper, render_header, render_ticker, render_regime_strip,
     render_section_divider, render_economic_calendar, render_asset_table,
-    render_news_section, render_footer, _fmt_change, _fmt_price,
-    render_coinbase_premium_card, maybe
+    render_news_section, render_footer, _fmt_change, _fmt_price, _fmt_funding,
+    render_coinbase_premium_card, maybe, render_research_brief, render_fed_strip
 )
-from render.i18n import STR
+from render.i18n import STR, fmt_sentiment
 
-def render_daily(data, lang='tr'):
+def render_daily(data, lang='tr', theme=None):
     """Assemble and compile sections for the Daily edition."""
     accent_color = STYLE_TOKENS['colors']['accent']
     
@@ -51,9 +51,18 @@ def render_daily(data, lang='tr'):
         </div>
         '''
         
+    # Research Brief Section
+    research_html = ""
+    research_brief = data.get('research_brief')
+    if research_brief:
+        research_html = render_research_brief(research_brief, lang=lang)
+        
     # Ticker Bar
     ticker_html = render_ticker(data, lang=lang)
     
+    # Fed Pricing Strip (above the calendar)
+    fed_html = render_fed_strip(data.get('fed_pricing'), lang=lang)
+
     # Economic Calendar
     calendar_html = ""
     events = data.get('economic_calendar', [])
@@ -70,16 +79,23 @@ def render_daily(data, lang='tr'):
             
         calendar_html = f'''
         {render_section_divider(title)}
+        {fed_html}
         {render_economic_calendar(events, lang=lang)}
+        '''
+    elif fed_html:
+        calendar_html = f'''
+        {render_section_divider(STR['section_calendar'][lang])}
+        {fed_html}
         '''
         
     # Equities & Commodities
     equities_html = ""
     mag7 = data.get('magnificent_7', [])
     commodities = data.get('commodities', [])
+    asset_sparklines = data.get('asset_sparklines', {})
     if mag7 or commodities:
-        mag7_table = render_asset_table(mag7, "equities", lang=lang) if mag7 else ""
-        comm_table = render_asset_table(commodities, "commodities", lang=lang) if commodities else ""
+        mag7_table = render_asset_table(mag7, "equities", lang=lang, sparklines=asset_sparklines) if mag7 else ""
+        comm_table = render_asset_table(commodities, "commodities", lang=lang, sparklines=asset_sparklines) if commodities else ""
         equities_html = f'''
         {render_section_divider(STR['section_equities_commodities'][lang])}
         {mag7_table}
@@ -101,7 +117,7 @@ def render_daily(data, lang='tr'):
             border = 'rgba(16,185,129,0.18)' if chg >= 0 else 'rgba(239,68,68,0.18)'
             tiles.append(f'''
             <div style="background:{bg}; border:1px solid {border}; padding:8px; text-align:center; border-radius:4px;">
-              <div style="font-size:7.5px; color:var(--dim); text-transform:uppercase; margin-bottom:2px;">{name}</div>
+              <div style="font-size:9px; color:var(--dim); text-transform:uppercase; margin-bottom:2px;">{name}</div>
               <div style="font-family:var(--mono); font-size:11px; font-weight:600; color:var(--text); margin-bottom:2px;">{sym}</div>
               <div class="{chg_cls}" style="font-family:var(--mono); font-size:10px;">{chg_text}</div>
             </div>''')
@@ -129,22 +145,30 @@ def render_daily(data, lang='tr'):
         ind_note = data.get('indicators_note')
     ind_note = ind_note or ''
     
+    # (F&G is already shown in the ticker bar and the gauge below — no third copy)
+    mcap_chg = crypto_ov.get('market_cap_change_24h', 0.0) or 0.0
+    mcap_chg_txt, mcap_chg_cls = _fmt_change(mcap_chg)
+    total_vol = crypto_ov.get('total_volume', 0.0) or 0.0
     kpis = [
-        {'label': STR['card_mcap'][lang], 'value': f"${crypto_ov.get('total_market_cap', 0)/1e12:.2f}T", 'change': '', 'cls': ''},
+        {'label': STR['card_mcap'][lang], 'value': f"${crypto_ov.get('total_market_cap', 0)/1e12:.2f}T", 'change': mcap_chg_txt, 'cls': mcap_chg_cls},
         {'label': STR['card_dominance'][lang], 'value': f"{crypto_ov.get('btc_dominance', 0):.1f}%", 'change': '', 'cls': ''},
-        {'label': STR['card_fng'][lang], 'value': f"{fng.get('value', 0)}", 'change': fng.get('classification', ''), 'cls': 'up' if fng.get('value', 50) >= 50 else 'down'},
+        {'label': STR['card_volume'][lang], 'value': f"${total_vol/1e9:.1f}B" if total_vol else '—', 'change': '', 'cls': ''},
     ]
-    
-    # Map F&G labels
-    lbl_tr = {
-        'Neutral': 'Nötr',
-        'Fear': 'Korku',
-        'Extreme Fear': 'Aşırı Korku',
-        'Greed': 'Açgözlülük',
-        'Extreme Greed': 'Aşırı Açgözlülük'
-    }
-    if lang == 'tr':
-        kpis[2]['change'] = lbl_tr.get(kpis[2]['change'], kpis[2]['change'])
+
+    # ETH/BTC ratio — the single best rotation gauge
+    eth_btc = data.get('eth_btc') or {}
+    if eth_btc.get('ratio'):
+        eb_chg = eth_btc.get('chg_7d') if eth_btc.get('chg_7d') is not None else eth_btc.get('chg_24h')
+        eb_txt, eb_cls = _fmt_change(eb_chg)
+        eb_suffix = ' (7g)' if lang == 'tr' else ' (7D)'
+        if eth_btc.get('chg_7d') is None:
+            eb_suffix = ' (24s)' if lang == 'tr' else ' (24H)'
+        kpis.append({
+            'label': STR['card_eth_btc'][lang],
+            'value': f"{eth_btc['ratio']:.5f}",
+            'change': eb_txt + eb_suffix if eb_chg is not None else '',
+            'cls': eb_cls,
+        })
 
     kpi_cards = []
     for k in kpis:
@@ -163,7 +187,7 @@ def render_daily(data, lang='tr'):
         </div>'''
 
     kpi_html = f'''
-    <div class="card-grid" style="grid-template-columns: repeat(3, 1fr);">
+    <div class="card-grid" style="grid-template-columns: repeat({len(kpis)}, 1fr);">
       {''.join(kpi_cards)}
     </div>
     {kpi_note_html}
@@ -258,6 +282,7 @@ def render_daily(data, lang='tr'):
         'Strong Bearish': 'background:rgba(239,68,68,0.12); color:var(--red); border:1px solid rgba(239,68,68,0.3);',
     }
     fb_badge_style = fb_badges.get(fb_sen, fb_badges['Neutral'])
+    fb_sen_display = fmt_sentiment(fb_sen, lang)
     futures_note = lang_data.get('notes', {}).get('futures_note')
     if not futures_note and lang == 'tr':
         futures_note = data.get('futures_note')
@@ -267,7 +292,7 @@ def render_daily(data, lang='tr'):
     fb_desc = fb.get('description', '')
     if not futures_note and fb_desc:
         if lang == 'tr':
-            futures_note = f"BTC için mevcut yıllıklandırılmış vadeli prim {fb_btc:.1f}% seviyesinde, piyasa duyarlılığı {fb_sen.lower()}."
+            futures_note = f"BTC için mevcut yıllıklandırılmış vadeli prim {fb_btc:.1f}% seviyesinde, piyasa duyarlılığı {fmt_sentiment(fb_sen, 'tr').lower()} yönünde."
         else:
             futures_note = fb_desc
     
@@ -285,7 +310,7 @@ def render_daily(data, lang='tr'):
     <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
         <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px;">{STR['section_positioning'][lang]}</div>
-        <div style="font-family:var(--mono); font-size:9px; padding:2px 8px; border-radius:3px; font-weight:600; text-transform:uppercase; {fb_badge_style}">{fb_sen}</div>
+        <div style="font-family:var(--mono); font-size:9px; padding:2px 8px; border-radius:3px; font-weight:600; text-transform:uppercase; {fb_badge_style}">{fb_sen_display}</div>
       </div>
       <div style="display:flex; gap:24px; margin-bottom:12px;">
         <div>
@@ -302,9 +327,9 @@ def render_daily(data, lang='tr'):
     '''
 
     # Funding & OI
-    btc_fr_str, btc_fr_cls = _fmt_change(fr.get('BTC', 0.0))
-    eth_fr_str, eth_fr_cls = _fmt_change(fr.get('ETH', 0.0))
-    sol_fr_str, sol_fr_cls = _fmt_change(fr.get('SOL', 0.0))
+    btc_fr_str, btc_fr_cls = _fmt_funding(fr.get('BTC', 0.0))
+    eth_fr_str, eth_fr_cls = _fmt_funding(fr.get('ETH', 0.0))
+    sol_fr_str, sol_fr_cls = _fmt_funding(fr.get('SOL', 0.0))
     
     def fmt_oi_val(val):
         if not val: return '—'
@@ -430,6 +455,15 @@ def render_daily(data, lang='tr'):
         if not etf_note and lang == 'tr':
             etf_note = data.get('etf_note')
         etf_note = etf_note or ''
+        if str(etf_note).strip() == 'None':
+            etf_note = ''
+
+        etf_note_html = ""
+        if etf_note.strip():
+            etf_note_html = f'''
+          <div style="font-family:var(--sans); font-size:11px; color:var(--dim); line-height:1.5; background:var(--bg3); padding:10px 14px; border-left:3px solid var(--gold); border-radius:0 4px 4px 0;">
+            <strong style="color:var(--text);">{STR['analyst_note'][lang]}:</strong> {etf_note}
+          </div>'''
         
         ibit_cls = "up" if ibit >= 0 else "down"
         fbtc_cls = "up" if fbtc >= 0 else "down"
@@ -451,6 +485,7 @@ def render_daily(data, lang='tr'):
             badge_style = 'background:rgba(16,185,129,0.12); color:var(--green); border:1px solid rgba(16,185,129,0.3);'
         elif 'Outflow' in sentiment:
             badge_style = 'background:rgba(239,68,68,0.12); color:var(--red); border:1px solid rgba(239,68,68,0.3);'
+        sentiment_display = fmt_sentiment(sentiment, lang)
             
         etf_html = f'''
         {render_section_divider(STR['section_etf_flows'][lang])}
@@ -460,7 +495,7 @@ def render_daily(data, lang='tr'):
               <div style="font-family:var(--sans); font-size:13px; color:var(--text); font-weight:600;">{STR['card_etf_flows_title'][lang]}</div>
               <div style="font-family:var(--mono); font-size:9px; color:var(--dim); margin-top:2px;">{etf_date}</div>
             </div>
-            <div style="font-family:var(--mono); font-size:9px; padding:3px 10px; border-radius:3px; font-weight:600; text-transform:uppercase; {badge_style}">{sentiment}</div>
+            <div style="font-family:var(--mono); font-size:9px; padding:3px 10px; border-radius:3px; font-weight:600; text-transform:uppercase; {badge_style}">{sentiment_display}</div>
           </div>
           <div style="display:flex; gap:28px; margin-bottom:12px;">
             <div>
@@ -478,12 +513,49 @@ def render_daily(data, lang='tr'):
           </div>
           
           {bar_chart_svg}
-          
-          <div style="font-family:var(--sans); font-size:11px; color:var(--dim); line-height:1.5; background:var(--bg3); padding:10px 14px; border-left:3px solid var(--gold); border-radius:0 4px 4px 0;">
-            <strong style="color:var(--text);">{STR['analyst_note'][lang]}:</strong> {etf_note}
-          </div>
+          {etf_note_html}
         </div>
         '''
+
+        # ETH Spot ETF daily flows (second row card)
+        eth_etf = data.get('eth_etf_flows')
+        if eth_etf and eth_etf.get('Total_flow_m') is not None:
+            e_total = eth_etf['Total_flow_m']
+            e_etha = eth_etf.get('ETHA_flow_m')
+            e_feth = eth_etf.get('FETH_flow_m')
+            e_sent = eth_etf.get('sentiment', 'Neutral') or 'Neutral'
+            e_badge = 'background:rgba(245,158,11,0.1); color:var(--gold); border:1px solid rgba(245,158,11,0.3);'
+            if 'Inflow' in e_sent:
+                e_badge = 'background:rgba(16,185,129,0.12); color:var(--green); border:1px solid rgba(16,185,129,0.3);'
+            elif 'Outflow' in e_sent:
+                e_badge = 'background:rgba(239,68,68,0.12); color:var(--red); border:1px solid rgba(239,68,68,0.3);'
+
+            eth_cells = [f'''
+            <div>
+              <div style="font-family:var(--sans); font-size:9px; font-weight:500; text-transform:uppercase; color:var(--dim); letter-spacing:1px; margin-bottom:4px;">{STR['card_daily_total'][lang]}</div>
+              <div class="{'up' if e_total >= 0 else 'down'}" style="font-family:var(--mono); font-size:17px; font-weight:600;">{e_total:+.1f}M</div>
+            </div>''']
+            for fund_label, fund_val in (('ETHA (BlackRock)', e_etha), ('FETH (Fidelity)', e_feth)):
+                if fund_val is not None:
+                    eth_cells.append(f'''
+            <div>
+              <div style="font-family:var(--sans); font-size:9px; font-weight:500; text-transform:uppercase; color:var(--dim); letter-spacing:1px; margin-bottom:4px;">{fund_label}</div>
+              <div class="{'up' if fund_val >= 0 else 'down'}" style="font-family:var(--mono); font-size:17px; font-weight:600;">{fund_val:+.1f}M</div>
+            </div>''')
+
+            etf_html += f'''
+            <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:18px; margin-bottom:24px; page-break-inside:avoid; break-inside:avoid;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                <div>
+                  <div style="font-family:var(--sans); font-size:13px; color:var(--text); font-weight:600;">{STR['card_eth_etf_title'][lang]}</div>
+                  <div style="font-family:var(--mono); font-size:9px; color:var(--dim); margin-top:2px;">{eth_etf.get('date', '')}</div>
+                </div>
+                <div style="font-family:var(--mono); font-size:9px; padding:3px 10px; border-radius:3px; font-weight:600; text-transform:uppercase; {e_badge}">{fmt_sentiment(e_sent, lang)}</div>
+              </div>
+              <div style="display:flex; gap:28px;">
+                {''.join(eth_cells)}
+              </div>
+            </div>'''
 
     # Watchlist
     watchlist_html = ""
@@ -513,6 +585,7 @@ def render_daily(data, lang='tr'):
     {header_html}
     {regime_html}
     {overview_html}
+    {research_html}
     {ticker_html}
     {calendar_html}
     {equities_html}
@@ -530,5 +603,6 @@ def render_daily(data, lang='tr'):
         title="Daily Financial Bulletin" if lang == 'en' else "Günlük Finans Bülteni",
         content=content_html,
         accent_color=accent_color,
-        lang=lang
+        lang=lang,
+        theme=theme
     )

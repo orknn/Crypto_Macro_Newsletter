@@ -37,6 +37,94 @@ def generate_sparkline(prices, width=100, height=30):
     '''
     return svg
 
+def _generic_line_chart(series, width, height, color, y_fmt, grad_id, zero_line=False):
+    """
+    Shared line-chart body: series = [{'date','value'}], y_fmt formats axis
+    ticks. Optionally draws a dashed zero baseline (for indices like NFCI).
+    """
+    values = [s['value'] for s in series]
+    min_val, max_val = min(values), max(values)
+    if zero_line:
+        min_val = min(min_val, 0.0)
+        max_val = max(max_val, 0.0)
+    diff = max_val - min_val if max_val != min_val else 1.0
+    min_val -= diff * 0.05
+    max_val += diff * 0.05
+    diff = max_val - min_val
+
+    padding_left, padding_right, padding_top, padding_bottom = 50, 20, 20, 30
+    chart_w = width - padding_left - padding_right
+    chart_h = height - padding_top - padding_bottom
+
+    points = []
+    for i, val in enumerate(values):
+        x = padding_left + (i / (len(values) - 1)) * chart_w
+        y = padding_top + chart_h - ((val - min_val) / diff) * chart_h
+        points.append(f"{x:.1f},{y:.1f}")
+    path_d = f"M {points[0]} " + " ".join([f"L {p}" for p in points[1:]])
+    area_d = f"M {padding_left:.1f},{padding_top + chart_h:.1f} " + " ".join([f"L {p}" for p in points]) + f" L {padding_left + chart_w:.1f},{padding_top + chart_h:.1f} Z"
+
+    labels = []
+    n = len(series)
+    for idx in [0, n // 4, n // 2, (3 * n) // 4, n - 1]:
+        dt = series[idx]['date']
+        try:
+            lbl = datetime.strptime(dt, "%Y-%m-%d").strftime("%b %y")
+        except Exception:
+            lbl = dt
+        lx = padding_left + (idx / (n - 1)) * chart_w
+        labels.append(f'<text x="{lx:.1f}" y="{height - 8}" fill="var(--dim)" font-size="9" text-anchor="middle" font-family="var(--sans)">{lbl}</text>')
+
+    y_ticks = []
+    for k in range(4):
+        val = min_val + (k / 3) * diff
+        ly = padding_top + chart_h - (k / 3) * chart_h
+        y_ticks.append(f'''
+        <line x1="{padding_left}" y1="{ly:.1f}" x2="{width - padding_right}" y2="{ly:.1f}" stroke="var(--border)" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.4"/>
+        <text x="{padding_left - 8}" y="{ly + 3:.1f}" fill="var(--dim)" font-size="9" text-anchor="end" font-family="var(--mono)">{y_fmt(val)}</text>
+        ''')
+
+    zero_svg = ""
+    if zero_line and min_val < 0 < max_val:
+        y_zero = padding_top + chart_h - ((0 - min_val) / diff) * chart_h
+        gold = STYLE_TOKENS['colors']['gold']
+        zero_svg = f'<line x1="{padding_left}" y1="{y_zero:.1f}" x2="{width - padding_right}" y2="{y_zero:.1f}" stroke="{gold}" stroke-width="1" stroke-dasharray="5,4" opacity="0.7"/>'
+
+    return f'''
+    <svg width="100%" viewBox="0 0 {width} {height}" preserveAspectRatio="none" style="display:block; overflow:visible;">
+      {''.join(y_ticks)}
+      <defs>
+        <linearGradient id="{grad_id}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="{color}" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="{color}" stop-opacity="0.00"/>
+        </linearGradient>
+      </defs>
+      <path d="{area_d}" fill="url(#{grad_id})" />
+      {zero_svg}
+      <path d="{path_d}" fill="none" stroke="{color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      {''.join(labels)}
+      <line x1="{padding_left}" y1="{padding_top + chart_h}" x2="{width - padding_right}" y2="{padding_top + chart_h}" stroke="var(--border)" stroke-width="1"/>
+    </svg>
+    '''
+
+
+def generate_nfci_chart(history, width=600, height=180):
+    """Chicago Fed NFCI: >0 = tighter-than-average conditions, <0 = looser."""
+    if not history or len(history) < 2:
+        return ''
+    color = STYLE_TOKENS['colors']['gold']
+    return _generic_line_chart(history, width, height, color, lambda v: f"{v:+.2f}", "nfciGrad", zero_line=True)
+
+
+def generate_cumulative_flow_chart(series, width=600, height=180):
+    """Cumulative BTC spot ETF net flows since launch, in $B."""
+    if not series or len(series) < 2:
+        return ''
+    series_b = [{'date': s['date'], 'value': s['value'] / 1000.0} for s in series]
+    color = STYLE_TOKENS['colors']['green']
+    return _generic_line_chart(series_b, width, height, color, lambda v: f"${v:.0f}B", "cumFlowGrad")
+
+
 def generate_net_liquidity_chart(series, width=600, height=200):
     """Draw a 3-year line chart of Net Liquidity with a 4-week moving average."""
     if not series or len(series) < 2:
@@ -137,10 +225,10 @@ def generate_net_liquidity_chart(series, width=600, height=200):
     '''
     return svg
 
-def generate_inflation_chart(series, width=600, height=200):
+def generate_inflation_chart(series, width=600, height=200, lang='tr'):
     """Draw a 5-year line chart containing CPI, Core CPI, Core PCE YoY."""
     if not series or len(series) < 2:
-        return '<div style="color:var(--dim); text-align:center; padding:20px;">No inflation history data</div>'
+        return ''
         
     dates = [s['date'] for s in series]
     cpi = [s['cpi'] for s in series]
@@ -181,7 +269,8 @@ def generate_inflation_chart(series, width=600, height=200):
     # 2% target line
     y_target = padding_top + chart_h - ((2.0 - min_val) / diff) * chart_h
     target_line = f'<line x1="{padding_left}" y1="{y_target:.1f}" x2="{width - padding_right}" y2="{y_target:.1f}" stroke="{STYLE_TOKENS["colors"]["gold"]}" stroke-width="1" stroke-dasharray="4,4"/>'
-    target_label = f'<text x="{width - padding_right - 4}" y="{y_target - 4:.1f}" fill="{STYLE_TOKENS["colors"]["gold"]}" font-size="8" text-anchor="end" font-family="var(--sans)">2.0% Target</text>'
+    target_text = "%2,0 Hedef" if lang == 'tr' else "2.0% Target"
+    target_label = f'<text x="{width - padding_right - 4}" y="{y_target - 4:.1f}" fill="{STYLE_TOKENS["colors"]["gold"]}" font-size="8" text-anchor="end" font-family="var(--sans)">{target_text}</text>'
     
     # X labels
     n = len(series)
@@ -654,10 +743,11 @@ def generate_coinbase_premium_chart(trend, current, width=600, height=140):
     '''
     return svg
 
-def generate_ytd_comparison_chart(data, width=600, height=200):
+def generate_ytd_comparison_chart(data, width=600, height=200, lang='tr'):
     """Draw a YTD performance line chart comparing BTC, NDX, Gold."""
+    from render.i18n import STR as _STR
     if not data or not any(data.values()):
-        return '<div style="color:var(--dim); text-align:center; padding:20px;">No YTD comparison data available</div>'
+        return ''
         
     padding_left = 50
     padding_right = 20
@@ -674,7 +764,7 @@ def generate_ytd_comparison_chart(data, width=600, height=200):
             all_vals.extend([s['value'] for s in series])
             
     if not all_vals:
-        return '<div style="color:var(--dim); text-align:center; padding:20px;">No YTD comparison data available</div>'
+        return ''
         
     min_val = min(all_vals)
     max_val = max(all_vals)
@@ -743,7 +833,7 @@ def generate_ytd_comparison_chart(data, width=600, height=200):
     svg = f'''
     <div class="sparkline-wrap" style="padding:20px 24px; margin-bottom:24px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <div style="font-size:12px; color:var(--text); font-weight:600;">BTC vs NDX vs GOLD (YTD Performance)</div>
+        <div style="font-size:12px; color:var(--text); font-weight:600;">{_STR['chart_ytd_title'][lang]}</div>
         <div style="color:var(--text);">{ ' '.join(legends) }</div>
       </div>
       <svg width="100%" viewBox="0 0 {width} {height}" preserveAspectRatio="none" style="display:block; overflow:visible;">

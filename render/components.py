@@ -9,6 +9,7 @@ from render.svg import (
     generate_inflation_chart
 )
 from render.i18n import STR, format_bulletin_date
+from render.themes import apply_theme
 
 def _na(v):
     return v is None or (isinstance(v, float) and v != v)
@@ -58,13 +59,22 @@ def _fmt_change(val):
     arrow = "▲" if val >= 0 else "▼"
     return f"{arrow} {sign}{val:.2f}%", cls
 
-def html_wrapper(title, content, accent_color="#3b82f6", lang="tr", is_weekly=False):
-    """Wrap content in base HTML template with CSS styling."""
+def _fmt_funding(val):
+    """Funding rates live around ±0.01%; two decimals would render as +0.00%."""
+    if _na(val):
+        return "—", ""
+    sign = "+" if val >= 0 else ""
+    cls = "up" if val >= 0 else "down"
+    arrow = "▲" if val >= 0 else "▼"
+    return f"{arrow} {sign}{val:.4f}%", cls
+
+def html_wrapper(title, content, accent_color="#3b82f6", lang="tr", is_weekly=False, theme=None):
+    """Wrap content in base HTML template with CSS styling, then apply the selected theme."""
     other_lang = "en" if lang == "tr" else "tr"
     type_path = "weekly" if is_weekly else "daily"
     alt_url = f"https://nocashflow.net/bulletins/{type_path}/latest.{other_lang}.html"
-    
-    return f'''<!DOCTYPE html>
+
+    base_html = f'''<!DOCTYPE html>
 <html lang="{lang}">
 <head>
   <meta charset="utf-8">
@@ -300,6 +310,7 @@ def html_wrapper(title, content, accent_color="#3b82f6", lang="tr", is_weekly=Fa
 </body>
 </html>
 '''
+    return apply_theme(base_html, theme)
 
 def render_header(title, sub_title, accent_color, fng_data=None, lang='tr'):
     """Render the premium header section with optional Fear & Greed index indicator."""
@@ -468,6 +479,42 @@ def render_section_divider(title, icon=None):
     </div>
     '''
 
+def render_fed_strip(fed, lang='tr'):
+    """One-line Fed pricing strip: next FOMC date, median dot, cut odds (if liquid)."""
+    if not fed or not fed.get('next_fomc'):
+        return ""
+    try:
+        fomc_dt = datetime.strptime(fed['next_fomc'], '%Y-%m-%d')
+        fomc_str = format_bulletin_date(fomc_dt, lang).rsplit(',', 1)[0]
+    except Exception:
+        fomc_str = fed['next_fomc']
+
+    items = [f'''
+    <td style="padding-right:24px;">
+      <span style="font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:0.5px;">{STR['fed_next_meeting'][lang]}</span>
+      <div style="font-family:var(--mono); font-size:12px; color:var(--text); font-weight:600; margin-top:2px;">{fomc_str} <span style="color:var(--dim); font-weight:400;">({fed.get('days_to_fomc', '?')} {STR['fed_days_left'][lang]})</span></div>
+    </td>''']
+
+    if fed.get('dots_median') is not None:
+        items.append(f'''
+    <td style="padding-right:24px;">
+      <span style="font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:0.5px;">{STR['fed_dots'][lang]} ({fed.get('dots_year', '')})</span>
+      <div style="font-family:var(--mono); font-size:12px; color:var(--gold); font-weight:600; margin-top:2px;">{fed['dots_median']:.2f}%</div>
+    </td>''')
+
+    if fed.get('cut_odds') is not None:
+        items.append(f'''
+    <td>
+      <span style="font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:0.5px;">{STR['fed_cut_odds'][lang]} · {fed.get('odds_source', '')}</span>
+      <div style="font-family:var(--mono); font-size:12px; color:var(--green); font-weight:600; margin-top:2px;">{fed['cut_odds']:.0f}%</div>
+    </td>''')
+
+    return f'''
+    <div style="background:var(--bg2); border:1px solid var(--border); border-left:3px solid var(--gold); border-radius:0 4px 4px 0; padding:10px 16px; margin-bottom:20px; page-break-inside:avoid; break-inside:avoid;">
+      <table cellpadding="0" cellspacing="0"><tr>{''.join(items)}</tr></table>
+    </div>'''
+
+
 def render_economic_calendar(events, lang='tr'):
     """Render the economic calendar table."""
     if not events:
@@ -504,7 +551,8 @@ def render_economic_calendar(events, lang='tr'):
         if timestamp:
             from datetime import datetime as _dt
             try:
-                dt_obj = _dt.fromtimestamp(timestamp)
+                from zoneinfo import ZoneInfo
+                dt_obj = _dt.fromtimestamp(timestamp, tz=ZoneInfo('Europe/Istanbul'))
                 if lang == 'tr':
                     months_tr_abbr = {
                         1: "Oca", 2: "Şub", 3: "Mar", 4: "Nis", 5: "May", 6: "Haz",
@@ -549,14 +597,16 @@ def render_economic_calendar(events, lang='tr'):
     </table>
     '''
 
-def render_asset_table(assets, type_name, lang='tr'):
+def render_asset_table(assets, type_name, lang='tr', sparklines=None):
     """Render Equities, Commodities, or Watchlist rows with dynamic sparklines and indicators."""
     if not assets:
         return f'<div style="color:var(--dim); text-align:center; padding:15px;">{STR["no_asset_data"][lang]}</div>'
-        
+
+    sparklines = sparklines or {}
     rows = []
     for a in assets:
         symbol = a.get('Symbol') or a.get('Ticker') or ''
+        raw_symbol = symbol
         # Map Yahoo Finance commodity tickers to cleaner symbols
         if symbol in ['GC=F', 'SI=F', 'HG=F', 'NG=F', 'CC=F', 'KC=F', 'BZ=F', 'CL=F']:
             mapping = {
@@ -601,15 +651,11 @@ def render_asset_table(assets, type_name, lang='tr'):
             c24h_t, c24h_cls = _fmt_change(chg24h)
             c7d_t, c7d_cls = _fmt_change(chg7d)
             c30d_t, c30d_cls = _fmt_change(chg30d)
-            
-            # Draw tiny inline momentum indicator
-            momentum = max(0, min(100, int(50 + chg24h * 5)))
-            mom_svg = f'''
-            <svg width="40" height="6" style="vertical-align:middle; background:var(--bg3); border-radius:3px;">
-              <rect x="0" y="0" width="{momentum}%" height="6" fill="var(--{"green" if chg24h >= 0 else "red"})"/>
-            </svg>
-            '''
-            
+
+            # Real 7-day price sparkline (keyed by the raw ticker, e.g. 'GC=F')
+            history = sparklines.get(raw_symbol, [])
+            mom_svg = generate_sparkline(history, width=50, height=14) if len(history) >= 2 else '<span style="color:var(--dim);">—</span>'
+
             rows.append(f'''
             <tr>
               <td><div class="asset-name"><div class="asset-dot"></div><strong style="color:var(--text);">{symbol}</strong>&nbsp;<span style="color:var(--dim); font-size:10px;">{name}</span></div></td>
@@ -659,6 +705,9 @@ def render_news_section(news_data, ai_commentaries=None, lang='tr'):
     if not stories:
         return ""  # Section will be completely hidden
         
+    def _norm_text(t):
+        return ''.join(c for c in (t or '').lower() if c.isalnum())
+
     html = []
     rendered_count = 0
     for idx, s in enumerate(stories[:3]): # Max 3 stories
@@ -667,11 +716,22 @@ def render_news_section(news_data, ai_commentaries=None, lang='tr'):
         url = s.get('url', '')
         img_url = s.get('image_url') or s.get('image', '')
         source = s.get('source', '')
-        
+
         # RENDERER GUARD: skip news without real URL or source
         if not url or url == '#' or not source:
             continue
-        
+
+        # Finnhub often echoes the headline (± source suffix) as the summary —
+        # showing it twice reads broken, so drop the redundant copy.
+        norm_title, norm_summary = _norm_text(title), _norm_text(summary)
+        if norm_summary and (norm_summary in norm_title or norm_title in norm_summary):
+            summary = ''
+
+        # Publisher logos (e.g. .../finnhub/logo/reuters_logo.jpeg) cropped to
+        # 100x70 look broken — only keep real article photos.
+        if img_url and 'logo' in img_url.lower():
+            img_url = ''
+
         rendered_count += 1
         
         # Fetch matching AI commentary
@@ -716,7 +776,7 @@ def render_news_section(news_data, ai_commentaries=None, lang='tr'):
               <td style="vertical-align:top;">
                 <div style="font-size:9px; text-transform:uppercase; color:var(--gold2); font-weight:600; margin-bottom:6px; letter-spacing:0.5px;">{source}{time_html}</div>
                 <h3 style="font-size:14px; font-weight:600; color:var(--text); margin:0 0 6px 0; line-height:1.45;"><a href="{url}" style="color:inherit; text-decoration:none;" target="_blank">{title}</a></h3>
-                <div style="font-size:12px; color:var(--dim); line-height:1.5;">{summary}</div>
+                {f'<div style="font-size:12px; color:var(--dim); line-height:1.5;">{summary}</div>' if summary.strip() else ''}
               </td>
               {img_html}
             </tr>
@@ -841,3 +901,61 @@ def render_coinbase_premium_card(cp_data, period_label="7D", lang="tr"):
       </div>
     </div>
     '''
+
+def render_research_brief(brief_data, lang='tr'):
+    """Render the Research Desk's featured topics and primary sources."""
+    if not brief_data:
+        return ""
+    
+    topics = brief_data.get('featured_topics', [])
+    if not topics:
+        return ""
+        
+    title = "STRATEJİK ARAŞTIRMA GÜNDEMİ" if lang == 'tr' else "STRATEGIC RESEARCH FOCUS"
+    html = [render_section_divider(title)]
+    
+    for t in topics:
+        lang_content = t.get(lang, {})
+        if not lang_content:
+            continue
+            
+        topic_title = lang_content.get('title', '')
+        topic_desc = lang_content.get('topic', '')
+        beat = t.get('beat', '')
+        
+        # Primary sources
+        sources_html = []
+        sources = lang_content.get('primary_sources', [])
+        for s in sources:
+            s_name = s.get('name', '')
+            s_url = s.get('url', '')
+            s_desc = s.get('description', '')
+            
+            if s_url and s_url != '#':
+                sources_html.append(f'<li><a href="{s_url}" style="color:var(--gold2); text-decoration:none; font-weight:500;" target="_blank"><strong>{s_name}</strong></a> — {s_desc}</li>')
+            else:
+                sources_html.append(f'<li><strong>{s_name}</strong> — {s_desc}</li>')
+                
+        sources_list_html = ""
+        if sources_html:
+            sources_title = "Birincil Kaynaklar / Raporlar:" if lang == 'tr' else "Primary Sources / Reports:"
+            sources_list_html = f'''
+            <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:10px;">
+              <div style="font-size:10px; font-weight:600; text-transform:uppercase; color:var(--dim); margin-bottom:6px; letter-spacing:0.5px;">{sources_title}</div>
+              <ul style="margin:0; padding-left:16px; font-size:11.5px; color:var(--text); line-height:1.6;">
+                {"".join(sources_html)}
+              </ul>
+            </div>
+            '''
+            
+        html.append(f'''
+        <div style="background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:16px; margin-bottom:14px; page-break-inside:avoid; break-inside:avoid;">
+          <div style="font-size:9px; text-transform:uppercase; color:var(--accent); font-weight:700; margin-bottom:6px; letter-spacing:1px;">{beat}</div>
+          <h3 style="font-size:15px; font-weight:700; color:var(--text); margin:0 0 8px 0; line-height:1.4;">{topic_title}</h3>
+          <div style="font-size:12.5px; color:var(--dim); line-height:1.65;">{topic_desc}</div>
+          {sources_list_html}
+        </div>
+        ''')
+        
+    return "".join(html)
+

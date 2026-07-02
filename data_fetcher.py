@@ -629,6 +629,23 @@ def get_macro_scoreboard():
     except Exception as e:
         print(f"      ⚠️  Error fetching MOVE for scoreboard: {e}")
 
+    # Copper/Gold ratio — classic growth-vs-safety gauge (x1000 for readability)
+    try:
+        print("      → Computing Copper/Gold ratio...")
+        cu = get_yfinance_data('HG=F', period='35d')
+        au = get_yfinance_data('GC=F', period='35d')
+        if not cu.empty and not au.empty and 'Close' in cu and 'Close' in au:
+            cu_closes = cu['Close'].dropna()
+            au_closes = au['Close'].dropna()
+            if len(cu_closes) >= 6 and len(au_closes) >= 6:
+                ratio_now = float(cu_closes.iloc[-1].item()) / float(au_closes.iloc[-1].item()) * 1000
+                ratio_week = float(cu_closes.iloc[-6].item()) / float(au_closes.iloc[-6].item()) * 1000
+                results['COPPER_GOLD'] = ratio_now
+                results['COPPER_GOLD_chg'] = ((ratio_now - ratio_week) / ratio_week) * 100 if ratio_week else 0.0
+                print(f"      ✅ Copper/Gold: {ratio_now:.3f} ({results['COPPER_GOLD_chg']:+.2f}% w/w)")
+    except Exception as e:
+        print(f"      ⚠️  Error computing Copper/Gold ratio: {e}")
+
     return results
 
 def get_sp500_sectors():
@@ -1050,8 +1067,12 @@ def get_economic_calendar():
             ts = None
             try:
                 dt = datetime.fromisoformat(date_iso.replace('Z', '+00:00'))
+                # Show event times in Turkish local time, 24h format
+                if dt.tzinfo is not None:
+                    from zoneinfo import ZoneInfo
+                    dt = dt.astimezone(ZoneInfo('Europe/Istanbul'))
                 formatted_date = dt.strftime('%d %b %a')
-                time_str = dt.strftime('%I:%M %p').lstrip('0')
+                time_str = dt.strftime('%H:%M')
                 ts = dt.timestamp()
             except ValueError:
                 formatted_date = date_iso.split('T')[0] if 'T' in date_iso else date_iso
@@ -2108,17 +2129,27 @@ def get_correlation_matrix():
         print(f"      ⚠️  Error generating correlation matrix: {e}")
         return None
 
-def get_etf_flows_history(limit=10):
+def get_etf_flows_history(limit=10, all_data=False, asset='btc'):
     """
-    Fetch Spot Bitcoin ETF daily flows from Farside Investors and return the last N days.
+    Fetch Spot ETF daily flows from Farside Investors and return the last N days.
+
+    asset='btc' tracks IBIT/FBTC; asset='eth' tracks ETHA/FETH. The main
+    /btc/ and /eth/ pages only list the most recent ~2 weeks; pass
+    all_data=True (used by the weekly edition) to scrape full history instead.
+    Output keys stay IBIT_flow_m/FBTC_flow_m for btc; ETHA_flow_m/FETH_flow_m for eth.
     """
+    urls = {
+        'btc': ("https://farside.co.uk/bitcoin-etf-flow-all-data/", "https://farside.co.uk/btc/"),
+        'eth': ("https://farside.co.uk/ethereum-etf-flow-all-data/", "https://farside.co.uk/eth/"),
+    }
+    fund1, fund2 = ('IBIT', 'FBTC') if asset == 'btc' else ('ETHA', 'FETH')
     try:
         from bs4 import BeautifulSoup
         import re as _re
         import cloudscraper
-        url = "https://farside.co.uk/btc/"
+        url = urls[asset][0] if all_data else urls[asset][1]
         scraper = cloudscraper.create_scraper()
-        response = scraper.get(url, timeout=10)
+        response = scraper.get(url, timeout=15)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         table = soup.find('table', class_='etf')
@@ -2127,10 +2158,10 @@ def get_etf_flows_history(limit=10):
 
         header_row = None
         total_col_idx = 13
-        
+
         for tr in table.find_all('tr'):
             cells = [td.get_text(strip=True).upper() for td in tr.find_all(['td', 'th'])]
-            if 'IBIT' in cells or 'FBTC' in cells:
+            if fund1 in cells or fund2 in cells:
                 header_row = cells
                 break
 
@@ -2138,11 +2169,11 @@ def get_etf_flows_history(limit=10):
             i_ibit = None
             i_fbtc = None
             for idx, c in enumerate(header_row):
-                if 'IBIT' in c:
+                if fund1 in c:
                     i_ibit = idx
-                elif 'FBTC' in c:
+                elif fund2 in c:
                     i_fbtc = idx
-            
+
             for tr in table.find_all('tr'):
                 cells = [td.get_text(strip=True).upper() for td in tr.find_all(['td', 'th'])]
                 if 'TOTAL' in cells:
@@ -2170,18 +2201,200 @@ def get_etf_flows_history(limit=10):
 
         results = []
         for r in date_rows[-limit:]:
+            # Skip not-yet-published rows: today's row shows '-' in every fund
+            # column while the Total column already reads '0.0'
+            fund_vals = r[1:total_col_idx] if total_col_idx and total_col_idx <= len(r) else r[1:]
+            if fund_vals and all(v.replace('$', '').strip() in ('', '-', '—') for v in fund_vals):
+                continue
             ibit = to_m(r[i_ibit]) if i_ibit is not None and i_ibit < len(r) else 0.0
             fbtc = to_m(r[i_fbtc]) if i_fbtc is not None and i_fbtc < len(r) else 0.0
             total = to_m(r[total_col_idx]) if total_col_idx is not None and total_col_idx < len(r) else 0.0
             results.append({
                 'date': r[0],
-                'IBIT_flow_m': ibit,
-                'FBTC_flow_m': fbtc,
+                f'{fund1}_flow_m': ibit,
+                f'{fund2}_flow_m': fbtc,
                 'Total_flow_m': total
             })
         return results
     except Exception as e:
-        print(f"      ⚠️  Error fetching ETF flows history: {e}")
+        print(f"      ⚠️  Error fetching ETF flows history ({asset}): {e}")
+        return None
+
+
+def get_eth_etf_flows():
+    """Latest daily Spot Ethereum ETF flows (Total + ETHA/FETH) from Farside."""
+    try:
+        rows = get_etf_flows_history(limit=5, asset='eth')
+        if not rows:
+            return None
+        last = rows[-1]
+        total = last.get('Total_flow_m')
+        return {
+            'date': last.get('date'),
+            'Total_flow_m': total,
+            'ETHA_flow_m': last.get('ETHA_flow_m'),
+            'FETH_flow_m': last.get('FETH_flow_m'),
+            'sentiment': None if total is None else
+                ('Strong Inflow' if total > 100 else ('Outflow' if total < 0 else 'Moderate Inflow'))
+        }
+    except Exception as e:
+        print(f"      ⚠️  Error fetching ETH ETF flows: {e}")
+        return None
+
+
+def get_rates_and_breakevens():
+    """
+    10Y real yield (FRED DFII10) and 10Y breakeven inflation (FRED T10YIE),
+    latest value plus 1-week change in basis points.
+    """
+    out = {}
+    for key, sid in (('real_10y', 'DFII10'), ('breakeven_10y', 'T10YIE')):
+        try:
+            df = get_fred_data(sid, days_back=30)
+            if df is not None and len(df) >= 6:
+                cur = float(df['value'].iloc[-1])
+                week_ago = float(df['value'].iloc[-6])
+                out[key] = cur
+                out[f'{key}_chg_bp'] = (cur - week_ago) * 100
+                print(f"      ✅ {sid}: {cur:.2f}% ({(cur - week_ago) * 100:+.1f} bps w/w)")
+        except Exception as e:
+            print(f"      ⚠️  Error fetching {sid}: {e}")
+    return out
+
+
+def get_nfci():
+    """
+    Chicago Fed National Financial Conditions Index (weekly).
+    Positive = tighter than average, negative = looser than average.
+    Returns current value, 1-week change and a 3-year history for charting.
+    """
+    try:
+        df = get_fred_data('NFCI', days_back=3 * 365)
+        if df is None or len(df) < 2:
+            return None
+        history = [
+            {'date': d.strftime('%Y-%m-%d'), 'value': float(v)}
+            for d, v in zip(df['date'], df['value'])
+        ]
+        current = float(df['value'].iloc[-1])
+        prev = float(df['value'].iloc[-2])
+        print(f"      ✅ NFCI: {current:.3f} ({current - prev:+.3f} w/w)")
+        return {'current': current, 'chg_1w': current - prev, 'history': history}
+    except Exception as e:
+        print(f"      ⚠️  Error fetching NFCI: {e}")
+        return None
+
+
+# FOMC meeting dates (decision day). Extend this list each year — "next
+# meeting" is computed against today's date so it advances automatically.
+FOMC_DATES = [
+    '2026-01-28', '2026-03-18', '2026-04-29', '2026-06-17',
+    '2026-07-29', '2026-09-16', '2026-10-28', '2026-12-09',
+    '2027-01-27', '2027-03-17',
+]
+
+
+def _kalshi_cut_odds(next_fomc_dt):
+    """
+    Market-implied probability of a cut at the given FOMC meeting, from
+    Kalshi's KXFEDDECISION series (sum of C25/C26 yes prices, in cents).
+    Ticker date format is YYMON (year+month, not day). Prices are often
+    None (illiquid) — caller must handle a None return.
+    """
+    ticker_tag = next_fomc_dt.strftime('%y%b').upper()  # e.g. 26JUL
+    url = "https://api.elections.kalshi.com/trade-api/v2/markets?series_ticker=KXFEDDECISION&status=open"
+    resp = requests.get(url, timeout=15)
+    resp.raise_for_status()
+    markets = resp.json().get('markets', [])
+    cut_prob_cents = 0.0
+    found_price = False
+    for m in markets:
+        ticker = m.get('ticker', '')
+        if f'-{ticker_tag}-' not in ticker:
+            continue
+        outcome = ticker.rsplit('-', 1)[-1]
+        if outcome.startswith('C'):
+            price = m.get('last_price') or m.get('yes_bid')
+            if price:
+                cut_prob_cents += float(price)
+                found_price = True
+    return cut_prob_cents if found_price else None
+
+
+def get_fed_pricing():
+    """
+    Fed pricing snapshot for the calendar strip: next FOMC decision date,
+    FOMC median dot for the current year (FRED FEDTARMD) and, when a
+    prediction market has liquidity, the implied cut probability.
+    """
+    result = {}
+    today = datetime.now().date()
+
+    next_fomc = None
+    for d in FOMC_DATES:
+        dt = datetime.strptime(d, '%Y-%m-%d').date()
+        if dt >= today:
+            next_fomc = dt
+            break
+    if next_fomc is None:
+        return None
+    result['next_fomc'] = next_fomc.strftime('%Y-%m-%d')
+    result['days_to_fomc'] = (next_fomc - today).days
+
+    # Median dot for the current year from the latest SEP
+    try:
+        df = get_fred_data('FEDTARMD', start_date=f'{today.year}-01-01')
+        if df is not None and not df.empty:
+            row = df[df['date'].dt.year == today.year]
+            if not row.empty:
+                result['dots_median'] = float(row['value'].iloc[-1])
+                result['dots_year'] = today.year
+                print(f"      ✅ FOMC median dot {today.year}: {result['dots_median']:.2f}%")
+    except Exception as e:
+        print(f"      ⚠️  Error fetching FEDTARMD: {e}")
+
+    # Prediction-market implied cut odds (often illiquid → None → hidden)
+    try:
+        odds = _kalshi_cut_odds(datetime.combine(next_fomc, datetime.min.time()))
+        if odds is not None:
+            result['cut_odds'] = odds
+            result['odds_source'] = 'Kalshi'
+            print(f"      ✅ Kalshi cut odds: {odds:.0f}%")
+        else:
+            print("      ℹ️  Kalshi FOMC markets illiquid — cut odds hidden.")
+    except Exception as e:
+        print(f"      ⚠️  Error fetching Kalshi cut odds: {e}")
+
+    return result
+
+
+def get_eth_btc_ratio():
+    """ETH/BTC spot ratio from Binance with 24h/7d change and 30-day history."""
+    try:
+        r = requests.get('https://api.binance.com/api/v3/ticker/24hr?symbol=ETHBTC', timeout=10)
+        r.raise_for_status()
+        t = r.json()
+        ratio = float(t.get('lastPrice', 0))
+        chg_24h = float(t.get('priceChangePercent', 0))
+        if not ratio:
+            return None
+
+        history = []
+        chg_7d = None
+        try:
+            rk = requests.get('https://api.binance.com/api/v3/klines?symbol=ETHBTC&interval=1d&limit=30', timeout=10)
+            rk.raise_for_status()
+            closes = [float(k[4]) for k in rk.json()]
+            history = closes
+            if len(closes) >= 8 and closes[-8]:
+                chg_7d = (closes[-1] - closes[-8]) / closes[-8] * 100
+        except Exception:
+            pass
+
+        print(f"      ✅ ETH/BTC: {ratio:.5f} ({chg_24h:+.2f}% 24h)")
+        return {'ratio': ratio, 'chg_24h': chg_24h, 'chg_7d': chg_7d, 'history': history}
+    except Exception as e:
+        print(f"      ⚠️  Error fetching ETH/BTC ratio: {e}")
         return None
 
 def calculate_oi_change_from_snapshots(current_oi, edition='daily'):

@@ -29,6 +29,11 @@
       "value": 15.0,
       "range": "0 ... 12",
       "timestamp": "2026-06-12T09:10:49.141496"
+    },
+    "funding_8h_SOL": {
+      "value": 4.501641534,
+      "range": "-0.75 ... +0.75",
+      "timestamp": "2026-07-02T14:07:57.913917"
     }
   },
   "finnhub_calendar": "premium_locked",

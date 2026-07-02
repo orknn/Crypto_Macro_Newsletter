@@ -7,13 +7,14 @@ from render.svg import (
     generate_cycle_heatmap_svg, generate_net_liquidity_chart,
     generate_inflation_chart, generate_ytd_comparison_chart,
     generate_stablecoin_mcap_share_chart, generate_etf_flow_chart,
-    generate_coinbase_premium_chart
+    generate_coinbase_premium_chart, generate_nfci_chart,
+    generate_cumulative_flow_chart
 )
 from render.components import (
     html_wrapper, render_header, render_ticker, render_regime_strip,
     render_section_divider, render_economic_calendar, render_asset_table,
-    render_news_section, render_footer, _fmt_change, _fmt_price,
-    render_coinbase_premium_card, maybe
+    render_news_section, render_footer, _fmt_change, _fmt_price, _fmt_funding,
+    render_coinbase_premium_card, maybe, render_fed_strip
 )
 from render.i18n import STR, tr_upper
 
@@ -26,7 +27,7 @@ def fmt_notional(val):
     else:
         return f"${val:,.0f}"
 
-def render_weekly(data, lang='tr'):
+def render_weekly(data, lang='tr', theme=None):
     """Assemble and compile sections for the Weekly edition."""
     accent_color = STYLE_TOKENS['colors']['accent']
     gold_color = STYLE_TOKENS['colors']['gold']
@@ -50,16 +51,13 @@ def render_weekly(data, lang='tr'):
     if themes:
         theme_items = []
         for i, t in enumerate(themes[:3]):
-            icons = ["🌍", "💧", "🪙"]
-            icon = icons[i] if i < len(icons) else "💡"
-            
             theme_title = t.get('title', '')
             if lang == 'tr':
                 theme_title = tr_upper(theme_title)
-                
+
             theme_items.append(f'''
             <div style="background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:16px; margin-bottom:12px;">
-              <div style="font-family:var(--sans); font-size:11px; font-weight:700; color:var(--gold2); text-transform:uppercase; margin-bottom:6px; letter-spacing:0.5px;">{STR['theme'][lang]} {i+1}: {icon} {theme_title}</div>
+              <div style="font-family:var(--sans); font-size:11px; font-weight:700; color:var(--gold2); text-transform:uppercase; margin-bottom:6px; letter-spacing:0.5px;"><span style="color:var(--dim); font-weight:600;">{STR['theme'][lang]} {i+1} ·</span> {theme_title}</div>
               <div style="font-family:var(--sans); font-size:12.5px; color:var(--text); line-height:1.7;">{t.get('description', '')}</div>
             </div>''')
             
@@ -85,7 +83,8 @@ def render_weekly(data, lang='tr'):
             title += f" (önceki veri · {source_date})" if lang == 'tr' else f" (previous data · {source_date})"
             
         calendar_weekly_html = f'''
-        {render_section_divider(title)}'''
+        {render_section_divider(title)}
+        {render_fed_strip(data.get('fed_pricing'), lang=lang)}'''
         if events:
             calendar_weekly_html += f'''
         {render_economic_calendar(events, lang=lang)}'''
@@ -99,16 +98,37 @@ def render_weekly(data, lang='tr'):
     # 4. Liquidity Regime
     liq_html = ""
     net_liq = data.get('net_liquidity_history_data', [])
-    if net_liq:
-        liq_chart = generate_net_liquidity_chart(net_liq)
+    nfci = data.get('nfci') or {}
+    if net_liq or nfci.get('history'):
+        liq_html = render_section_divider(STR['section_liquidity'][lang])
         liq_note = lang_data.get('notes', {}).get('liquidity_note') or data.get('liquidity_note', '')
-        liq_html = f'''
-        {render_section_divider(STR['section_liquidity'][lang])}
+
+        if net_liq:
+            liq_chart = generate_net_liquidity_chart(net_liq)
+            liq_html += f'''
         <div class="sparkline-wrap" style="margin-bottom:12px;">
-          <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:8px;">US Federal Reserve Net Liquidity (3-Year Weekly)</div>
+          <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:8px;">{STR['chart_net_liq_title'][lang]}</div>
           {liq_chart}
         </div>'''
-        
+
+        if nfci.get('history'):
+            nfci_chart = generate_nfci_chart(nfci['history'])
+            nfci_val = nfci.get('current')
+            nfci_chg = nfci.get('chg_1w')
+            nfci_stat = ""
+            if nfci_val is not None:
+                chg_str = f" ({nfci_chg:+.3f} w/w)" if nfci_chg is not None else ""
+                nfci_stat = f'<span style="font-family:var(--mono); font-size:12px; color:var(--gold); font-weight:600;">{nfci_val:+.3f}{chg_str}</span>'
+            liq_html += f'''
+        <div class="sparkline-wrap" style="margin-bottom:12px; page-break-inside:avoid; break-inside:avoid;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div style="font-size:12.5px; font-weight:600; color:var(--text);">{STR['chart_nfci_title'][lang]}</div>
+            {nfci_stat}
+          </div>
+          {nfci_chart}
+          <div style="font-size:9.5px; color:var(--dim); margin-top:6px;">{STR['nfci_hint'][lang]}</div>
+        </div>'''
+
         if liq_note and str(liq_note).strip() and str(liq_note).strip() != 'None':
             liq_html += f'''
             <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6; margin-bottom:24px; background:var(--bg2); padding:10px 14px; border-left:3px solid var(--accent); border-radius:0 4px 4px 0;">
@@ -139,11 +159,48 @@ def render_weekly(data, lang='tr'):
         vix_txt, vix_cls = _fmt_change(vix_chg)
         
         yield_10y = macro_indicators_data.get('US 10-Year Treasury Yield', 0.0)
+        yield_10y_chg = macro_indicators_data.get('US 10-Year Treasury Yield_chg')
+        if yield_10y_chg is not None:
+            yield_10y_chg_txt, yield_10y_chg_cls = _fmt_change(yield_10y_chg)
+        else:
+            yield_10y_chg_txt, yield_10y_chg_cls = '—', ''
         spread_2s10s = macro_indicators_data.get('2s10s_spread', 0.0)
         spread_txt, spread_cls = _fmt_change(spread_2s10s)
         
-        inflation_chart = generate_inflation_chart(inflation_history) if inflation_history else ""
+        inflation_chart = generate_inflation_chart(inflation_history, lang=lang) if inflation_history else ""
         inflation_note = lang_data.get('notes', {}).get('inflation_note') or data.get('inflation_note', '')
+
+        # Extra tiles: 10Y real yield, 10Y breakeven, copper/gold ratio
+        rates = data.get('rates_breakevens') or {}
+        rates_tiles = []
+        if rates.get('real_10y') is not None:
+            chg_bp = rates.get('real_10y_chg_bp', 0.0)
+            cls = 'down' if chg_bp > 0 else 'up'  # rising real yields = risk headwind
+            rates_tiles.append(f'''
+          <div style="background:var(--bg2); padding:12px; text-align:center;">
+            <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_real_yield'][lang]}</div>
+            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{rates['real_10y']:.2f}%</div>
+            <div class="{cls}" style="font-family:var(--mono); font-size:10px; margin-top:2px;">{chg_bp:+.1f} bps</div>
+          </div>''')
+        if rates.get('breakeven_10y') is not None:
+            chg_bp = rates.get('breakeven_10y_chg_bp', 0.0)
+            rates_tiles.append(f'''
+          <div style="background:var(--bg2); padding:12px; text-align:center;">
+            <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_breakeven'][lang]}</div>
+            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{rates['breakeven_10y']:.2f}%</div>
+            <div style="font-family:var(--mono); font-size:10px; color:var(--dim); margin-top:2px;">{chg_bp:+.1f} bps</div>
+          </div>''')
+        cg = ms.get('COPPER_GOLD')
+        if cg:
+            cg_chg = ms.get('COPPER_GOLD_chg', 0.0)
+            cg_cls = 'up' if cg_chg >= 0 else 'down'
+            rates_tiles.append(f'''
+          <div style="background:var(--bg2); padding:12px; text-align:center;">
+            <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_copper_gold'][lang]}</div>
+            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{cg:.3f}</div>
+            <div class="{cg_cls}" style="font-family:var(--mono); font-size:10px; margin-top:2px;">{cg_chg:+.2f}% · {STR['growth_signal'][lang]}</div>
+          </div>''')
+        rates_tiles_html = ''.join(rates_tiles)
         
         macro_scoreboard_html = f'''
         {render_section_divider(STR['section_macro_scoreboard'][lang])}
@@ -156,7 +213,7 @@ def render_weekly(data, lang='tr'):
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_10y_yield'][lang]}</div>
             <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{yield_10y:.2f}%</div>
-            <div style="font-family:var(--mono); font-size:10px; color:var(--dim); margin-top:2px;">Consolidated</div>
+            <div class="{yield_10y_chg_cls}" style="font-family:var(--mono); font-size:10px; margin-top:2px;">{yield_10y_chg_txt}</div>
           </div>
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_spread'][lang]}</div>
@@ -178,10 +235,11 @@ def render_weekly(data, lang='tr'):
             <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{vix:.1f}</div>
             <div class="{vix_cls}" style="font-family:var(--mono); font-size:10px; margin-top:2px;">{vix_txt}</div>
           </div>
+          {rates_tiles_html}
         </div>
         
         <div class="sparkline-wrap" style="margin-bottom:12px;">
-          <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:8px;">{STR['card_inflation_path'][lang]} (CPI, Core CPI, Core PCE YoY - 5-Year)</div>
+          <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:8px;">{STR['chart_inflation_title'][lang]}</div>
           {inflation_chart}
         </div>'''
         
@@ -195,9 +253,10 @@ def render_weekly(data, lang='tr'):
     equities_html = ""
     mag7 = data.get('magnificent_7', [])
     commodities = data.get('commodities', [])
+    asset_sparklines = data.get('asset_sparklines', {})
     if mag7 or commodities:
-        mag7_table = render_asset_table(mag7, "equities", lang=lang) if mag7 else ""
-        comm_table = render_asset_table(commodities, "commodities", lang=lang) if commodities else ""
+        mag7_table = render_asset_table(mag7, "equities", lang=lang, sparklines=asset_sparklines) if mag7 else ""
+        comm_table = render_asset_table(commodities, "commodities", lang=lang, sparklines=asset_sparklines) if commodities else ""
         equities_html = f'''
         {render_section_divider(STR['section_equities_commodities'][lang])}
         {mag7_table}
@@ -219,7 +278,7 @@ def render_weekly(data, lang='tr'):
             border = 'rgba(16,185,129,0.18)' if chg >= 0 else 'rgba(239,68,68,0.18)'
             tiles.append(f'''
             <div style="background:{bg}; border:1px solid {border}; padding:8px; text-align:center; border-radius:4px;">
-              <div style="font-size:7.5px; color:var(--dim); text-transform:uppercase; margin-bottom:2px;">{name}</div>
+              <div style="font-size:9px; color:var(--dim); text-transform:uppercase; margin-bottom:2px;">{name}</div>
               <div style="font-family:var(--mono); font-size:11px; font-weight:600; color:var(--text); margin-bottom:2px;">{sym}</div>
               <div class="{chg_cls}" style="font-family:var(--mono); font-size:10px;">{chg_text}</div>
             </div>''')
@@ -237,7 +296,7 @@ def render_weekly(data, lang='tr'):
     ytd_html = ""
     ytd_comp = data.get('ytd_comparison_data', {})
     if ytd_comp:
-        ytd_html = generate_ytd_comparison_chart(ytd_comp)
+        ytd_html = generate_ytd_comparison_chart(ytd_comp, lang=lang)
 
     # 9. Turkey Desk
     turkey_html = ""
@@ -288,7 +347,7 @@ def render_weekly(data, lang='tr'):
         stablecoin_html = f'''
         {render_section_divider(STR['section_stablecoin'][lang])}
         <div class="sparkline-wrap" style="margin-bottom:12px;">
-          <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:8px;">{STR['card_stablecoin_mcap'][lang]} & USDT/USDC Shares (3-Year Weekly)</div>
+          <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:8px;">{STR['chart_stablecoin_title'][lang]}</div>
           {stable_chart}
         </div>'''
         
@@ -320,7 +379,7 @@ def render_weekly(data, lang='tr'):
           <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
             <div>
               <div style="font-family:var(--sans); font-size:13px; color:var(--text); font-weight:600;">{STR['card_etf_weekly_title'][lang]}</div>
-              <div style="font-family:var(--mono); font-size:9px; color:var(--dim); margin-top:2px;">Week ending {w_date}</div>
+              <div style="font-family:var(--mono); font-size:9px; color:var(--dim); margin-top:2px;">{STR['week_ending'][lang]} · {w_date}</div>
             </div>
           </div>
           <div style="display:flex; gap:28px; margin-bottom:16px;">
@@ -340,6 +399,36 @@ def render_weekly(data, lang='tr'):
           <div class="sparkline-wrap" style="margin-bottom:12px; padding-top:12px; border-top:1px solid var(--border);">
             <div style="font-size:10px; font-weight:600; text-transform:uppercase; color:var(--dim); margin-bottom:10px;">{STR['card_etf_weekly_history_title'][lang]}</div>
             {etf_chart}
+          </div>'''
+
+        # ETH weekly total (one-line summary under the BTC numbers)
+        eth_weekly = data.get('eth_etf_weekly_data') or []
+        if eth_weekly:
+            ew = eth_weekly[-1]
+            ew_total = ew.get('Total_flow_m', 0.0)
+            ew_cls = 'up' if ew_total >= 0 else 'down'
+            ew_etha = ew.get('ETHA_flow_m')
+            ew_feth = ew.get('FETH_flow_m')
+            ew_detail = ""
+            if ew_etha is not None and ew_feth is not None:
+                ew_detail = f'&nbsp;·&nbsp;<span style="color:var(--dim);">ETHA {ew_etha:+.1f}M · FETH {ew_feth:+.1f}M</span>'
+            etf_weekly_html += f'''
+          <div style="border-top:1px solid var(--border); padding-top:12px; margin-bottom:12px; font-family:var(--sans); font-size:11.5px; color:var(--dim);">
+            <span style="font-weight:600; text-transform:uppercase; font-size:9.5px; letter-spacing:0.5px;">{STR['card_eth_etf_title'][lang].replace('Günlük', 'Haftalık') if lang == 'tr' else STR['card_eth_etf_title'][lang].replace('Daily', 'Weekly')}:</span>
+            <span class="{ew_cls}" style="font-family:var(--mono); font-size:13px; font-weight:600;">&nbsp;{ew_total:+.1f}M</span>{ew_detail}
+          </div>'''
+
+        cumulative = data.get('etf_cumulative_data', [])
+        if cumulative:
+            cum_chart = generate_cumulative_flow_chart(cumulative)
+            cum_total_b = cumulative[-1]['value'] / 1000.0
+            etf_weekly_html += f'''
+          <div class="sparkline-wrap" style="margin-bottom:12px; page-break-inside:avoid; break-inside:avoid;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <div style="font-size:10px; font-weight:600; text-transform:uppercase; color:var(--dim);">{STR['chart_cumulative_title'][lang]}</div>
+              <div style="font-family:var(--mono); font-size:12px; color:var(--green); font-weight:600;">${cum_total_b:.1f}B</div>
+            </div>
+            {cum_chart}
           </div>'''
           
         if etf_note:
@@ -376,6 +465,24 @@ def render_weekly(data, lang='tr'):
     rotation_html = ""
     rotation_data = data.get('crypto_sector_rotation_data', {})
     rotation_note = lang_data.get('notes', {}).get('rotation_note') or data.get('rotation_note', '')
+
+    # ETH/BTC ratio card (rotation gauge)
+    eth_btc = data.get('eth_btc') or {}
+    eth_btc_card = ""
+    if eth_btc.get('ratio'):
+        eb_chg = eth_btc.get('chg_7d')
+        eb_txt, eb_cls = _fmt_change(eb_chg)
+        eb_spark = generate_sparkline(eth_btc.get('history', []), width=90, height=22)
+        eth_btc_card = f'''
+        <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:14px 16px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; page-break-inside:avoid; break-inside:avoid;">
+          <div>
+            <div style="font-size:9.5px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:4px;">{STR['card_eth_btc'][lang]}</div>
+            <span style="font-family:var(--mono); font-size:17px; font-weight:700; color:var(--text);">{eth_btc['ratio']:.5f}</span>
+            <span class="{eb_cls}" style="font-family:var(--mono); font-size:11px; margin-left:8px;">{eb_txt} {'(7g)' if lang == 'tr' else '(7D)'}</span>
+          </div>
+          <div>{eb_spark}</div>
+        </div>'''
+
     if rotation_data:
         rows = []
         for sector, score in rotation_data.items():
@@ -387,6 +494,7 @@ def render_weekly(data, lang='tr'):
             </tr>''')
         rotation_html = f'''
         {render_section_divider(STR['section_rotation'][lang])}
+        {eth_btc_card}
         <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; overflow:hidden; padding:12px; margin-bottom:24px; page-break-inside:avoid; break-inside:avoid;">
           <table width="100%" style="border-collapse:collapse; font-size:12px;">
             <thead>
@@ -439,14 +547,14 @@ def render_weekly(data, lang='tr'):
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_spot_price'][lang]}</div>
             <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">${spot:,.0f}</div>
-            <div style="font-size:9.5px; color:var(--dim); margin-top:2px;">Real-time</div>
+            <div style="font-size:9.5px; color:var(--dim); margin-top:2px;">{STR['label_realtime'][lang]}</div>
           </div>
         </div>
         
         <div class="sparkline-wrap" style="margin-bottom:12px; page-break-inside:avoid; break-inside:avoid;">
-          <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:8px;">Bitcoin Monthly Return Heatmap (2024-2026)</div>
+          <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:8px;">{STR['chart_heatmap_title'][lang]}</div>
           {heatmap_svg}
-          <div style="font-size:9px; color:var(--dim); margin-top:6px; text-align:right;">* Current month is marked.</div>
+          <div style="font-size:9px; color:var(--dim); margin-top:6px; text-align:right;">{STR['heatmap_footnote'][lang]}</div>
         </div>'''
         
         if cycle_note:
@@ -464,7 +572,7 @@ def render_weekly(data, lang='tr'):
         correlation_html = f'''
         {render_section_divider(STR['section_correlation'][lang])}
         <div class="sparkline-wrap" style="margin-bottom:12px; page-break-inside:avoid; break-inside:avoid;">
-          <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:12px;">Macro & Crypto Assets Correlation Matrix (30-Day Rolling Daily Returns)</div>
+          <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:12px;">{STR['chart_correlation_title'][lang]}</div>
           {corr_chart}
         </div>'''
         
@@ -490,8 +598,8 @@ def render_weekly(data, lang='tr'):
     cp = data.get('coinbase_premium', {}) or {}
     cp_card_html = render_coinbase_premium_card(cp, "180D", lang=lang)
     
-    btc_fr_str, btc_fr_cls = _fmt_change(fr.get('BTC', 0.0))
-    eth_fr_str, eth_fr_cls = _fmt_change(fr.get('ETH', 0.0))
+    btc_fr_str, btc_fr_cls = _fmt_funding(fr.get('BTC', 0.0))
+    eth_fr_str, eth_fr_cls = _fmt_funding(fr.get('ETH', 0.0))
     
     btc_oi = oi.get('BTC', {})
     eth_oi = oi.get('ETH', {})
@@ -674,5 +782,6 @@ def render_weekly(data, lang='tr'):
         content=content_html,
         accent_color=gold_color,
         lang=lang,
-        is_weekly=True
+        is_weekly=True,
+        theme=theme
     )

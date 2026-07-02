@@ -20,9 +20,11 @@ from data_fetcher import (
     get_commodities, get_economic_calendar, get_global_liquidity_index, 
     get_macro_scoreboard, get_sp500_sectors, get_crypto_futures_basis, 
     get_etf_flows, get_bist_data, get_m2_money_supply, get_stablecoin_data,
-    get_net_liquidity, get_stablecoin_history, get_inflation_path, 
+    get_net_liquidity, get_stablecoin_history, get_inflation_path,
     get_btc_cycle_metrics, get_correlation_matrix, get_etf_flows_history,
-    get_yfinance_data, calculate_oi_change_from_snapshots
+    get_yfinance_data, calculate_oi_change_from_snapshots,
+    get_options_market_data, get_eth_etf_flows, get_rates_and_breakevens,
+    get_nfci, get_fed_pricing, get_eth_btc_ratio
 )
 from agents import ContentEditorAgent, ExperienceDesignerAgent
 import validators
@@ -144,32 +146,77 @@ def calculate_crypto_sector_rotation(crypto_prices):
     return results
 
 
-def get_weekly_etf_flows(etf_daily_history):
-    """Aggregate daily ETF flows into weekly sums by Sunday."""
+def get_weekly_etf_flows(etf_daily_history, max_weeks=12):
+    """Aggregate daily ETF flows into weekly sums by Sunday.
+
+    Partial boundary weeks are dropped: the first resampled week rarely covers
+    a full Mon-Fri span of the scraped range, and the week containing today is
+    still incomplete — both would show misleadingly small bars.
+    """
     import pandas as pd
     if not etf_daily_history:
         return []
-        
+
     try:
         df = pd.DataFrame(etf_daily_history)
         df['parsed_date'] = pd.to_datetime(df['date'], errors='coerce')
         df = df.dropna(subset=['parsed_date'])
         df.set_index('parsed_date', inplace=True)
-        
+
         # Resample weekly and sum
-        weekly = df.resample('W-SUN').sum()
-        
+        weekly = df.resample('W-SUN').sum(numeric_only=True)
+
+        # Drop the leading partial week and the still-running current week
+        if len(weekly) > 1:
+            weekly = weekly.iloc[1:]
+        today = pd.Timestamp(datetime.now().date())
+        weekly = weekly[weekly.index <= today]
+        weekly = weekly.tail(max_weeks)
+
         results = []
         for d, row in weekly.iterrows():
-            results.append({
-                'date': d.strftime('%Y-%m-%d'),
-                'Total_flow_m': float(row['Total_flow_m']),
-                'IBIT_flow_m': float(row['IBIT_flow_m']),
-                'FBTC_flow_m': float(row['FBTC_flow_m'])
-            })
+            entry = {'date': d.strftime('%Y-%m-%d')}
+            for col in weekly.columns:
+                entry[col] = float(row[col])
+            results.append(entry)
         return results
     except Exception as e:
         print(f"      ⚠️  Error aggregating weekly ETF flows: {e}")
+        return []
+
+
+def get_cumulative_etf_flows(etf_daily_history, max_points=120):
+    """
+    Cumulative sum of daily BTC ETF net flows since launch, downsampled for
+    charting. Input is the full-history Farside list (oldest → newest).
+    """
+    if not etf_daily_history:
+        return []
+    try:
+        from datetime import datetime as _dt
+        cumulative = 0.0
+        series = []
+        for row in etf_daily_history:
+            total = row.get('Total_flow_m')
+            if total is None:
+                continue
+            cumulative += total
+            try:
+                d = _dt.strptime(row['date'], '%d %b %Y').strftime('%Y-%m-%d')
+            except Exception:
+                d = row.get('date', '')
+            series.append({'date': d, 'value': cumulative})
+
+        # Downsample evenly, always keeping the last point
+        if len(series) > max_points:
+            step = len(series) / max_points
+            sampled = [series[int(i * step)] for i in range(max_points)]
+            if sampled[-1] is not series[-1]:
+                sampled.append(series[-1])
+            series = sampled
+        return series
+    except Exception as e:
+        print(f"      ⚠️  Error computing cumulative ETF flows: {e}")
         return []
 
 
@@ -213,8 +260,17 @@ def run_pipeline():
     dry_run = '--dry-run' in sys.argv
     skip_agents = '--no-agents' in sys.argv
     send_email_arg = '--send-email' in sys.argv
-    
-    print(f"Running pipeline in {edition.upper()} edition (Language: {lang_arg.upper()})...")
+
+    # Görsel tema seçimi: premium (varsayılan) | editorial | glass
+    from render.themes import resolve_theme
+    theme_arg = None
+    if '--theme' in sys.argv:
+        idx = sys.argv.index('--theme')
+        if idx + 1 < len(sys.argv):
+            theme_arg = sys.argv[idx + 1].lower()
+    theme = resolve_theme(theme_arg)
+
+    print(f"Running pipeline in {edition.upper()} edition (Language: {lang_arg.upper()}, Theme: {theme.upper()})...")
     if dry_run:
         print("  ⚠️  DRY RUN mode active — no emails, no web push.")
         
@@ -228,8 +284,8 @@ def run_pipeline():
         '^TNX', '^IRX', '^VIX', 'DX-Y.NYB', 'NQ=F', 'SMH', '^MOVE',
         'XLE', 'XLF', 'XLK', 'XLY', 'XLP', 'XLV', 'XLI', 'XLC', 'XLB', 'XLRE', 'XLU',
         'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA',
-        'GC=F', 'SI=F', 'CL=F', 'HG=F', 'XU100.IS', 'USDTRY=X',
-        'BTC-USD', '^NDX'
+        'GC=F', 'SI=F', 'CL=F', 'HG=F', 'NG=F', 'CC=F', 'KC=F', 'BZ=F',
+        'XU100.IS', 'USDTRY=X', 'BTC-USD', '^NDX'
     ]
     preload_period = '2y' if edition == 'weekly' else '35d'
     preload_yfinance_data(yf_tickers, period=preload_period)
@@ -293,6 +349,18 @@ def run_pipeline():
     print("  → Stablecoin data...")
     stablecoin_data = get_stablecoin_data()
 
+    print("  → Options market data (Deribit)...")
+    options_data = get_options_market_data()
+
+    print("  → ETH Spot ETF flows...")
+    eth_etf_flows = get_eth_etf_flows()
+
+    print("  → Fed pricing (FOMC/dots/cut-odds)...")
+    fed_pricing = get_fed_pricing()
+
+    print("  → ETH/BTC ratio...")
+    eth_btc = get_eth_btc_ratio()
+
     # Fetch sparkline histories
     print("  → Ticker history (sparklines)...")
     ticker_history_data = {}
@@ -312,6 +380,23 @@ def run_pipeline():
                 ticker_history_data[name] = [float(x) for x in closes[-7:]]
         except Exception as e:
             print(f"      ⚠️  Error fetching history for ticker sparkline {name}: {e}")
+
+    # 7-day sparklines for the equities & commodities tables (data already cached)
+    print("  → Asset table sparklines...")
+    asset_sparkline_tickers = [
+        'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA',
+        'GC=F', 'SI=F', 'HG=F', 'NG=F', 'CC=F', 'KC=F', 'BZ=F'
+    ]
+    asset_sparklines = {}
+    for sym in asset_sparkline_tickers:
+        try:
+            df = get_yfinance_data(sym, period='35d')
+            if not df.empty and 'Close' in df:
+                closes = df['Close'].dropna().tolist()
+                if len(closes) >= 2:
+                    asset_sparklines[sym] = [float(x) for x in closes[-7:]]
+        except Exception as e:
+            print(f"      ⚠️  Error fetching asset sparkline {sym}: {e}")
 
     # Combine into core data dict
     data = {
@@ -335,8 +420,25 @@ def run_pipeline():
         'etf_flows': etf_flows,
         'bist_try': bist_try,
         'stablecoin_data': stablecoin_data,
+        'options_data': options_data or {},
+        'eth_etf_flows': eth_etf_flows,
+        'fed_pricing': fed_pricing,
+        'eth_btc': eth_btc,
         'ticker_history': ticker_history_data,
+        'asset_sparklines': asset_sparklines,
     }
+
+    # Load research brief if it exists
+    research_brief = None
+    try:
+        brief_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'research_brief_daily.json')
+        if os.path.exists(brief_path):
+            with open(brief_path, 'r', encoding='utf-8') as f:
+                research_brief = json.load(f)
+            print("  ✅ Research brief loaded successfully.")
+    except Exception as e:
+        print(f"  ⚠️  Error loading research brief: {e}")
+    data['research_brief'] = research_brief
 
     # ── 2. Fetch Weekly Specific Data (if weekly) ──
     if edition == 'weekly':
@@ -362,8 +464,22 @@ def run_pipeline():
         data['ytd_comparison_data'] = get_ytd_comparison_data()
         
         print("  → Weekly ETF flows...")
-        etf_history = get_etf_flows_history(limit=30)
+        etf_history = get_etf_flows_history(limit=2000, all_data=True)
         data['etf_weekly_history_data'] = get_weekly_etf_flows(etf_history)
+
+        print("  → Cumulative ETF flows (since launch)...")
+        data['etf_cumulative_data'] = get_cumulative_etf_flows(etf_history)
+
+        print("  → Weekly ETH ETF flows...")
+        eth_history = get_etf_flows_history(limit=2000, all_data=True, asset='eth')
+        eth_weekly = get_weekly_etf_flows(eth_history)
+        data['eth_etf_weekly_data'] = eth_weekly
+
+        print("  → 10Y Real Yield & Breakeven...")
+        data['rates_breakevens'] = get_rates_and_breakevens()
+
+        print("  → Chicago Fed NFCI...")
+        data['nfci'] = get_nfci()
         
         print("  → Winners & Losers (7D)...")
         winners, losers = get_winners_losers(crypto_prices)
@@ -479,9 +595,9 @@ def run_pipeline():
         pdf_filename = f'{edition}_bulletin_{lang}.pdf'
         
         if edition == 'weekly':
-            html_content = render_weekly(data, lang=lang)
+            html_content = render_weekly(data, lang=lang, theme=theme)
         else:
-            html_content = render_daily(data, lang=lang)
+            html_content = render_daily(data, lang=lang, theme=theme)
             
         with open(html_filename, 'w', encoding='utf-8') as f:
             f.write(html_content)

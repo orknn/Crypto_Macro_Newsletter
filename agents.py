@@ -249,13 +249,18 @@ Maksimum 5 öneri ver. Her öneri UYGULANABİLİR ve SOMUT olmalı."""
 # HELPER: Prepare data summary for LLM
 # ═══════════════════════════════════════════
 
-def _prepare_data_summary(data):
+def _prepare_data_summary(data, edition='daily'):
     """Create a clean copy of the newsletter data for the LLM, excluding AI outputs."""
     exclude_keys = {
-        'tr', 'en', 'ai_summary', 'news_commentaries', 
-        'design_improvement_report', 'futures_note', 
+        'tr', 'en', 'ai_summary', 'news_commentaries',
+        'design_improvement_report', 'futures_note',
         'etf_note', 'indicators_note', 'weekly_themes'
     }
+    if edition == 'weekly':
+        # The weekly bulletin renders weekly aggregates (etf_weekly_history_data);
+        # hide the single-day ETF numbers so the AI notes can't quote figures
+        # that contradict the weekly totals shown on the card.
+        exclude_keys |= {'etf_flows', 'etf_history_data'}
     summary = {k: v for k, v in data.items() if k not in exclude_keys}
     return summary
 
@@ -346,7 +351,7 @@ class ContentEditorAgent:
             from anthropic import Anthropic
             client = Anthropic(api_key=api_key)
 
-            data_summary = _prepare_data_summary(data)
+            data_summary = _prepare_data_summary(data, edition=edition)
             
             raw_news = data.get('macro_news', {}).get('news', [])
             news_inputs = [{"title": n.get('title'), "summary": n.get('summary')} for n in raw_news]
