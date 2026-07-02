@@ -557,13 +557,13 @@ def render_daily(data, lang='tr', theme=None):
               </div>
             </div>'''
 
-    # Watchlist
+    # Watchlist (top 10 by market cap)
     watchlist_html = ""
-    crypto_prices = data.get('crypto_prices', [])
-    if crypto_prices:
+    watchlist_rows = data.get('crypto_prices_display') or data.get('crypto_prices', [])
+    if watchlist_rows:
         watchlist_html = f'''
         {render_section_divider(STR['section_watchlist'][lang])}
-        {render_asset_table(crypto_prices, "crypto", lang=lang)}
+        {render_asset_table(watchlist_rows, "crypto", lang=lang)}
         '''
 
     # Stories

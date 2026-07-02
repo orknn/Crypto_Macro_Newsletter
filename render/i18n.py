@@ -141,6 +141,12 @@ STR = {
     "fed_dots": {"tr": "Medyan Nokta Tahmini", "en": "Median Dot"},
     "fed_cut_odds": {"tr": "Faiz İndirim İhtimali", "en": "Rate Cut Odds"},
     "growth_signal": {"tr": "büyüme sinyali", "en": "growth signal"},
+    "section_hype_radar": {"tr": "HYPE RADARI", "en": "Hype Radar"},
+    "col_mcap_rank": {"tr": "MCap Sırası", "en": "MCap Rank"},
+    "hype_radar_hint": {
+        "tr": "CoinGecko arama trendleri — piyasanın bu hafta en çok konuştuğu coinler. Yüksek hype ≠ al sinyali; küçük hacimli coinlerde oynaklık aşırıdır.",
+        "en": "CoinGecko search trends — the coins the market is talking about this week. High hype ≠ buy signal; low-cap coins are extremely volatile."
+    },
 }
 
 # Sentiment badges (data layer produces English labels)

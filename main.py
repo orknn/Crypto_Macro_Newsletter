@@ -24,7 +24,7 @@ from data_fetcher import (
     get_btc_cycle_metrics, get_correlation_matrix, get_etf_flows_history,
     get_yfinance_data, calculate_oi_change_from_snapshots,
     get_options_market_data, get_eth_etf_flows, get_rates_and_breakevens,
-    get_nfci, get_fed_pricing, get_eth_btc_ratio
+    get_nfci, get_fed_pricing, get_eth_btc_ratio, get_trending_coins
 )
 from agents import ContentEditorAgent, ExperienceDesignerAgent
 import validators
@@ -291,8 +291,17 @@ def run_pipeline():
     preload_yfinance_data(yf_tickers, period=preload_period)
 
     # ── 1. Fetch Shared Core Data ──
+    # The full watchlist is still fetched for weekly analytics (sector
+    # rotation, winners & losers); the watchlist TABLE shows only the top 10
+    # by market cap.
     print("  → Crypto prices...")
     crypto_prices = get_crypto_prices(watchlist)
+    crypto_prices_display = sorted(
+        crypto_prices, key=lambda c: c.get('Market Cap') or 0, reverse=True
+    )[:10]
+    if not any(c.get('Market Cap') for c in crypto_prices):
+        # Binance fallback has no market cap — watchlist order is ~mcap-sorted
+        crypto_prices_display = crypto_prices[:10]
     
     print("  → Crypto market overview...")
     crypto_market_overview = get_crypto_market_overview()
@@ -402,6 +411,7 @@ def run_pipeline():
     data = {
         'date': datetime.now().strftime('%Y-%m-%d'),
         'crypto_prices': crypto_prices,
+        'crypto_prices_display': crypto_prices_display,
         'crypto_market_overview': crypto_market_overview,
         'macro_indicators': macro_indicators,
         'magnificent_7': magnificent_7,
@@ -488,6 +498,9 @@ def run_pipeline():
         
         print("  → Crypto sector rotation...")
         data['crypto_sector_rotation_data'] = calculate_crypto_sector_rotation(crypto_prices)
+
+        print("  → Trending coins (hype radar)...")
+        data['trending_coins'] = get_trending_coins()
     else:
         # For daily ETF bar chart (last 10 days)
         print("  → ETF daily history...")

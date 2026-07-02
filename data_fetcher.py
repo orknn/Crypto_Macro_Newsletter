@@ -193,6 +193,7 @@ def get_crypto_prices(watchlist):
                     '24h %': item.get('price_change_percentage_24h_in_currency', 0.0),
                     '7d %': item.get('price_change_percentage_7d_in_currency', 0.0),
                     '30d %': item.get('price_change_percentage_30d_in_currency', 0.0),
+                    'Market Cap': item.get('market_cap', 0.0),
                 })
             else:
                 results.append({
@@ -208,6 +209,34 @@ def get_crypto_prices(watchlist):
         print(f"Error fetching crypto prices from CoinGecko: {e}")
         print("Falling back to Binance API...")
         return _fallback_crypto_prices_binance(watchlist)
+
+def get_trending_coins(limit=7):
+    """
+    CoinGecko search-trending coins — a proxy for what the market is hyping
+    right now. Returns [{'symbol','name','rank','chg_24h','mcap_str'}].
+    """
+    try:
+        r = requests.get('https://api.coingecko.com/api/v3/search/trending', timeout=15)
+        r.raise_for_status()
+        coins = r.json().get('coins', [])
+        results = []
+        for c in coins[:limit]:
+            it = c.get('item', {}) or {}
+            d = it.get('data', {}) or {}
+            chg = d.get('price_change_percentage_24h', {})
+            chg_usd = chg.get('usd') if isinstance(chg, dict) else None
+            results.append({
+                'symbol': (it.get('symbol') or '').upper(),
+                'name': it.get('name', ''),
+                'rank': it.get('market_cap_rank'),
+                'chg_24h': float(chg_usd) if chg_usd is not None else None,
+                'mcap_str': d.get('market_cap', ''),
+            })
+        return results
+    except Exception as e:
+        print(f"      ⚠️  Error fetching trending coins: {e}")
+        return []
+
 
 def get_crypto_market_overview():
     """
@@ -834,7 +863,7 @@ def get_global_liquidity_index():
         df = df.dropna()
         
         if len(df) < 2:
-            return _fallback_liquidity()
+            return None
         
         current = df['value'].iloc[-1]  # in millions
         prev_week = df['value'].iloc[-2] if len(df) >= 2 else current
@@ -853,20 +882,10 @@ def get_global_liquidity_index():
             'label': 'Fed Balance Sheet',
         }
     except Exception as e:
+        # No fabricated fallback — a None here means the AI summary simply
+        # won't see a liquidity figure instead of quoting a stale hardcoded one.
         print(f"  ⚠️  Global Liquidity fetch error: {e}")
-        return _fallback_liquidity()
-
-
-def _fallback_liquidity():
-    """Fallback with approximate data if FRED is unreachable."""
-    return {
-        'value': 6.8,
-        'value_formatted': '$6.80T',
-        'weekly_change': 0.0,
-        'monthly_change': 0.0,
-        'source': 'fallback',
-        'label': 'Fed Balance Sheet',
-    }
+        return None
 
 
 # ═══════════════════════════════════════════

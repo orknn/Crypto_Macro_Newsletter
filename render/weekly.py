@@ -452,14 +452,50 @@ def render_weekly(data, lang='tr', theme=None):
         </div>
         '''
 
-    # 13. Watchlist Weekly
+    # 13. Watchlist Weekly (top 10 by market cap)
     watchlist_html = ""
-    crypto_prices = data.get('crypto_prices', [])
-    if crypto_prices:
+    watchlist_rows = data.get('crypto_prices_display') or data.get('crypto_prices', [])
+    if watchlist_rows:
         watchlist_html = f'''
         {render_section_divider(STR['section_watchlist'][lang])}
-        {render_asset_table(crypto_prices, "crypto", lang=lang)}
+        {render_asset_table(watchlist_rows, "crypto", lang=lang)}
         '''
+
+    # 13b. Hype Radar — CoinGecko trending searches
+    hype_html = ""
+    trending = data.get('trending_coins') or []
+    if trending:
+        rows = []
+        for i, t in enumerate(trending):
+            chg = t.get('chg_24h')
+            chg_txt, chg_cls = _fmt_change(chg)
+            rank = t.get('rank')
+            rank_str = f"#{rank}" if rank else "—"
+            rows.append(f'''
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
+              <td class="mono" style="padding:8px 12px; color:var(--gold); font-weight:700; width:30px;">{i + 1}</td>
+              <td style="padding:8px 12px;"><strong style="color:var(--text);">{t.get('symbol', '')}</strong>&nbsp;<span style="color:var(--dim); font-size:10px;">{t.get('name', '')}</span></td>
+              <td class="mono" style="padding:8px 12px; color:var(--dim); text-align:right;">{rank_str}</td>
+              <td class="mono {chg_cls}" style="padding:8px 12px; text-align:right;">{chg_txt}</td>
+            </tr>''')
+        hype_html = f'''
+        {render_section_divider(STR['section_hype_radar'][lang])}
+        <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; overflow:hidden; padding:12px; margin-bottom:12px; page-break-inside:avoid; break-inside:avoid;">
+          <table width="100%" style="border-collapse:collapse; font-size:12px;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border);">
+                <th style="text-align:left; padding:8px 12px; color:var(--dim);">#</th>
+                <th style="text-align:left; padding:8px 12px; color:var(--dim);">{STR['col_asset'][lang]}</th>
+                <th style="text-align:right; padding:8px 12px; color:var(--dim);">{STR['col_mcap_rank'][lang]}</th>
+                <th style="text-align:right; padding:8px 12px; color:var(--dim);">{STR['col_24h'][lang]}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {''.join(rows)}
+            </tbody>
+          </table>
+        </div>
+        <div style="font-size:9.5px; color:var(--dim); margin-bottom:24px;">{STR['hype_radar_hint'][lang]}</div>'''
 
     # 14. Crypto Sector Rotation
     rotation_html = ""
@@ -769,6 +805,7 @@ def render_weekly(data, lang='tr', theme=None):
     {etf_weekly_html}
     {winners_losers_html}
     {watchlist_html}
+    {hype_html}
     {rotation_html}
     {cycle_html}
     {correlation_html}
