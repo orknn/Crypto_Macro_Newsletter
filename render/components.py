@@ -301,6 +301,28 @@ def html_wrapper(title, content, accent_color="#3b82f6", lang="tr", is_weekly=Fa
         color: var(--gold);
         font-weight: 600;
     }}
+
+    /* ── PDF/print rules ── */
+    body {{
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }}
+    @media print {{
+        /* A section title must never be stranded at a page bottom */
+        .section-divider {{
+            page-break-after: avoid;
+            break-after: avoid;
+        }}
+        /* Never split a table row mid-page */
+        table.data-table tr, table.ticker tr {{
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }}
+        .sparkline-wrap, .summary-card, .kpi-card {{
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }}
+    }}
   </style>
 </head>
 <body>
@@ -755,7 +777,7 @@ def render_news_section(news_data, ai_commentaries=None, lang='tr'):
         if img_url:
             img_html = f'''
             <td width="100" style="vertical-align:top; padding-left:16px;">
-              <img src="{img_url}" width="100" height="70" style="border-radius:4px; object-fit:cover; border:1px solid var(--border);" loading="lazy" onerror="this.parentNode.style.display='none';" />
+              <img src="{img_url}" width="100" height="70" style="border-radius:4px; object-fit:cover; border:1px solid var(--border);" onerror="this.parentNode.style.display='none';" />
             </td>'''
         
         # Format timestamp if available

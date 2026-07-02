@@ -47,7 +47,17 @@ def html_to_pdf(html_path, pdf_path):
             abs_path = os.path.abspath(html_path)
             page.goto(f'file://{abs_path}')
             page.wait_for_load_state('networkidle')
-            page.wait_for_timeout(2000)
+            # Scroll through the document so below-the-fold images/resources
+            # actually load before printing, then wait for webfonts.
+            page.evaluate('''async () => {
+                for (let y = 0; y < document.body.scrollHeight; y += 800) {
+                    window.scrollTo(0, y);
+                    await new Promise(r => setTimeout(r, 60));
+                }
+                window.scrollTo(0, 0);
+                await document.fonts.ready;
+            }''')
+            page.wait_for_timeout(1500)
             page.pdf(
                 path=pdf_path,
                 format='A4',
