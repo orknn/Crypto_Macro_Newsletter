@@ -177,7 +177,8 @@ def _resend_send(api_key, from_addr, to, subject, html):
                           "html": html, "reply_to": REPLY_TO}).encode("utf-8")
     req = urllib.request.Request("https://api.resend.com/emails", data=payload,
                                  headers={"Authorization": f"Bearer {api_key}",
-                                          "Content-Type": "application/json"}, method="POST")
+                                          "Content-Type": "application/json",
+                                          "User-Agent": "NoCashFlow-Bulletin/1.0"}, method="POST")
     with urllib.request.urlopen(req) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
