@@ -1,0 +1,87 @@
+name: Send Article (Special Edition)
+
+# One-button article blast. Point it at any published nocashflow.net article
+# URL; the script fetches the live page, renders it in the site's broadsheet
+# design and emails confirmed subscribers in the language each one chose.
+#
+# Run from the Actions tab → "Send Article (Special Edition)" → Run workflow.
+# Safe first: run with mode=count to see the audience, or mode=test to send
+# yourself one copy, before mode=send.
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Article URL (EN or TR — the sibling is auto-discovered)"
+        required: true
+        type: string
+      mode:
+        description: "What to do"
+        required: true
+        default: count
+        type: choice
+        options: [count, test, send, preview]
+      languages:
+        description: "Which audiences"
+        required: true
+        default: both
+        type: choice
+        options: [both, en, tr]
+      topic:
+        description: "Flash label (e.g. 'CPI Flash') — optional"
+        required: false
+        default: ""
+        type: string
+      test_email:
+        description: "Recipient for mode=test"
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout newsletter repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run article mailer
+        env:
+          URL: ${{ inputs.url }}
+          MODE: ${{ inputs.mode }}
+          LANGS: ${{ inputs.languages }}
+          TOPIC: ${{ inputs.topic }}
+          TEST_EMAIL: ${{ inputs.test_email }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          NCF_ADMIN_TOKEN: ${{ secrets.NCF_ADMIN_TOKEN }}
+        run: |
+          set -euo pipefail
+          ARGS=(--url "$URL")
+          [ -n "$TOPIC" ] && ARGS+=(--topic "$TOPIC")
+          [ "$LANGS" != "both" ] && ARGS+=(--lang "$LANGS")
+          case "$MODE" in
+            count)   python send_article.py "${ARGS[@]}" --count ;;
+            preview) python send_article.py "${ARGS[@]}" --preview ;;
+            test)
+              if [ -z "$TEST_EMAIL" ]; then echo "::error::mode=test needs a test_email input"; exit 1; fi
+              python send_article.py "${ARGS[@]}" --test "$TEST_EMAIL" ;;
+            send)    python send_article.py "${ARGS[@]}" --send ;;
+            *) echo "::error::unknown mode $MODE"; exit 1 ;;
+          esac
+
+      - name: Upload rendered previews
+        if: ${{ inputs.mode == 'preview' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: article-email-preview
+          path: out/article_email_*.html
+          retention-days: 14
