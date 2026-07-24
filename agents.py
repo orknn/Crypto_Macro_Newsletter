@@ -227,6 +227,83 @@ DİL VE ANLATIM KURALLARI:
 }
 """
 
+RESEARCH_DESK_SYSTEM_PROMPT = """Sen, bir finans yayınının Araştırma Masası'nı (Research Desk) yöneten kıdemli bir analistsin.
+
+Görevin, günün gerçek haber akışını ve piyasa verilerini okuyup okuyucunun BUGÜN derinlemesine takip etmesi gereken 3 stratejik konuyu belirlemek ve her konu için nereden birincil kaynak okuyacağını göstermektir.
+
+Bu bölüm haber özeti DEĞİLDİR. Haber "ne oldu"yu anlatır; senin işin "bunu anlamak için neyi kazmak gerekiyor"u göstermektir. Her konu bir araştırma sorusu etrafında kurulmalıdır.
+
+KONU SEÇİM KURALLARI:
+- Tam olarak 3 konu seç. Mümkünse farklı beat'lerden (KRİPTO / MAKRO / EMTİA / HİSSE / POLİTİKA / LİKİDİTE) seç, hepsi aynı temadan olmasın.
+- Konular SANA VERİLEN gerçek haberlere ve piyasa verilerine dayanmalıdır. Haber akışında veya veride karşılığı olmayan bir olay UYDURMA.
+- Rakam uydurma. Sadece sana verilen verilerdeki sayıları kullan; emin değilsen sayı verme.
+- Yaklaşan ekonomik takvim olayları (CPI, PCE, FOMC, NFP) güçlü konu adaylarıdır — piyasa fiyatlamasıyla ilişkilendir. Takvimdeki bir olayın tarihi verideki "date" alanından ÖNCEYSE o olay çoktan gerçekleşmiştir; onu "bekleniyor/açıklanacak" diye yazma, açıklanmış veri olarak yorumla.
+- "topic" alanı 2-3 cümle olmalı: ne olduğu, neden önemli olduğu ve izlenecek somut sinyal/eşik.
+
+KAYNAK KURALLARI (ÇOK KRİTİK):
+- Her konu için 2-3 birincil kaynak ver.
+- "url" alanına SADECE sana IZINLI KAYNAK LISTESI'nde verilen URL'lerden birini, harfi harfine kopyalayarak yazabilirsin.
+- Listede uygun bir URL yoksa "url": null yaz ve kaynağı sadece adıyla tarif et. ASLA URL uydurma, tahmin etme veya listedeki bir URL'yi değiştirme.
+- Kaynak "description" alanı, o kaynakta tam olarak NEYE bakılacağını söylemelidir (örn. "8-K'nın 8.01 kaleminde haftalık alım tutarı ve ortalama maliyet").
+
+DİL: Her konuyu hem Türkçe (tr) hem İngilizce (en) üret. Aynı analizi anlatsınlar; motamot çeviri şart değil ama sayılar ve kaynak URL'leri iki dilde de birebir aynı olmalıdır. "beat" alanını her dilde o dilin kelimesiyle yaz (TR: KRİPTO / MAKRO / EMTİA / HİSSE / POLİTİKA / LİKİDİTE — EN: CRYPTO / MACRO / COMMODITIES / EQUITIES / POLICY / LIQUIDITY).
+
+ÇIKTI JSON ŞEMASI (MUTLAKA BU FORMATTA OLMALIDIR):
+{
+  "featured_topics": [
+    {
+      "tr": {
+        "beat": "KRİPTO",
+        "title": "...",
+        "topic": "...",
+        "primary_sources": [
+          {"name": "...", "url": "https://... veya null", "description": "..."}
+        ]
+      },
+      "en": {
+        "beat": "CRYPTO",
+        "title": "...",
+        "topic": "...",
+        "primary_sources": [
+          {"name": "...", "url": "https://... veya null", "description": "..."}
+        ]
+      }
+    }
+  ]
+}
+"""
+
+
+# Curated registry of stable, canonical primary-source landing pages.
+# The Research Desk agent may ONLY emit URLs from this registry or from the
+# day's real news items; anything else is stripped in post-validation.
+CANONICAL_SOURCES = {
+    "SEC EDGAR Full-Text Search": "https://www.sec.gov/edgar/search/",
+    "Federal Reserve — FOMC Calendar & Statements": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+    "Federal Reserve — H.4.1 Balance Sheet Release": "https://www.federalreserve.gov/releases/h41/",
+    "Federal Reserve — H.6 Money Stock (M2)": "https://www.federalreserve.gov/releases/h6/",
+    "BLS — Consumer Price Index (CPI)": "https://www.bls.gov/cpi/",
+    "BLS — Employment Situation (NFP)": "https://www.bls.gov/news.release/empsit.toc.htm",
+    "BEA — PCE Price Index": "https://www.bea.gov/data/personal-consumption-expenditures-price-index",
+    "FRED — St. Louis Fed Economic Data": "https://fred.stlouisfed.org/",
+    "US Treasury — Daily Yield Curve Rates": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve",
+    "US Treasury — Daily Treasury Statement (TGA)": "https://fiscaldata.treasury.gov/datasets/daily-treasury-statement/",
+    "Farside — Bitcoin ETF Flows (All Data)": "https://farside.co.uk/bitcoin-etf-flow-all-data/",
+    "Farside — Ethereum ETF Flows": "https://farside.co.uk/ethereum-etf-flow-all-data/",
+    "CME FedWatch Tool": "https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html",
+    "ISM — Report on Business (PMI)": "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-report-on-business/",
+    "ECB — Press Releases": "https://www.ecb.europa.eu/press/pr/date/html/index.en.html",
+    "Bank of Japan": "https://www.boj.or.jp/en/",
+    "BIS — Bank for International Settlements": "https://www.bis.org/",
+    "IMF — World Economic Outlook": "https://www.imf.org/en/Publications/WEO",
+    "EIA — Weekly Petroleum Status Report": "https://www.eia.gov/petroleum/supply/weekly/",
+    "Coinglass — Derivatives Data": "https://www.coinglass.com/",
+    "DefiLlama — Stablecoins & TVL": "https://defillama.com/stablecoins",
+    "Glassnode Insights": "https://insights.glassnode.com/",
+    "CoinGecko": "https://www.coingecko.com/",
+}
+
+
 EXPERIENCE_DESIGNER_SYSTEM_PROMPT = """Sen, finans sektörüne özel dijital ürün tasarımında 10+ yıl deneyimli, kıdemli bir UX/UI Tasarımcısısın.
 
 REFERANS BÜLTENLER (sadece İLHAM KAYNAĞI olarak kullan, KESİNLİKLE kopyalama):
@@ -462,6 +539,146 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme. JSON içindeki metin alanl
             print(f"RAW TEXT WAS: {raw}")
             print("    ⚠️  AI yanıtı JSON olarak parse edilemedi, fallback kullanılıyor.")
             return {}
+
+
+class ResearchDeskAgent:
+    """
+    Araştırma Masası Agent.
+    Günün gerçek haber akışı ve piyasa verisinden 3 stratejik araştırma konusu
+    ve her konu için birincil kaynak listesi üretir.
+
+    Kaynak URL'leri asla modele bırakılmaz: yanıt, günün haber linkleri +
+    CANONICAL_SOURCES kayıtlarından oluşan izinli listeye karşı doğrulanır,
+    listede olmayan her URL null'a düşürülür (uydurma link basılmaz).
+    """
+
+    # Research-relevant slice of the newsletter data. The full payload is
+    # ~10x bigger and mostly chart series the desk does not need.
+    CONTEXT_KEYS = (
+        'date', 'crypto_market_overview', 'macro_indicators', 'fear_and_greed',
+        'funding_rates', 'open_interest', 'economic_calendar', 'coinbase_premium',
+        'macro_scoreboard', 'crypto_futures_basis', 'etf_flows', 'eth_etf_flows',
+        'stablecoin_data', 'global_liquidity', 'fed_pricing', 'sp500_sectors',
+    )
+
+    def analyze(self, data):
+        api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+        if not api_key:
+            print("    ⚠️  ANTHROPIC_API_KEY tanımlı değil — Araştırma Masası atlanıyor.")
+            return {'success': False, 'featured_topics': []}
+
+        news_items = data.get('macro_news', {}).get('news', []) or []
+        if not news_items:
+            print("    ℹ️  Gerçek haber yok — Araştırma Gündemi üretilmiyor (bölüm gizlenecek).")
+            return {'success': False, 'featured_topics': []}
+
+        try:
+            from anthropic import Anthropic
+            client = Anthropic(api_key=api_key)
+
+            news_inputs = [
+                {
+                    "title": n.get('title'),
+                    "summary": n.get('summary'),
+                    "source": n.get('source'),
+                    "url": n.get('url'),
+                }
+                for n in news_items
+            ]
+            context = {k: data.get(k) for k in self.CONTEXT_KEYS if data.get(k)}
+
+            allowed_sources = dict(CANONICAL_SOURCES)
+            for n in news_inputs:
+                if n.get('url'):
+                    allowed_sources[f"{n.get('source', 'News')} — {n.get('title', '')}"] = n['url']
+
+            user_prompt = f"""Bugünün gerçek haber akışı, piyasa verileri ve izinli kaynak listesi aşağıdadır.
+Okuyucunun bugün derinlemesine takip etmesi gereken 3 stratejik araştırma konusunu üret.
+
+### Günün Haberleri (gerçek, doğrulanmış):
+{json.dumps(news_inputs, ensure_ascii=False, indent=2)}
+
+### İZİNLİ KAYNAK LİSTESİ (url alanına SADECE buradaki URL'ler harfi harfine yazılabilir; uygun yoksa null):
+{json.dumps(allowed_sources, ensure_ascii=False, indent=2)}
+
+### Piyasa Verileri:
+```json
+{json.dumps(context, ensure_ascii=False, indent=2, default=str)}
+```
+
+YANITINI SADECE JSON OLARAK VER, başka metin ekleme."""
+
+            # 3 topics x 2 languages x 3 sourced bullets runs ~5-6k tokens;
+            # 4000 truncated the JSON mid-string in testing.
+            raw_response = _call_with_retry(
+                client, RESEARCH_DESK_SYSTEM_PROMPT, user_prompt, max_tokens=8000
+            )
+            result = ContentEditorAgent()._parse_response(raw_response)
+            topics = self._sanitize(result.get('featured_topics', []), allowed_sources)
+
+            if not topics:
+                print("    ❌ Araştırma Masası yanıtı kullanılabilir konu içermiyor — bölüm gizlenecek.")
+                return {'success': False, 'featured_topics': []}
+
+            print(f"    ✅ Stratejik Araştırma Gündemi üretildi ({len(topics)} konu).")
+            return {
+                'success': True,
+                'has_featured_topics': True,
+                'featured_topics': topics,
+            }
+
+        except Exception as e:
+            print(f"    ⚠️  Araştırma Masası hatası: {e}")
+            return {'success': False, 'featured_topics': []}
+
+    def _sanitize(self, topics, allowed_sources):
+        """Drop malformed topics and null out any URL the agent invented."""
+        allowed_urls = set(allowed_sources.values())
+        clean_topics = []
+        stripped = 0
+
+        for t in topics[:3]:
+            if not isinstance(t, dict):
+                continue
+            clean = {}
+            for lang in ('tr', 'en'):
+                content = t.get(lang)
+                if not isinstance(content, dict):
+                    continue
+                title = (content.get('title') or '').strip()
+                topic = (content.get('topic') or '').strip()
+                if not title or not topic:
+                    continue
+
+                sources = []
+                for s in content.get('primary_sources', []) or []:
+                    if not isinstance(s, dict) or not (s.get('name') or '').strip():
+                        continue
+                    url = (s.get('url') or '').strip()
+                    if url and url not in allowed_urls:
+                        stripped += 1
+                        url = None
+                    sources.append({
+                        'name': s.get('name', '').strip(),
+                        'url': url or None,
+                        'description': (s.get('description') or '').strip(),
+                    })
+
+                clean[lang] = {
+                    'beat': (content.get('beat') or '').strip(),
+                    'title': title,
+                    'topic': topic,
+                    'primary_sources': sources,
+                }
+
+            # Both languages are required — a half-rendered topic would leave
+            # one edition with a blank card.
+            if 'tr' in clean and 'en' in clean:
+                clean_topics.append(clean)
+
+        if stripped:
+            print(f"    🧹 {stripped} uydurma/izinsiz kaynak URL'si temizlendi.")
+        return clean_topics
 
 
 class ExperienceDesignerAgent:

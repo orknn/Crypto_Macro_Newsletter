@@ -943,7 +943,8 @@ def render_research_brief(brief_data, lang='tr'):
             
         topic_title = lang_content.get('title', '')
         topic_desc = lang_content.get('topic', '')
-        beat = t.get('beat', '')
+        # Beat is per-language now; older briefs kept a single shared value.
+        beat = lang_content.get('beat') or t.get('beat', '')
         
         # Primary sources
         sources_html = []

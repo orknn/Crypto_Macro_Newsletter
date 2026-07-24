@@ -26,7 +26,7 @@ from data_fetcher import (
     get_options_market_data, get_eth_etf_flows, get_rates_and_breakevens,
     get_nfci, get_fed_pricing, get_eth_btc_ratio, get_trending_coins
 )
-from agents import ContentEditorAgent, ExperienceDesignerAgent
+from agents import ContentEditorAgent, ExperienceDesignerAgent, ResearchDeskAgent
 import validators
 from render.daily import render_daily
 from render.weekly import render_weekly
@@ -448,17 +448,9 @@ def run_pipeline():
         'asset_sparklines': asset_sparklines,
     }
 
-    # Load research brief if it exists
-    research_brief = None
-    try:
-        brief_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'research_brief_daily.json')
-        if os.path.exists(brief_path):
-            with open(brief_path, 'r', encoding='utf-8') as f:
-                research_brief = json.load(f)
-            print("  ✅ Research brief loaded successfully.")
-    except Exception as e:
-        print(f"  ⚠️  Error loading research brief: {e}")
-    data['research_brief'] = research_brief
+    # The research brief is generated per-run by the Research Desk agent
+    # (see section 3). No static file fallback — a stale brief is worse than none.
+    data['research_brief'] = None
 
     # ── 2. Fetch Weekly Specific Data (if weekly) ──
     if edition == 'weekly':
@@ -580,6 +572,22 @@ def run_pipeline():
         # Short sleep to prevent Anthropic rate limiting
         import time
         time.sleep(2)
+
+        if edition == 'daily':
+            print("  → Araştırma Masası...")
+            research_result = ResearchDeskAgent().analyze(data)
+            if research_result.get('success'):
+                data['research_brief'] = {
+                    'has_featured_topics': True,
+                    'featured_topics': research_result['featured_topics'],
+                }
+                try:
+                    os.makedirs('out', exist_ok=True)
+                    with open('out/research_brief_daily.json', 'w', encoding='utf-8') as f:
+                        json.dump(data['research_brief'], f, ensure_ascii=False, indent=2)
+                except Exception as e:
+                    print(f"    ⚠️  Araştırma gündemi diske yazılamadı: {e}")
+            time.sleep(2)
 
         print("  → Bülten Deneyim Tasarımcısı...")
         design_report = ExperienceDesignerAgent().analyze(data)
