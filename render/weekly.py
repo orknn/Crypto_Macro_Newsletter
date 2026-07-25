@@ -159,31 +159,36 @@ def render_weekly(data, lang='tr', theme=None):
     ms = data.get('macro_scoreboard', {}) or {}
     inflation_history = data.get('inflation_history_data', [])
     if ms or inflation_history:
-        dxy = ms.get('DXY', 0.0)
-        dxy_chg = ms.get('DXY_chg', 0.0)
+        # Every tile prints "—" when its metric is missing. Defaulting to 0.0
+        # published "DXY 0.00" and "VIX 0.0" as if they had been measured.
+        def _val(v, fmt):
+            return format(v, fmt) if isinstance(v, (int, float)) else '—'
+
+        dxy = ms.get('DXY')
+        dxy_chg = ms.get('DXY_chg')
         dxy_txt, dxy_cls = _fmt_change(dxy_chg)
-        
-        hy_oas = ms.get('HY_OAS', 0.0)
-        hy_chg = ms.get('HY_OAS_chg_bp', 0.0)
-        hy_txt = f"{hy_chg:+.1f} bps"
-        hy_cls = 'down' if hy_chg > 0 else 'up'
-        
-        move_idx = ms.get('MOVE', 0.0)
-        move_chg = ms.get('MOVE_chg', 0.0)
+
+        hy_oas = ms.get('HY_OAS')
+        hy_chg = ms.get('HY_OAS_chg_bp')
+        hy_txt = f"{hy_chg:+.1f} bps" if hy_chg is not None else '—'
+        hy_cls = '' if hy_chg is None else ('down' if hy_chg > 0 else 'up')
+
+        move_idx = ms.get('MOVE')
+        move_chg = ms.get('MOVE_chg')
         move_txt, move_cls = _fmt_change(move_chg)
-        
+
         macro_indicators_data = data.get('macro_indicators', {}) or {}
-        vix = macro_indicators_data.get('VIX', 0.0)
-        vix_chg = macro_indicators_data.get('VIX_chg', 0.0)
+        vix = macro_indicators_data.get('VIX')
+        vix_chg = macro_indicators_data.get('VIX_chg')
         vix_txt, vix_cls = _fmt_change(vix_chg)
         
-        yield_10y = macro_indicators_data.get('US 10-Year Treasury Yield', 0.0)
+        yield_10y = macro_indicators_data.get('US 10-Year Treasury Yield')
         yield_10y_chg = macro_indicators_data.get('US 10-Year Treasury Yield_chg')
         if yield_10y_chg is not None:
             yield_10y_chg_txt, yield_10y_chg_cls = _fmt_change(yield_10y_chg)
         else:
             yield_10y_chg_txt, yield_10y_chg_cls = '—', ''
-        spread_2s10s = macro_indicators_data.get('2s10s_spread', 0.0)
+        spread_2s10s = macro_indicators_data.get('2s10s_spread')
         spread_txt, spread_cls = _fmt_change(spread_2s10s)
         
         inflation_chart = generate_inflation_chart(inflation_history, lang=lang) if inflation_history else ""
@@ -226,32 +231,32 @@ def render_weekly(data, lang='tr', theme=None):
         <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:4px; overflow:hidden; margin-bottom:20px;">
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_dxy'][lang]}</div>
-            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{dxy:.2f}</div>
+            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{_val(dxy, '.2f')}</div>
             <div class="{dxy_cls}" style="font-family:var(--mono); font-size:10px; margin-top:2px;">{dxy_txt}</div>
           </div>
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_10y_yield'][lang]}</div>
-            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{yield_10y:.2f}%</div>
+            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{_val(yield_10y, '.2f')}%</div>
             <div class="{yield_10y_chg_cls}" style="font-family:var(--mono); font-size:10px; margin-top:2px;">{yield_10y_chg_txt}</div>
           </div>
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_spread'][lang]}</div>
-            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{spread_2s10s:.2f}%</div>
+            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{_val(spread_2s10s, '.2f')}%</div>
             <div class="{spread_cls}" style="font-family:var(--mono); font-size:10px; margin-top:2px;">{spread_txt}</div>
           </div>
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_hy_spread'][lang]}</div>
-            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{hy_oas:.2f}%</div>
+            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{_val(hy_oas, '.2f')}%</div>
             <div class="{hy_cls}" style="font-family:var(--mono); font-size:10px; margin-top:2px;">{hy_txt}</div>
           </div>
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_move'][lang]}</div>
-            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{move_idx:.1f}</div>
+            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{_val(move_idx, '.1f')}</div>
             <div class="{move_cls}" style="font-family:var(--mono); font-size:10px; margin-top:2px;">{move_txt}</div>
           </div>
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_vix_index'][lang]}</div>
-            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{vix:.1f}</div>
+            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{_val(vix, '.1f')}</div>
             <div class="{vix_cls}" style="font-family:var(--mono); font-size:10px; margin-top:2px;">{vix_txt}</div>
           </div>
           {rates_tiles_html}
@@ -321,15 +326,19 @@ def render_weekly(data, lang='tr', theme=None):
     turkey_html = ""
     bist_data = data.get('bist_try', {})
     if bist_data:
-        bist100 = bist_data.get('bist100', 0.0)
-        bist_chg = bist_data.get('bist100_chg', 0.0)
+        bist100 = bist_data.get('bist100')
+        bist_chg = bist_data.get('bist100_chg')
         bist_txt, bist_cls = _fmt_change(bist_chg)
-        
-        usd_try = bist_data.get('usd_try', 0.0)
-        try_chg = bist_data.get('try_chg', 0.0)
+
+        usd_try = bist_data.get('usd_try')
+        try_chg = bist_data.get('try_chg')
         try_txt, try_cls = _fmt_change(try_chg)
-        
-        bist_usd = bist100 / usd_try if usd_try > 0 else 0.0
+
+        # BIST in dollars needs both legs; "$0.00" is not a fallback value.
+        bist_usd = (bist100 / usd_try) if (bist100 and usd_try) else None
+        bist100_txt = f"{bist100:,.0f}" if bist100 else '—'
+        usd_try_txt = f"{usd_try:.4f}" if usd_try else '—'
+        bist_usd_txt = f"${bist_usd:.2f}" if bist_usd else '—'
         bist_usd_chg = bist_chg - try_chg
         usd_bist_txt, usd_bist_cls = _fmt_change(bist_usd_chg)
         
@@ -338,17 +347,17 @@ def render_weekly(data, lang='tr', theme=None):
         <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:4px; overflow:hidden; margin-bottom:24px;">
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">BIST 100</div>
-            <div style="font-family:var(--mono); font-size:16px; color:var(--text); font-weight:600;">{bist100:,.0f}</div>
+            <div style="font-family:var(--mono); font-size:16px; color:var(--text); font-weight:600;">{bist100_txt}</div>
             <div class="{bist_cls}" style="font-family:var(--mono); font-size:10px; margin-top:2px;">{bist_txt}</div>
           </div>
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">USD/TRY</div>
-            <div style="font-family:var(--mono); font-size:16px; color:var(--text); font-weight:600;">{usd_try:.4f}</div>
+            <div style="font-family:var(--mono); font-size:16px; color:var(--text); font-weight:600;">{usd_try_txt}</div>
             <div class="{try_cls}" style="font-family:var(--mono); font-size:10px; margin-top:2px;">{try_txt}</div>
           </div>
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">BIST 100 ($ Denom.)</div>
-            <div style="font-family:var(--mono); font-size:16px; color:var(--text); font-weight:600;">${bist_usd:.2f}</div>
+            <div style="font-family:var(--mono); font-size:16px; color:var(--text); font-weight:600;">{bist_usd_txt}</div>
             <div class="{usd_bist_cls}" style="font-family:var(--mono); font-size:10px; margin-top:2px;">{usd_bist_txt}</div>
           </div>
         </div>
@@ -653,8 +662,8 @@ def render_weekly(data, lang='tr', theme=None):
     cp = data.get('coinbase_premium', {}) or {}
     cp_card_html = render_coinbase_premium_card(cp, "180D", lang=lang)
     
-    btc_fr_str, btc_fr_cls = _fmt_funding(fr.get('BTC', 0.0))
-    eth_fr_str, eth_fr_cls = _fmt_funding(fr.get('ETH', 0.0))
+    btc_fr_str, btc_fr_cls = _fmt_funding(fr.get('BTC'))
+    eth_fr_str, eth_fr_cls = _fmt_funding(fr.get('ETH'))
     
     btc_oi = oi.get('BTC', {})
     eth_oi = oi.get('ETH', {})
@@ -679,15 +688,17 @@ def render_weekly(data, lang='tr', theme=None):
     else:
         eth_oi_chg = ""
     
-    fb_btc = fb.get('btc_basis', 0)
-    fb_eth = fb.get('eth_basis', 0)
+    fb_btc = fb.get('btc_basis')
+    fb_eth = fb.get('eth_basis')
+    fb_btc_txt = f"{fb_btc:.2f}%" if fb_btc is not None else '—'
+    fb_eth_txt = f"{fb_eth:.2f}%" if fb_eth is not None else '—'
 
     basis_column_html = f'''
     <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">
       <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:12px;">Futures Term Structure</div>
       <table width="100%" style="border-collapse:collapse; font-size:12px;">
-        <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 0; color:var(--dim);">BTC Futures Basis</td><td class="mono" align="right" style="color:var(--text); font-weight:600; padding:8px 0;">{fb_btc:.2f}%</td></tr>
-        <tr><td style="padding:8px 0; color:var(--dim);">ETH Futures Basis</td><td class="mono" align="right" style="color:var(--text); font-weight:600; padding:8px 0;">{fb_eth:.2f}%</td></tr>
+        <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 0; color:var(--dim);">BTC Futures Basis</td><td class="mono" align="right" style="color:var(--text); font-weight:600; padding:8px 0;">{fb_btc_txt}</td></tr>
+        <tr><td style="padding:8px 0; color:var(--dim);">ETH Futures Basis</td><td class="mono" align="right" style="color:var(--text); font-weight:600; padding:8px 0;">{fb_eth_txt}</td></tr>
       </table>
     </div>
     '''

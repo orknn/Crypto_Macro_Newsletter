@@ -8,6 +8,10 @@ on:
     - cron: '45 5 * * *'
   workflow_dispatch:  # Manuel tetikleme — test için
 
+concurrency:
+  group: bulletin-website-push
+  cancel-in-progress: false
+
 jobs:
   generate-and-send:
     runs-on: ubuntu-latest
@@ -79,7 +83,22 @@ jobs:
           # Check changes and commit
           if ! git diff-index --quiet HEAD; then
             git commit -m "bulletin: daily ${TODAY}"
-            git push origin main
+            # Retry: another workflow (or a manual commit) may land between the
+            # clone above and this push, and a plain push would just be rejected
+            # after the mail has already gone out.
+            for attempt in 1 2 3; do
+              if git push origin main; then
+                echo "Pushed on attempt $attempt."
+                break
+              fi
+              if [ "$attempt" = "3" ]; then
+                echo "::error title=Website push failed::Could not push after 3 attempts."
+                exit 1
+              fi
+              echo "Push rejected, rebasing and retrying ($attempt/3)..."
+              git pull --rebase origin main
+              sleep 5
+            done
           else
             echo "No changes to commit."
           fi

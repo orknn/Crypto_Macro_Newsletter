@@ -163,10 +163,19 @@ def validate_ai_notes(data):
         if isinstance(notes, dict):
             for note_key, note_text in list(notes.items()):
                 if isinstance(note_text, str) and note_text.strip() and note_text.strip() != 'None':
-                    # Find percentages in both formats: +0.61% and %+0.61 (with optional signs)
-                    percentage_matches = re.findall(r'[+-]?\d+\.\d+%', note_text) + re.findall(r'%[+-]?\d+\.\d+', note_text)
+                    # Both orders (+0.61% and %+0.61), both decimal marks, and
+                    # whole numbers. The old pattern required a dot, so it
+                    # matched nothing at all in the Turkish edition — where the
+                    # model writes %4,68 — leaving TR notes unchecked.
+                    # Turkish writes the sign outside the percent sign (-%3,27),
+                    # so the sign has to be picked up before the % as well —
+                    # otherwise -3.27 is read as +3.27 and rejected as unmatched.
+                    percentage_matches = (
+                        re.findall(r'[+-]?\d+(?:[.,]\d+)?%', note_text)
+                        + re.findall(r'[+-]?%[+-]?\d+(?:[.,]\d+)?', note_text)
+                    )
                     for match in percentage_matches:
-                        val_str = match.replace('%', '').strip()
+                        val_str = match.replace('%', '').replace(',', '.').strip()
                         try:
                             val_float = float(val_str)
                         except ValueError:

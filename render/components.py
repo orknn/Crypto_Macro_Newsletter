@@ -463,7 +463,7 @@ def render_ticker(data, lang='tr'):
             break
 
     # F&G Classification mapped
-    fng_val = fng.get('value', 0)
+    fng_val = fng.get('value')
     fng_lbl = fng.get('classification', 'Neutral')
     lbl_tr = {
         'Neutral': 'Nötr',
@@ -473,6 +473,9 @@ def render_ticker(data, lang='tr'):
         'Extreme Greed': 'Aşırı Açgözlülük'
     }
     fng_lbl_mapped = lbl_tr.get(fng_lbl, fng_lbl) if lang == 'tr' else fng_lbl
+
+    # Dominance is None when CoinGecko is unreachable; "0.0%" would be a claim.
+    _dom = crypto_ov.get('btc_dominance')
 
     tickers = [
         {'name': 'NASDAQ 100', 'price': _fmt_price(macro.get('NASDAQ 100 Futures', 0), 'index'),
@@ -487,8 +490,8 @@ def render_ticker(data, lang='tr'):
          'chg': macro.get('VIX_chg', 0)},
         {'name': 'BTC', 'price': _fmt_price(btc_price, 'price0'),
          'chg': btc_chg},
-        {'name': 'BTC.D', 'price': f"{crypto_ov.get('btc_dominance', 0):.1f}%", 'chg': None},
-        {'name': 'F&G INDEX', 'price': str(fng_val), 'chg': None, 'custom': fng_lbl_mapped},
+        {'name': 'BTC.D', 'price': f"{_dom:.1f}%" if _dom else '—', 'chg': None},
+        {'name': 'F&G INDEX', 'price': str(fng_val) if fng_val else '—', 'chg': None, 'custom': fng_lbl_mapped},
     ]
 
     html = '<table class="ticker" cellpadding="0" cellspacing="0"><tr>\n'

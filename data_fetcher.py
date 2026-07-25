@@ -118,8 +118,8 @@ def _fallback_crypto_prices_binance(watchlist):
             if sym == 'HYPE':
                 # HYPE doesn't have a spot pair on Binance yet, return 0 or fetch from elsewhere if critical
                 results.append({
-                    'Symbol': sym, 'Current Price USD': 0.0,
-                    '1h %': 0.0, '24h %': 0.0, '7d %': 0.0, '30d %': 0.0,
+                    'Symbol': sym, 'Current Price USD': None,
+                    '1h %': None, '24h %': None, '7d %': None, '30d %': None,
                 })
                 continue
                 
@@ -129,20 +129,23 @@ def _fallback_crypto_prices_binance(watchlist):
                 results.append({
                     'Symbol': sym,
                     'Current Price USD': float(item.get('lastPrice', 0.0)),
-                    '1h %': 0.0,  # Binance doesn't provide 1h easily in 24hr ticker
+                    # Binance's 24hr ticker carries no 1h/7d/30d window. 0.0
+                    # claimed "unchanged"; None renders as "—".
+                    '1h %': None,
                     '24h %': float(item.get('priceChangePercent', 0.0)),
-                    '7d %': 0.0,  # Binance doesn't provide 7d easily
-                    '30d %': 0.0, # Binance doesn't provide 30d easily
+                    '7d %': None,
+                    '30d %': None,
                 })
             else:
                 results.append({
-                    'Symbol': sym, 'Current Price USD': 0.0,
-                    '1h %': 0.0, '24h %': 0.0, '7d %': 0.0, '30d %': 0.0,
+                    'Symbol': sym, 'Current Price USD': None,
+                    '1h %': None, '24h %': None, '7d %': None, '30d %': None,
                 })
         return results
     except Exception as e:
         print(f"Error fetching Binance fallback prices: {e}")
-        return [{'Symbol': sym, 'Current Price USD': 0.0, '1h %': 0.0, '24h %': 0.0, '7d %': 0.0, '30d %': 0.0} for sym in watchlist]
+        return [{'Symbol': sym, 'Current Price USD': None, '1h %': None,
+                 '24h %': None, '7d %': None, '30d %': None} for sym in watchlist]
 
 
 def get_crypto_prices(watchlist):
@@ -274,11 +277,13 @@ def get_crypto_market_overview():
         }
     except Exception as e:
         print(f"Error fetching crypto market overview: {e}")
+        # All-zero dict used to render as "$0.00T" / "0.0%" — a measured zero.
+        # None values make the renderer print "—" instead.
         return {
-            'total_market_cap': 0.0, 'total3': 0.0,
-            'btc_dominance': 0.0, 'eth_dominance': 0.0,
-            'stablecoin_dominance': 0.0, 'total_volume': 0.0,
-            'market_cap_change_24h': 0.0,
+            'total_market_cap': None, 'total3': None,
+            'btc_dominance': None, 'eth_dominance': None,
+            'stablecoin_dominance': None, 'total_volume': None,
+            'market_cap_change_24h': None,
         }
 
 def get_fear_and_greed_index():
@@ -355,12 +360,15 @@ def get_funding_rates():
                     'oi_chg_24h': None # Will be calculated via snapshot comparisons
                 }
             else:
-                fr_results[name] = 0.0
+                fr_results[name] = None
                 oi_results[name] = {}
     except Exception as e:
+        # None, not 0.0: a zero funding rate is a real market state ("neutral"),
+        # so emitting it on an API failure invents a reading. _fmt_funding
+        # prints "—" for None.
         print(f"Error fetching Kraken Futures data: {e}")
         for name in symbols:
-            fr_results[name] = 0.0
+            fr_results[name] = None
             oi_results[name] = {}
             
     return fr_results, oi_results
@@ -382,7 +390,7 @@ def get_crypto_futures_basis():
 
     try:
         # Get spot prices
-        spot_res = requests.get('https://api.binance.com/api/v3/ticker/price').json()
+        spot_res = requests.get('https://api.binance.com/api/v3/ticker/price', timeout=10).json()
         spots = {item['symbol']: float(item['price']) for item in spot_res}
         
         # Get delivery contracts
@@ -1160,16 +1168,17 @@ def get_coinbase_premium_index(interval='1h', limit=168):
     Also calculates 4-Hour Support & Resistance levels from real recent highs/lows.
     Supports '1h' (limit=168) and '1d' (limit=180) resolutions.
     """
-    btc_price = 65000 # fallback
-    premium_pct = 0.0
+    # No seeded price. These stay None unless real candles arrive: a fixed
+    # $65k seed produced "Support $63,700 / Resistance $66,300" — plus a
+    # "trading above resistance" verdict — out of thin air whenever Binance
+    # Vision was unreachable, and the renderer had no way to tell it apart
+    # from real levels.
+    btc_price = None
+    premium_pct = None
     trend = []
-    
-    # Fallback SR
-    support_1 = btc_price * 0.98
-    support_2 = btc_price * 0.95
-    resist_1 = btc_price * 1.02
-    resist_2 = btc_price * 1.05
-    
+
+    support_1 = support_2 = resist_1 = resist_2 = None
+
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         
@@ -1216,13 +1225,12 @@ def get_coinbase_premium_index(interval='1h', limit=168):
             
             if trend:
                 premium_pct = trend[-1]['value']
-            else:
-                premium_pct = 0.0
-                
+
     except Exception as e:
         print(f"Error fetching historical Premium data: {e}")
-        # no fabricated trend — leave it empty rather than inventing points
+        # no fabricated trend or levels — leave them empty rather than inventing
         premium_pct = None
+        support_1 = support_2 = resist_1 = resist_2 = None
 
     return {
         'current_value': premium_pct,
@@ -1479,14 +1487,9 @@ def get_m2_money_supply():
     except Exception as e:
         print(f"  ⚠️  M2 Money Supply fetch error: {e}")
 
-    # Fallback
-    return {
-        'value': 21.0,
-        'value_formatted': '$21.00T',
-        'monthly_change': 0.0,
-        'source': 'fallback',
-        'trend': [],
-    }
+    # No fallback figure. The old $21.00T literal was never rendered but did
+    # reach the AI prompt, where the editor could quote it as a real M2 print.
+    return None
 
 
 

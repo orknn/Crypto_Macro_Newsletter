@@ -548,8 +548,21 @@ def run_pipeline():
             data['indicators_note'] = data['tr'].get('notes', {}).get('indicators_note')
             data['weekly_themes'] = data['tr'].get('themes', [])
             
-            data['news_commentaries'] = []
+            # Insights are matched to stories by position, so a list that is
+            # not exactly as long as the news list silently shifts every
+            # commentary onto the wrong headline. The prompt asks the model to
+            # leave skipped items as "", but if it drops them instead the whole
+            # list slides by one. Publishing no commentary beats publishing one
+            # story's analysis under another story's headline.
             raw_news = data.get('macro_news', {}).get('news', [])
+            for _lang in ('tr', 'en'):
+                _insights = data.get(_lang, {}).get('insights')
+                if _insights is not None and len(_insights) != len(raw_news):
+                    print(f"    ⚠️  {_lang.upper()} insight sayısı haber sayısıyla uyuşmuyor "
+                          f"({len(_insights)} ≠ {len(raw_news)}) — yorumlar gizleniyor.")
+                    data[_lang]['insights'] = []
+
+            data['news_commentaries'] = []
             tr_insights = data['tr'].get('insights', [])
             for idx, n in enumerate(raw_news):
                 headline = n.get('title', '')
@@ -610,6 +623,37 @@ def run_pipeline():
         # Validate snapshot schema
         validate_snapshot(serializable_data)
 
+    # ── 4b. Content quality gate ──
+    # Until now every failure mode still produced a green run: if the AI died
+    # or the market feeds returned nothing, subscribers were emailed a hollow
+    # bulletin and nobody was told. Check the few things a bulletin cannot be
+    # published without; if any is missing, the mail is skipped and the job is
+    # failed loudly at the end.
+    quality_failures = []
+
+    _btc_price = None
+    for _c in data.get('crypto_prices', []) or []:
+        if _c.get('Symbol') == 'BTC':
+            _btc_price = _c.get('Current Price USD')
+            break
+    if not _btc_price:
+        quality_failures.append("BTC fiyatı yok")
+
+    if not (data.get('tr', {}).get('overview') or '').strip():
+        quality_failures.append("TR genel değerlendirme boş")
+    if not (data.get('fear_and_greed') or {}).get('value'):
+        quality_failures.append("Fear & Greed yok")
+    if not (data.get('crypto_market_overview') or {}).get('total_market_cap'):
+        quality_failures.append("toplam piyasa değeri yok")
+
+    if quality_failures:
+        print(f"\n🚨 İÇERİK KALİTE KAPISI: {', '.join(quality_failures)}")
+        print("   → E-posta gönderilmeyecek, bülten yine de üretilip yazılacak.")
+        if os.environ.get("CI", "").lower() == "true":
+            print(f"::error title=Bulletin quality gate::{', '.join(quality_failures)}")
+    else:
+        print("\n  ✅ İçerik kalite kapısı geçildi.")
+
     # ── 5. Generate HTML and PDFs for requested languages ──
     languages = []
     if lang_arg == 'both':
@@ -642,8 +686,11 @@ def run_pipeline():
         # ── 7. Send Email ──
         is_ci = os.environ.get("CI", "").lower() == "true"
         env_send = os.environ.get("SEND_EMAIL", "").lower() == "true"
-        should_email = (is_ci or env_send or send_email_arg) and not dry_run
-        
+        should_email = (is_ci or env_send or send_email_arg) and not dry_run and not quality_failures
+
+        if quality_failures and (is_ci or env_send or send_email_arg) and not dry_run:
+            print(f"\n⛔ E-posta atlandı ({lang.upper()}) — kalite kapısı: {', '.join(quality_failures)}")
+
         if should_email:
             print(f"\n📧 E-posta gönderimi başlatılıyor ({lang.upper()})...")
             try:
@@ -669,10 +716,16 @@ def run_pipeline():
         print(f"  📋 AI Rapor: {os.path.abspath(ai_report_file)}")
     print(f"{'='*50}")
 
+    # Fail the run *after* writing every artifact, so the broken bulletin is
+    # still on disk (and uploaded) for diagnosis — but the job goes red.
+    return not quality_failures
+
 
 if __name__ == "__main__":
     print("=" * 50)
     print("  Orkun Biçen — Financial Bulletin Pipeline")
     print("=" * 50)
     print()
-    run_pipeline()
+    ok = run_pipeline()
+    if ok is False:
+        sys.exit(1)

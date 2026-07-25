@@ -147,12 +147,16 @@ def render_daily(data, lang='tr', theme=None):
     ind_note = ind_note or ''
     
     # (F&G is already shown in the ticker bar and the gauge below — no third copy)
-    mcap_chg = crypto_ov.get('market_cap_change_24h', 0.0) or 0.0
+    # A missing figure must read "—". Printing "$0.00T" or "0.0%" when
+    # CoinGecko rate-limits states a market cap of zero as if it were measured.
+    mcap_chg = crypto_ov.get('market_cap_change_24h')
     mcap_chg_txt, mcap_chg_cls = _fmt_change(mcap_chg)
-    total_vol = crypto_ov.get('total_volume', 0.0) or 0.0
+    total_vol = crypto_ov.get('total_volume') or 0.0
+    total_mcap = crypto_ov.get('total_market_cap') or 0.0
+    btc_dom = crypto_ov.get('btc_dominance') or 0.0
     kpis = [
-        {'label': STR['card_mcap'][lang], 'value': f"${crypto_ov.get('total_market_cap', 0)/1e12:.2f}T", 'change': mcap_chg_txt, 'cls': mcap_chg_cls},
-        {'label': STR['card_dominance'][lang], 'value': f"{crypto_ov.get('btc_dominance', 0):.1f}%", 'change': '', 'cls': ''},
+        {'label': STR['card_mcap'][lang], 'value': f"${total_mcap/1e12:.2f}T" if total_mcap else '—', 'change': mcap_chg_txt, 'cls': mcap_chg_cls},
+        {'label': STR['card_dominance'][lang], 'value': f"{btc_dom:.1f}%" if btc_dom else '—', 'change': '', 'cls': ''},
         {'label': STR['card_volume'][lang], 'value': f"${total_vol/1e9:.1f}B" if total_vol else '—', 'change': '', 'cls': ''},
     ]
 
@@ -217,10 +221,15 @@ def render_daily(data, lang='tr', theme=None):
             break
             
     btc_chg_text, btc_chg_cls = _fmt_change(btc_chg_24h)
-    btc_support = cp.get('btc_support_level', 0)
-    btc_resistance = cp.get('btc_resistance_level', 0)
-    
-    if btc_price > 0 and btc_support > 0 and btc_resistance > 0:
+    # Levels are None when the candle fetch failed — print "—", never $0.
+    btc_support = cp.get('btc_support_level')
+    btc_resistance = cp.get('btc_resistance_level')
+    has_levels = bool(btc_price) and bool(btc_support) and bool(btc_resistance)
+    btc_price_txt = f"${btc_price:,.0f}" if btc_price else "—"
+    btc_support_txt = f"${btc_support:,.0f}" if has_levels else "—"
+    btc_resistance_txt = f"${btc_resistance:,.0f}" if has_levels else "—"
+
+    if has_levels:
         if lang == 'tr':
             if btc_price > btc_resistance:
                 btc_analysis = f"Fiyat <strong>${btc_price:,.0f}</strong> ile <strong>direnç</strong> (${btc_resistance:,.0f}) seviyesinin üzerinde işlem görüyor — yukarı yönlü ivme devam edebilir."
@@ -251,15 +260,15 @@ def render_daily(data, lang='tr', theme=None):
         <tr>
           <td valign="middle" style="vertical-align:middle;">
             <table cellpadding="0" cellspacing="0"><tr>
-              <td style="font-family:var(--mono); font-size:22px; font-weight:600; color:var(--text); padding-right:12px;">${btc_price:,.0f}</td>
+              <td style="font-family:var(--mono); font-size:22px; font-weight:600; color:var(--text); padding-right:12px;">{btc_price_txt}</td>
               <td class="{btc_chg_cls}" style="font-family:var(--mono); font-size:13px;">{btc_chg_text}</td>
             </tr></table>
           </td>
           <td valign="middle" style="vertical-align:middle; text-align:right;">
             <table cellpadding="0" cellspacing="0" style="display:inline-block; font-family:var(--sans); font-size:11px;">
               <tr>
-                <td style="padding-right:24px; text-align:center;"><div style="color:var(--dim); margin-bottom:3px;">{STR['card_support'][lang]}</div><div style="font-family:var(--mono); color:var(--green); font-size:13px;">${btc_support:,.0f}</div></td>
-                <td style="text-align:center;"><div style="color:var(--dim); margin-bottom:3px;">{STR['card_resistance'][lang]}</div><div style="font-family:var(--mono); color:var(--red); font-size:13px;">${btc_resistance:,.0f}</div></td>
+                <td style="padding-right:24px; text-align:center;"><div style="color:var(--dim); margin-bottom:3px;">{STR['card_support'][lang]}</div><div style="font-family:var(--mono); color:var(--green); font-size:13px;">{btc_support_txt}</div></td>
+                <td style="text-align:center;"><div style="color:var(--dim); margin-bottom:3px;">{STR['card_resistance'][lang]}</div><div style="font-family:var(--mono); color:var(--red); font-size:13px;">{btc_resistance_txt}</div></td>
               </tr>
             </table>
           </td>
@@ -272,8 +281,10 @@ def render_daily(data, lang='tr', theme=None):
     '''
 
     # Futures Basis
-    fb_btc = fb.get('btc_basis', 0)
-    fb_eth = fb.get('eth_basis', 0)
+    fb_btc = fb.get('btc_basis')
+    fb_eth = fb.get('eth_basis')
+    fb_btc_txt = f"{fb_btc:.2f}%" if fb_btc is not None else '—'
+    fb_eth_txt = f"{fb_eth:.2f}%" if fb_eth is not None else '—'
     fb_sen = fb.get('sentiment', 'Neutral')
     fb_badges = {
         'Strong Bullish': 'background:rgba(16,185,129,0.12); color:var(--green); border:1px solid rgba(16,185,129,0.3);',
@@ -292,7 +303,7 @@ def render_daily(data, lang='tr', theme=None):
     # and we're in TR mode — use i18n template instead
     fb_desc = fb.get('description', '')
     if not futures_note and fb_desc:
-        if lang == 'tr':
+        if lang == 'tr' and fb_btc is not None:
             futures_note = f"BTC için mevcut yıllıklandırılmış vadeli prim {fb_btc:.1f}% seviyesinde, piyasa duyarlılığı {fmt_sentiment(fb_sen, 'tr').lower()} yönünde."
         else:
             futures_note = fb_desc
@@ -316,11 +327,11 @@ def render_daily(data, lang='tr', theme=None):
       <div style="display:flex; gap:24px; margin-bottom:12px;">
         <div>
           <div style="font-family:var(--sans); font-size:9px; font-weight:500; text-transform:uppercase; color:var(--dim); letter-spacing:1px; margin-bottom:4px;">BTC Basis</div>
-          <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:var(--text);">{fb_btc:.2f}%</div>
+          <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:var(--text);">{fb_btc_txt}</div>
         </div>
         <div>
           <div style="font-family:var(--sans); font-size:9px; font-weight:500; text-transform:uppercase; color:var(--dim); letter-spacing:1px; margin-bottom:4px;">ETH Basis</div>
-          <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:var(--text);">{fb_eth:.2f}%</div>
+          <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:var(--text);">{fb_eth_txt}</div>
         </div>
       </div>
       {futures_note_html}
@@ -328,9 +339,9 @@ def render_daily(data, lang='tr', theme=None):
     '''
 
     # Funding & OI
-    btc_fr_str, btc_fr_cls = _fmt_funding(fr.get('BTC', 0.0))
-    eth_fr_str, eth_fr_cls = _fmt_funding(fr.get('ETH', 0.0))
-    sol_fr_str, sol_fr_cls = _fmt_funding(fr.get('SOL', 0.0))
+    btc_fr_str, btc_fr_cls = _fmt_funding(fr.get('BTC'))
+    eth_fr_str, eth_fr_cls = _fmt_funding(fr.get('ETH'))
+    sol_fr_str, sol_fr_cls = _fmt_funding(fr.get('SOL'))
     
     def fmt_oi_val(val):
         if not val: return '—'
@@ -466,9 +477,17 @@ def render_daily(data, lang='tr', theme=None):
             <strong style="color:var(--text);">{STR['analyst_note'][lang]}:</strong> {etf_note}
           </div>'''
         
-        ibit_cls = "up" if ibit >= 0 else "down"
-        fbtc_cls = "up" if fbtc >= 0 else "down"
-        total_cls = "up" if total >= 0 else "down"
+        # A partially published Farside row leaves individual funds as None.
+        # Comparing None >= 0 raised TypeError and took the whole daily
+        # bulletin down, so each cell degrades to "—" on its own.
+        def _flow(v):
+            if v is None:
+                return '—', ''
+            return f"{v:+.1f}M", ("up" if v >= 0 else "down")
+
+        ibit_txt, ibit_cls = _flow(ibit)
+        fbtc_txt, fbtc_cls = _flow(fbtc)
+        total_txt, total_cls = _flow(total)
         
         # 10-day history bar chart
         etf_history = data.get('etf_history_data', [])
@@ -501,15 +520,15 @@ def render_daily(data, lang='tr', theme=None):
           <div style="display:flex; gap:28px; margin-bottom:12px;">
             <div>
               <div style="font-family:var(--sans); font-size:9px; font-weight:500; text-transform:uppercase; color:var(--dim); letter-spacing:1px; margin-bottom:4px;">{STR['card_daily_total'][lang]}</div>
-              <div class="{total_cls}" style="font-family:var(--mono); font-size:17px; font-weight:600;">{total:+.1f}M</div>
+              <div class="{total_cls}" style="font-family:var(--mono); font-size:17px; font-weight:600;">{total_txt}</div>
             </div>
             <div>
               <div style="font-family:var(--sans); font-size:9px; font-weight:500; text-transform:uppercase; color:var(--dim); letter-spacing:1px; margin-bottom:4px;">IBIT (BlackRock)</div>
-              <div class="{ibit_cls}" style="font-family:var(--mono); font-size:17px; font-weight:600;">{ibit:+.1f}M</div>
+              <div class="{ibit_cls}" style="font-family:var(--mono); font-size:17px; font-weight:600;">{ibit_txt}</div>
             </div>
             <div>
               <div style="font-family:var(--sans); font-size:9px; font-weight:500; text-transform:uppercase; color:var(--dim); letter-spacing:1px; margin-bottom:4px;">FBTC (Fidelity)</div>
-              <div class="{fbtc_cls}" style="font-family:var(--mono); font-size:17px; font-weight:600;">{fbtc:+.1f}M</div>
+              <div class="{fbtc_cls}" style="font-family:var(--mono); font-size:17px; font-weight:600;">{fbtc_txt}</div>
             </div>
           </div>
           
