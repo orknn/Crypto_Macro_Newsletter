@@ -65,7 +65,8 @@ def render_weekly(data, lang='tr', theme=None):
 
     # 2. Weekly Themes (AI Generated)
     themes_html = ""
-    themes = lang_data.get('themes', []) or data.get('weekly_themes', [])
+    # weekly_themes holds the TR themes — never fall back to it in the EN edition.
+    themes = lang_data.get('themes', []) or (data.get('weekly_themes', []) if lang == 'tr' else [])
     if themes:
         theme_items = []
         for i, t in enumerate(themes[:3]):
@@ -767,7 +768,7 @@ def render_weekly(data, lang='tr', theme=None):
     
     {cp_card_html}
     
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:20px; page-break-inside:avoid; break-inside:avoid;">
+    <div class="pair-grid" style="page-break-inside:avoid; break-inside:avoid;">
       <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">
         <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:12px;">{STR['card_fng'][lang]}</div>
         {fng_gauge}

@@ -54,9 +54,12 @@ def _fmt_price(price, fmt="price2"):
 def _fmt_change(val):
     if _na(val):
         return "—", ""
-    sign = "+" if val >= 0 else ""
-    cls = "up" if val >= 0 else "down"
-    arrow = "▲" if val >= 0 else "▼"
+    # A flat asset rounds to 0.00 — printing it green with ▲ read as a gain.
+    if abs(val) < 0.005:
+        return "● 0.00%", ""
+    sign = "+" if val > 0 else ""
+    cls = "up" if val > 0 else "down"
+    arrow = "▲" if val > 0 else "▼"
     return f"{arrow} {sign}{val:.2f}%", cls
 
 def _fmt_funding(val):
@@ -109,8 +112,31 @@ def html_wrapper(title, content, accent_color="#3b82f6", lang="tr", is_weekly=Fa
         gap: 12px;
         margin-bottom: 24px;
     }}
+    /* Side-by-side card pairs. min-width:0 matters: a grid item defaults to
+       min-width:auto, so the F&G gauge refused to shrink and pushed the whole
+       page 44px wider than a 390px phone. */
+    .pair-grid {{
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-bottom: 20px;
+    }}
+    .pair-grid > * {{ min-width: 0; }}
+    @media screen and (max-width: 500px) {{
+        .pair-grid {{ grid-template-columns: 1fr; }}
+    }}
+
+    /* Column counts live here, not in an inline style — an inline
+       grid-template-columns outranks the media query below and squeezed
+       KPI cards to ~78px on phones, truncating "$2.27T" to "$2.271". */
+    .card-grid-2 {{ grid-template-columns: repeat(2, 1fr); }}
+    .card-grid-3 {{ grid-template-columns: repeat(3, 1fr); }}
+    .card-grid-4 {{ grid-template-columns: repeat(4, 1fr); }}
+    .card-grid-5 {{ grid-template-columns: repeat(5, 1fr); }}
+    .card-grid-6 {{ grid-template-columns: repeat(6, 1fr); }}
     @media (max-width: 500px) {{
-        .card-grid {{
+        .card-grid,
+        .card-grid-2, .card-grid-3, .card-grid-4, .card-grid-5, .card-grid-6 {{
             grid-template-columns: repeat(2, 1fr);
         }}
     }}
@@ -134,9 +160,10 @@ def html_wrapper(title, content, accent_color="#3b82f6", lang="tr", is_weekly=Fa
     
     .kpi-value {{
         font-family: var(--mono);
-        font-size: 18px;
+        font-size: clamp(14px, 4.2vw, 18px);
         font-weight: 700;
         color: var(--text);
+        overflow-wrap: anywhere;
     }}
     
     .kpi-change {{
@@ -149,6 +176,23 @@ def html_wrapper(title, content, accent_color="#3b82f6", lang="tr", is_weekly=Fa
     .down {{ color: var(--red); }}
     
     /* Tables */
+    /* Wide tables scroll inside their own box so the page body never
+       scrolls sideways — on a 390px phone the calendar's Consensus/Actual
+       columns used to sit off-screen entirely. */
+    .tbl-scroll {{
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin-bottom: 20px;
+    }}
+    .tbl-scroll table.data-table {{
+        margin-bottom: 0;
+        min-width: 460px;
+    }}
+    @media print {{
+        .tbl-scroll {{ overflow-x: visible; }}
+        .tbl-scroll table.data-table {{ min-width: 0; }}
+    }}
+
     table.data-table {{
         width: 100%;
         border-collapse: collapse;
@@ -214,6 +258,18 @@ def html_wrapper(title, content, accent_color="#3b82f6", lang="tr", is_weekly=Fa
         padding: 8px 10px;
         text-align: center;
         width: 12.5%;
+    }}
+
+    /* Eight 12.5% cells need ~540px; on a phone the last three fell off the
+       right edge. Reflow the single ticker row into a 4-wide grid. */
+    @media screen and (max-width: 500px) {{
+        table.ticker, table.ticker tbody {{ display: block; }}
+        table.ticker tr {{
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+        }}
+        .ti {{ width: auto; }}
     }}
     
     .ti-name {{
@@ -601,6 +657,7 @@ def render_economic_calendar(events, lang='tr'):
         </tr>''')
         
     return f'''
+    <div class="tbl-scroll">
     <table class="data-table">
       <thead>
         <tr>
@@ -617,6 +674,7 @@ def render_economic_calendar(events, lang='tr'):
         {''.join(rows)}
       </tbody>
     </table>
+    </div>
     '''
 
 def render_asset_table(assets, type_name, lang='tr', sparklines=None):
@@ -709,10 +767,12 @@ def render_asset_table(assets, type_name, lang='tr', sparklines=None):
         </tr>'''
         
     return f'''
+    <div class="tbl-scroll">
     <table class="data-table">
       <thead>{headers}</thead>
       <tbody>{''.join(rows)}</tbody>
     </table>
+    </div>
     '''
 
 def render_news_section(news_data, ai_commentaries=None, lang='tr'):
@@ -824,12 +884,14 @@ def render_footer(lang='tr', date_str='', is_weekly=False):
         today_str = now.strftime("%Y-%m-%d")
         archive_url = f"https://nocashflow.net/bulletins/daily/{today_str}.{lang}.html"
         
-    preferences_url = "https://nocashflow.net/preferences"
-    unsubscribe_url = "{{{resend_unsubscribe_url}}}" # Resend unsubscribe tag
-    
+    # No preferences/unsubscribe links here. This footer only ever reaches the
+    # public web archive and the PDF — the email body is built separately in
+    # email_sender.build_email_html and carries its own token-scoped
+    # unsubscribe link. Unsubscribing needs a per-recipient token, so a link in
+    # a public archive copy cannot work: the old ones pointed at a literal
+    # "{{{resend_unsubscribe_url}}}" string and a /preferences page that does
+    # not exist, i.e. two 404s in every published bulletin.
     view_web_text = STR['view_on_web'][lang]
-    pref_text = STR['language_pref'][lang]
-    unsub_text = STR['unsubscribe'][lang]
     copyright_text = STR['footer_copyright'][lang]
     disclaimer_text = STR['disclaimer'][lang]
     bulletin_desc = STR['bulletin_desc'][lang]
@@ -838,9 +900,7 @@ def render_footer(lang='tr', date_str='', is_weekly=False):
     <div style="margin-top:40px; border-top:1px solid var(--border); padding-top:20px; text-align:center; font-family:var(--sans); font-size:10px; color:var(--dim); line-height:1.75; page-break-inside:avoid; break-inside:avoid;">
       <p style="margin:0 0 10px 0; font-weight:600; color:var(--text); letter-spacing:1px;">{bulletin_desc}</p>
       <p style="margin:0 0 15px 0;">
-        <a href="{archive_url}" style="color:var(--accent); text-decoration:none;" target="_blank">{view_web_text}</a> &nbsp;·&nbsp;
-        <a href="{preferences_url}" style="color:var(--accent); text-decoration:none;" target="_blank">{pref_text}</a> &nbsp;·&nbsp;
-        <a href="{unsubscribe_url}" style="color:var(--accent); text-decoration:none;" target="_blank">{unsub_text}</a>
+        <a href="{archive_url}" style="color:var(--accent); text-decoration:none;" target="_blank">{view_web_text}</a>
       </p>
       <p style="margin:0 0 10px 0; max-width: 580px; margin-left: auto; margin-right: auto;">{disclaimer_text}</p>
       <p style="margin:0;">&copy; {now.year} nocashflow.net. {copyright_text}</p>

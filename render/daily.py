@@ -43,7 +43,8 @@ def render_daily(data, lang='tr', theme=None):
     
     # Overview (Genel Değerlendirme) — hide if empty or literal 'None'
     overview_html = ""
-    overview_text = lang_data.get('overview', '') or data.get('ai_summary', '')
+    # ai_summary is the TR overview — never fall back to it in the EN edition.
+    overview_text = lang_data.get('overview', '') or (data.get('ai_summary', '') if lang == 'tr' else '')
     if overview_text and str(overview_text).strip() and str(overview_text).strip() != 'None':
         overview_html = f'''
         <div class="summary-card">
@@ -187,7 +188,7 @@ def render_daily(data, lang='tr', theme=None):
         </div>'''
 
     kpi_html = f'''
-    <div class="card-grid" style="grid-template-columns: repeat({len(kpis)}, 1fr);">
+    <div class="card-grid card-grid-{len(kpis)}">
       {''.join(kpi_cards)}
     </div>
     {kpi_note_html}
@@ -412,7 +413,7 @@ def render_daily(data, lang='tr', theme=None):
     
     {cp_card_html}
     
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:20px; page-break-inside:avoid; break-inside:avoid;">
+    <div class="pair-grid" style="page-break-inside:avoid; break-inside:avoid;">
       <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">
         <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:12px;">{STR['card_fng'][lang]}</div>
         {fng_gauge}
@@ -422,7 +423,7 @@ def render_daily(data, lang='tr', theme=None):
     
     {options_cards_html}
     
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:24px; page-break-inside:avoid; break-inside:avoid;">
+    <div class="pair-grid" style="page-break-inside:avoid; break-inside:avoid;">
       <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">
         <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:12px;">Funding Rates (8h Eq.)</div>
         <table width="100%" style="border-collapse:collapse; font-size:12px;">
