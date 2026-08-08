@@ -1,44 +1,118 @@
 """
 AI Agents — Financial Content Editor & Research Desk
-Uses Anthropic Claude API to generate strategic reports in Turkish.
+Generates the bulletin's written layer. Provider and model come from
+config/llm.py; nothing here names a model.
 """
 import os
 import json
 import time
+from datetime import datetime
 
+from config import llm
 from config.prompt_budget import (PROMPT_EXCLUDED_KEYS, PROMPT_SERIES_CAPS,
                                   PROMPT_SERIES_CAPS_WEEKLY)
+from schemas.agent_responses import (CONTENT_EDITOR_DAILY_SCHEMA,
+                                     CONTENT_EDITOR_WEEKLY_SCHEMA,
+                                     RESEARCH_DESK_SCHEMA)
 
 
-def _call_with_retry(client, system_prompt, user_prompt, max_tokens=4000, max_retries=3):
-    """Call Claude API with automatic retry on rate limit errors and logging."""
-    import os as _os
+def llm_available():
+    """True when the active provider has a key to call with."""
+    return bool(os.environ.get(llm.api_key_env(), '').strip())
+
+
+def _call_openai(system_prompt, user_prompt, max_tokens, schema, schema_name):
+    """One Responses API call. Returns (text, usage dict).
+
+    max_output_tokens covers reasoning and visible output together, which is
+    why config/llm.py turns reasoning off — otherwise the model can spend the
+    budget thinking and return JSON that stops mid-string.
+    """
+    from openai import OpenAI
+    client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
+
+    kwargs = {
+        'model': llm.OPENAI_MODEL,
+        'reasoning': {'effort': llm.OPENAI_REASONING_EFFORT},
+        'max_output_tokens': max_tokens,
+        'instructions': system_prompt,
+        'input': user_prompt,
+    }
+    if schema is not None:
+        kwargs['text'] = {'format': {
+            'type': 'json_schema',
+            'name': schema_name,
+            'schema': schema,
+            'strict': True,
+        }}
+
+    r = client.responses.create(**kwargs)
+
+    # 'incomplete' is the Responses API's way of saying it ran out of budget.
+    # Say so loudly: a silently truncated answer is how this pipeline shipped
+    # empty bulletins twice while printing a tick.
+    truncated = r.status == 'incomplete'
+    if truncated:
+        reason = getattr(getattr(r, 'incomplete_details', None), 'reason', '?')
+        print(f"    ⚠️  Yanıt tamamlanmadı (status=incomplete, reason={reason}, "
+              f"max_output_tokens={max_tokens}) — JSON büyük ihtimalle kesik.")
+
+    u = r.usage
+    details = getattr(u, 'output_tokens_details', None)
+    usage = {
+        'model': r.model,
+        'input_tokens': u.input_tokens,
+        'output_tokens': u.output_tokens,
+        'reasoning_tokens': getattr(details, 'reasoning_tokens', 0) or 0,
+        'truncated': truncated,
+    }
+    return r.output_text.strip(), usage
+
+
+def _call_anthropic(system_prompt, user_prompt, max_tokens):
+    """Rollback path. No strict schema here — the text parser still applies."""
+    from anthropic import Anthropic
+    client = Anthropic(api_key=os.environ['ANTHROPIC_API_KEY'])
+
+    r = client.messages.create(
+        model=llm.ANTHROPIC_MODEL,
+        max_tokens=max_tokens,
+        temperature=llm.ANTHROPIC_TEMPERATURE,
+        system=system_prompt,
+        messages=[{'role': 'user', 'content': user_prompt}],
+    )
+    truncated = getattr(r, 'stop_reason', None) == 'max_tokens'
+    if truncated:
+        print(f"    ⚠️  AI yanıtı max_tokens={max_tokens} sınırında KESİLDİ — "
+              "JSON büyük ihtimalle bozuk.")
+
+    u = r.usage
+    usage = {
+        'model': llm.ANTHROPIC_MODEL,
+        'input_tokens': u.input_tokens,
+        'output_tokens': u.output_tokens,
+        'reasoning_tokens': 0,
+        'truncated': truncated,
+    }
+    return r.content[0].text.strip(), usage
+
+
+def _call_with_retry(system_prompt, user_prompt, max_tokens=4000,
+                     schema=None, schema_name='response', max_retries=3,
+                     agent='?'):
+    """Call the active provider, retrying only on rate limits."""
     for attempt in range(max_retries):
         try:
-            response = client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=max_tokens,
-                temperature=0.7,
-                system=system_prompt,
-                messages=[
-                    {"role": "user", "content": user_prompt}
-                ]
-            )
-            result_text = response.content[0].text.strip()
-
-            if getattr(response, 'stop_reason', None) == 'max_tokens':
-                print(f"    ⚠️  AI yanıtı max_tokens={max_tokens} sınırında KESİLDİ — JSON büyük ihtimalle bozuk.")
-
-            # Log AI call to fetch_report.json
-            _log_ai_call(
-                model="claude-sonnet-4-6",
-                max_tokens=max_tokens,
-                prompt_length=len(user_prompt),
-                response_length=len(result_text),
-                status="success"
-            )
-            
-            return result_text
+            if llm.PROVIDER == 'openai':
+                text, usage = _call_openai(system_prompt, user_prompt,
+                                           max_tokens, schema, schema_name)
+            else:
+                text, usage = _call_anthropic(system_prompt, user_prompt,
+                                              max_tokens)
+            _log_ai_call(agent=agent, max_tokens=max_tokens,
+                         prompt_chars=len(user_prompt) + len(system_prompt),
+                         response_chars=len(text), status='success', **usage)
+            return text
         except Exception as e:
             error_str = str(e)
             if ('429' in error_str or 'rate' in error_str.lower()) and attempt < max_retries - 1:
@@ -46,41 +120,62 @@ def _call_with_retry(client, system_prompt, user_prompt, max_tokens=4000, max_re
                 print(f"    ⏳ Rate limit, {wait_time}s bekleniyor... (deneme {attempt + 2}/{max_retries})")
                 time.sleep(wait_time)
             else:
-                _log_ai_call(
-                    model="claude-sonnet-4-6",
-                    max_tokens=max_tokens,
-                    prompt_length=len(user_prompt),
-                    response_length=0,
-                    status=f"error: {error_str[:200]}"
-                )
+                _log_ai_call(agent=agent, model=llm.active_model(),
+                             max_tokens=max_tokens,
+                             prompt_chars=len(user_prompt) + len(system_prompt),
+                             response_chars=0,
+                             status=f"error: {error_str[:200]}")
                 raise
 
 
-def _log_ai_call(model, max_tokens, prompt_length, response_length, status):
-    """Log AI API call details to fetch_report.json under 'ai_call' key."""
-    import os as _os
-    report_path = "fetch_report.json"
+def _log_ai_call(agent, max_tokens, prompt_chars, response_chars, status,
+                 model=None, input_tokens=0, output_tokens=0,
+                 reasoning_tokens=0, truncated=False):
+    """Record one call to logs/cost.jsonl and to fetch_report.json.
+
+    Token counts come from the provider's own usage block, so the cost here is
+    what was billed rather than a guess from character counts.
+    """
+    cost = llm.estimate_cost(model or '', input_tokens, output_tokens)
+    entry = {
+        'timestamp': datetime.now().isoformat(),
+        'agent': agent,
+        'provider': llm.PROVIDER,
+        'model': model,
+        'max_tokens': max_tokens,
+        'input_tokens': input_tokens,
+        'output_tokens': output_tokens,
+        'reasoning_tokens': reasoning_tokens,
+        'estimated_usd': round(cost, 6),
+        'truncated': truncated,
+        'prompt_chars': prompt_chars,
+        'response_chars': response_chars,
+        'status': status,
+    }
+
+    if status == 'success':
+        print(f"       {agent}: in={input_tokens} out={output_tokens}"
+              f"{f' (reasoning={reasoning_tokens})' if reasoning_tokens else ''}"
+              f" — ${cost:.4f}")
+    if cost > llm.COST_ALERT_USD:
+        print(f"    ⚠️  Tek çağrı eşiği aştı: ${cost:.4f} > ${llm.COST_ALERT_USD:.2f}")
+
+    try:
+        os.makedirs(os.path.dirname(llm.COST_LOG_PATH), exist_ok=True)
+        with open(llm.COST_LOG_PATH, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+    except Exception:
+        pass
+
+    report_path = 'fetch_report.json'
     report_data = {}
-    if _os.path.exists(report_path):
+    if os.path.exists(report_path):
         try:
             with open(report_path, 'r', encoding='utf-8') as f:
                 report_data = json.load(f)
         except Exception:
             pass
-    
-    if "ai_calls" not in report_data:
-        report_data["ai_calls"] = []
-    
-    from datetime import datetime as _dt
-    report_data["ai_calls"].append({
-        "model": model,
-        "max_tokens": max_tokens,
-        "prompt_chars": prompt_length,
-        "response_chars": response_length,
-        "status": status,
-        "timestamp": _dt.now().isoformat()
-    })
-    
+    report_data.setdefault('ai_calls', []).append(entry)
     try:
         with open(report_path, 'w', encoding='utf-8') as f:
             json.dump(report_data, f, ensure_ascii=False, indent=2)
@@ -378,9 +473,8 @@ class ContentEditorAgent:
         """
         Analyze newsletter data and produce structured commentary.
         """
-        api_key = os.environ.get('ANTHROPIC_API_KEY', '')
-        if not api_key:
-            print(f"    ⚠️  ANTHROPIC_API_KEY tanımlı değil — İçerik Editörü atlanıyor ({edition}).")
+        if not llm_available():
+            print(f"    ⚠️  {llm.api_key_env()} tanımlı değil — İçerik Editörü atlanıyor ({edition}).")
             return {
                 'success': False,
                 'regime': 'NEUTRAL',
@@ -389,9 +483,6 @@ class ContentEditorAgent:
             }
 
         try:
-            from anthropic import Anthropic
-            client = Anthropic(api_key=api_key)
-
             data_summary = _prepare_data_summary(data, edition=edition)
             
             raw_news = data.get('macro_news', {}).get('news', [])
@@ -411,7 +502,10 @@ Piyasa Verileri:
 
 YANITINI SADECE JSON OLARAK VER, başka metin ekleme. JSON içindeki metin alanlarında çift tırnak işaretlerini kesinlikle kaçış karakteriyle (\\") yaz veya tek tırnak (') kullan."""
                 
-                raw_response = _call_with_retry(client, WEEKLY_CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt, max_tokens=10000)
+                raw_response = _call_with_retry(
+                    WEEKLY_CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt, max_tokens=10000,
+                    schema=CONTENT_EDITOR_WEEKLY_SCHEMA, schema_name='weekly_bulletin',
+                    agent='ContentEditor/weekly')
                 result = self._parse_response(raw_response)
                 if not result.get('tr') and not result.get('en'):
                     print("    ❌ Haftalık editör yanıtı parse edilemedi — AI bölümleri gizlenecek.")
@@ -437,7 +531,10 @@ Piyasa Verileri:
 
 YANITINI SADECE JSON OLARAK VER, başka metin ekleme. JSON içindeki metin alanlarında çift tırnak işaretlerini kesinlikle kaçış karakteriyle (\\") yaz veya tek tırnak (') kullan."""
 
-                raw_response = _call_with_retry(client, CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt, max_tokens=6000)
+                raw_response = _call_with_retry(
+                    CONTENT_EDITOR_SYSTEM_PROMPT, user_prompt, max_tokens=6000,
+                    schema=CONTENT_EDITOR_DAILY_SCHEMA, schema_name='daily_bulletin',
+                    agent='ContentEditor/daily')
                 result = self._parse_response(raw_response)
                 if not result.get('tr') and not result.get('en'):
                     print("    ❌ Günlük editör yanıtı parse edilemedi — AI bölümleri gizlenecek.")
@@ -522,9 +619,8 @@ class ResearchDeskAgent:
     )
 
     def analyze(self, data):
-        api_key = os.environ.get('ANTHROPIC_API_KEY', '')
-        if not api_key:
-            print("    ⚠️  ANTHROPIC_API_KEY tanımlı değil — Araştırma Masası atlanıyor.")
+        if not llm_available():
+            print(f"    ⚠️  {llm.api_key_env()} tanımlı değil — Araştırma Masası atlanıyor.")
             return {'success': False, 'featured_topics': []}
 
         news_items = data.get('macro_news', {}).get('news', []) or []
@@ -533,9 +629,6 @@ class ResearchDeskAgent:
             return {'success': False, 'featured_topics': []}
 
         try:
-            from anthropic import Anthropic
-            client = Anthropic(api_key=api_key)
-
             news_inputs = [
                 {
                     "title": n.get('title'),
@@ -573,8 +666,9 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme."""
             # 3 topics x 2 languages x 3 sourced bullets runs ~5-6k tokens;
             # 4000 truncated the JSON mid-string in testing.
             raw_response = _call_with_retry(
-                client, RESEARCH_DESK_SYSTEM_PROMPT, user_prompt, max_tokens=8000
-            )
+                RESEARCH_DESK_SYSTEM_PROMPT, user_prompt, max_tokens=8000,
+                schema=RESEARCH_DESK_SCHEMA, schema_name='research_brief',
+                agent='ResearchDesk')
             result = ContentEditorAgent()._parse_response(raw_response)
             topics = self._sanitize(result.get('featured_topics', []), allowed_sources)
 

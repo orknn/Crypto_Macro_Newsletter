@@ -46,3 +46,6 @@ sample_newsletter.pdf
 
 # Per-run research brief artifact
 out/research_brief_daily.json
+
+# Per-run LLM cost log (collected from the CI artifact, not source)
+logs/

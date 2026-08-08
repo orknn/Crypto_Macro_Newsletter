@@ -48,6 +48,10 @@ jobs:
           SEND_EMAIL: "true"
           CI: "true"
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Flip to 'anthropic' to roll the writing layer back
+          # without a deploy; both paths stay wired.
+          LLM_PROVIDER: openai
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
         run: |
           python main.py --send-email
@@ -119,4 +123,6 @@ jobs:
             daily_bulletin_en.html
             daily_bulletin_tr.pdf
             daily_bulletin_en.pdf
+            fetch_report.json
+            logs/cost.jsonl
           retention-days: 30
