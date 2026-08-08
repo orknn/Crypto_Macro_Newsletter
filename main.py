@@ -26,7 +26,7 @@ from data_fetcher import (
     get_options_market_data, get_eth_etf_flows, get_rates_and_breakevens,
     get_nfci, get_fed_pricing, get_eth_btc_ratio, get_trending_coins
 )
-from agents import ContentEditorAgent, ExperienceDesignerAgent, ResearchDeskAgent
+from agents import ContentEditorAgent, ResearchDeskAgent
 import validators
 from render.daily import render_daily
 from render.weekly import render_weekly
@@ -521,7 +521,6 @@ def run_pipeline():
         # Legacies for backward compatibility
         data['ai_summary'] = None
         data['news_commentaries'] = None
-        data['design_improvement_report'] = None
         data['futures_note'] = None
         data['etf_note'] = None
         data['options_note'] = None
@@ -601,10 +600,6 @@ def run_pipeline():
                 except Exception as e:
                     print(f"    ⚠️  Araştırma gündemi diske yazılamadı: {e}")
             time.sleep(2)
-
-        print("  → Bülten Deneyim Tasarımcısı...")
-        design_report = ExperienceDesignerAgent().analyze(data)
-        data['design_improvement_report'] = design_report
 
     # ── 4. Save Daily Snapshot and Validate (if daily run) ──
     if edition == 'daily' and not dry_run:

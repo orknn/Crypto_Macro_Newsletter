@@ -1,5 +1,5 @@
 """
-AI Agents — Financial Content Editor & Bulletin Experience Designer
+AI Agents — Financial Content Editor & Research Desk
 Uses Anthropic Claude API to generate strategic reports in Turkish.
 """
 import os
@@ -304,30 +304,6 @@ CANONICAL_SOURCES = {
 }
 
 
-EXPERIENCE_DESIGNER_SYSTEM_PROMPT = """Sen, finans sektörüne özel dijital ürün tasarımında 10+ yıl deneyimli, kıdemli bir UX/UI Tasarımcısısın.
-
-REFERANS BÜLTENLER (sadece İLHAM KAYNAĞI olarak kullan, KESİNLİKLE kopyalama):
-- Aposto (aposto.com): Minimalist, temiz layout, bol whitespace, net tipografi. Türk dijital medyanın en iyi bülteni.
-- Finimize: Finans verilerini 3 dakikada taranabilir yapan card-based layout.
-- Morning Brew: Conversational tone ile premium görsellik dengesi.
-- Sherwood / Robinhood Snacks: Data-driven, mobile-first tasarım.
-
-KRİTİK: Bu bültenin kendi özgün dark-navy kimliği var. Amacın bu kimliği koruyarak iyileştirmeler önermek.
-Hiçbir referans bülteni birebir kopyalama. Her önerinin bu bültenin mevcut tasarım diline uygun, ORİJİNAL bir çözüm olması gerekir.
-
-ANALİZ KATMANLARI (her seferinde 2-3 öneri yeterli, kalite > miktar):
-1. Layout & Spacing: padding, margin, whitespace dengesi
-2. Typography: font-size, weight, line-height, contrast
-3. Color & Contrast: arka plan, vurgu renkleri, data-ink ratio
-4. Component Design: KPI card, tablo, haber kartı tasarımı
-5. Data Visualization: grafik türleri, bar/sparkline iyileştirmeleri
-
-ÖNEMLİ: Yanıtını MUTLAKA aşağıdaki JSON formatında ver:
-{"suggestions": [{"area": "...", "selector": "CSS selector veya eleman açıklaması", "current": "mevcut CSS değeri", "proposed": "önerilen CSS değeri", "reason": "neden bu değişiklik — referans bülten varsa belirt", "priority": "high/medium/low"}]}
-
-Maksimum 5 öneri ver. Her öneri UYGULANABİLİR ve SOMUT olmalı."""
-
-
 # ═══════════════════════════════════════════
 # HELPER: Prepare data summary for LLM
 # ═══════════════════════════════════════════
@@ -347,63 +323,6 @@ def _prepare_data_summary(data, edition='daily'):
     summary = {k: v for k, v in data.items() if k not in exclude_keys}
     return summary
 
-
-
-def _prepare_design_context():
-    """Provide the actual CSS template code for the designer agent."""
-    # Read the actual CSS from html_generator.py
-    css_summary = """
-:root {
-  --navy: #1c2e4a;
-  --navy-light: #253a5e;
-  --navy-card: #1f3350;
-  --navy-border: #2e4872;
-  --straw: #e8c547;
-  --text-bright: #f0ead8;
-  --text-mid: #a8bcd4;
-  --text-dim: #5e7a9a;
-  --green: #00d084;
-  --red: #ff4757;
-}
-
-body { background: var(--navy); font-family: 'Inter', sans-serif; color: var(--text-bright); }
-.bulletin { max-width: 680px; margin: 0 auto; }
-.header { background: linear-gradient(160deg, #243f66 0%, var(--navy) 60%); padding: 36px 40px 28px; }
-.header-title { font-family: 'Playfair Display', serif; font-size: 34px; font-weight: 700; }
-.section { padding: 22px 40px; border-bottom: 1px solid var(--navy-border); }
-.section-label { font-size: 10px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--straw); }
-.kpi-grid { display: flex; flex-wrap: nowrap; gap: 8px; }
-.kpi-card { background: var(--navy-card); border: 1px solid var(--navy-border); border-radius: 8px; padding: 14px 12px; }
-.kpi-label { font-size: 9px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-dim); }
-.kpi-value { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 500; color: white; }
-.summary-card { background: #f7f5c8; border: 1px solid #e8e49a; border-radius: 12px; padding: 20px 24px; }
-.summary-text { font-size: 14.5px; line-height: 1.75; color: #2a3a28; }
-.heatmap-table { width: 100%; border-collapse: collapse; }
-.heatmap-table th { font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-dim); padding: 12px 16px; }
-.heatmap-table td { padding: 12px 16px; font-size: 14px; border-bottom: 1px solid #334155; }
-.econ-calendar td { padding: 12px 16px; font-size: 12px; }
-.story-headline { font-family: 'Playfair Display', serif; font-size: 15px; font-weight: 600; }
-.story-body { font-size: 12.5px; color: var(--text-mid); line-height: 1.6; }
-"""
-
-    return {
-        'actual_css': css_summary,
-        'fonts': 'Playfair Display (headings) + Inter (body) + JetBrains Mono (data)',
-        'theme': 'Dark navy (#1c2e4a) with straw/gold (#e8c547) accents',
-        'max_width': '680px',
-        'sections': [
-            'Header with Fear & Greed gauge',
-            'Ticker bar (6 indicators)',
-            'Genel Değerlendirme (AI-written summary in yellow card)',
-            'Haftalık Ekonomik Takvim (table)',
-            'KPI cards (6 horizontal)',
-            'Coinbase Premium SVG bar chart',
-            'Spot Bitcoin ETF Flows',
-            'Extra indicators (Yield Spread, Stablecoin, SMH)',
-            'Asset tables (Commodities, Magnificent 7, Crypto)',
-            'News stories with AI Insight commentary',
-        ]
-    }
 
 
 # ═══════════════════════════════════════════
@@ -679,95 +598,3 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme."""
         if stripped:
             print(f"    🧹 {stripped} uydurma/izinsiz kaynak URL'si temizlendi.")
         return clean_topics
-
-
-class ExperienceDesignerAgent:
-    """
-    Bülten Deneyim Tasarımcısı Agent.
-    Bültenin UX/UI tasarımını analiz edip Tasarım Geliştirme Önerisi üretir.
-    """
-
-    def analyze(self, data):
-        """
-        Analyze newsletter design using actual CSS template.
-        Returns a dict with structured JSON suggestions.
-        """
-        api_key = os.environ.get('ANTHROPIC_API_KEY', '')
-        if not api_key:
-            print("    ⚠️  ANTHROPIC_API_KEY tanımlı değil — Deneyim Tasarımcısı atlanıyor.")
-            return {'success': False, 'report': ''}
-
-        try:
-            from anthropic import Anthropic
-            client = Anthropic(api_key=api_key)
-
-            design_context = _prepare_design_context()
-
-            user_prompt = f"""Aşağıda bültenin GERÇEK CSS kodu ve mevcut bölüm yapısı yer almaktadır.
-
-Bu CSS'i analiz ederek uygulanabilir tasarım önerileri ver.
-
-Referans olarak özellikle Aposto bülteninin minimalist ve temiz stilini düşün.
-
-Yanıtını SADECE JSON olarak ver.
-
-### Mevcut CSS Kodu:
-```css
-{design_context['actual_css']}
-```
-
-### Bülten Yapısı:
-- Tema: {design_context['theme']}
-- Font Stack: {design_context['fonts']}
-- Max Width: {design_context['max_width']}
-- Bölümler: {', '.join(design_context['sections'])}
-
-### Günün Veri Özeti:
-- Total sections: {len(design_context['sections'])}
-- Crypto watchlist: {len(data.get('crypto_prices', []))} coin
-- Haber sayısı: {len(data.get('macro_news', {}).get('news', []))}
-- Ekonomik takvim: {len(data.get('economic_calendar', []))} event
-"""
-
-            raw_response = _call_with_retry(client, EXPERIENCE_DESIGNER_SYSTEM_PROMPT, user_prompt)
-            
-            # Parse structured JSON
-            result = self._parse_response(raw_response)
-            suggestions = result.get('suggestions', [])
-            
-            # Format as readable report for ai_reports.html
-            report_lines = ["## 🎨 Tasarım Önerileri\n"]
-            for i, s in enumerate(suggestions, 1):
-                report_lines.append(f"**{i}. [{s.get('priority', 'medium').upper()}] {s.get('area', '')}**")
-                report_lines.append(f"Selector: `{s.get('selector', '')}`")
-                report_lines.append(f"Mevcut: `{s.get('current', '')}`")
-                report_lines.append(f"Önerilen: `{s.get('proposed', '')}`")
-                report_lines.append(f"Neden: {s.get('reason', '')}\n")
-            
-            report = '\n'.join(report_lines)
-            print(f"    ✅ Tasarım Önerisi üretildi ({len(suggestions)} öneri).")
-            return {'success': True, 'report': report}
-
-        except Exception as e:
-            print(f"    ⚠️  Deneyim Tasarımcısı hatası: {e}")
-            return {'success': False, 'report': ''}
-
-    def _parse_response(self, raw):
-        """Extract JSON from the AI response."""
-        text = raw.strip()
-        if text.startswith('```'):
-            lines = text.split('\n')
-            lines = [l for l in lines if not l.strip().startswith('```')]
-            text = '\n'.join(lines)
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            start = text.find('{')
-            end = text.rfind('}') + 1
-            if start >= 0 and end > start:
-                try:
-                    return json.loads(text[start:end])
-                except json.JSONDecodeError:
-                    pass
-            print("    ⚠️  Tasarımcı yanıtı JSON olarak parse edilemedi.")
-            return {'suggestions': []}

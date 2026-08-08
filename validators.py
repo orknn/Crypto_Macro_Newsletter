@@ -140,7 +140,7 @@ def validate_ai_notes(data):
         elif isinstance(obj, dict):
             for k, v in obj.items():
                 # Skip the AI-generated language layers to avoid self-referencing
-                if k in ['tr', 'en', 'ai_summary', 'news_commentaries', 'design_improvement_report']:
+                if k in ['tr', 'en', 'ai_summary', 'news_commentaries']:
                     continue
                 numbers.update(collect_numbers(v))
         elif isinstance(obj, list):
