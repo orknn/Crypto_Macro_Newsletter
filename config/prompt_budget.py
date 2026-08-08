@@ -26,14 +26,43 @@ PROMPT_EXCLUDED_KEYS = {
 
 # Long point-series are truncated to their most recent N entries, so the model
 # can still describe a recent trend without paying for history it never quotes.
-# Keys are dotted paths into the payload.
+#
+# Paths are one of three shapes:
+#   'key'          the value itself is the series
+#   'key.field'    the series sits under a field
+#   'key.*'        every list-valued field is a series (one per asset)
+#
+# The cap is a number of points, so it only means something next to the
+# resolution of the series. Read each one as a span, not as a size.
 PROMPT_SERIES_CAPS = {
-    # 168 hourly points (7 days). The headline reading is `current_value` and
-    # the trend/support/resistance call is already summarised in `4h_status`.
-    'coinbase_premium.trend_data': 12,
-    # 61 monthly points back to 2021; the model quotes the level and the
-    # month-on-month change, both of which sit next to the series.
-    'm2_money_supply.trend': 12,
+    # Hourly, 168 points (7 days) -> the last day. The headline reading is
+    # `current_value` and the trend/support/resistance call is already
+    # summarised in `4h_status`.
+    'coinbase_premium.trend_data': 24,
+    # Monthly, 61 points back to 2021 -> the last year. The model quotes the
+    # level and the month-on-month change, both of which sit next to the series.
+    'm2_money_supply.trend': 13,
+}
+
+# The Weekly Deep Dive carries a second set of series, and they are the larger
+# problem: ~114k characters of chart history against the daily edition's ~47k
+# total payload. Same rule, but the resolutions differ, so the spans are set
+# per key rather than inherited from the daily table.
+PROMPT_SERIES_CAPS_WEEKLY = {
+    **PROMPT_SERIES_CAPS,
+    # Daily candles here, not hourly -> a month of context for a weekly read.
+    'coinbase_premium.trend_data': 30,
+    # YTD percentage paths, one daily series per asset (BTC 220, NDX and GOLD
+    # 150 each) -> the last month, enough to describe how they have diverged.
+    'ytd_comparison_data.*': 20,
+    # The rest are weekly or monthly points -> roughly a quarter, except
+    # inflation which is monthly and so gets a year.
+    'stablecoin_history_data': 13,
+    'net_liquidity_history_data': 13,
+    'etf_cumulative_data': 13,
+    'inflation_history_data': 13,
+    # `.current` and `.chg_1w` sit right beside this; the history is the chart.
+    'nfci.history': 13,
 }
 
 # Upper bound on the news items handed to the editor. Each item costs input

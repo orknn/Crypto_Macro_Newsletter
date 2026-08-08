@@ -6,7 +6,8 @@ import os
 import json
 import time
 
-from config.prompt_budget import PROMPT_EXCLUDED_KEYS, PROMPT_SERIES_CAPS
+from config.prompt_budget import (PROMPT_EXCLUDED_KEYS, PROMPT_SERIES_CAPS,
+                                  PROMPT_SERIES_CAPS_WEEKLY)
 
 
 def _call_with_retry(client, system_prompt, user_prompt, max_tokens=4000, max_retries=3):
@@ -310,25 +311,37 @@ CANONICAL_SOURCES = {
 # HELPER: Prepare data summary for LLM
 # ═══════════════════════════════════════════
 
-def _trim_for_prompt(payload):
+def _trim_for_prompt(payload, edition='daily'):
     """Drop render-only keys and shorten long point-series for the LLM copy.
 
     Returns a new dict. `data` itself is never touched, so the bulletin, the
     charts and the snapshot still see every point that was fetched — this only
     decides what the model is billed to read. See config/prompt_budget.py.
     """
+    caps = PROMPT_SERIES_CAPS_WEEKLY if edition == 'weekly' else PROMPT_SERIES_CAPS
     trimmed = {k: v for k, v in payload.items() if k not in PROMPT_EXCLUDED_KEYS}
 
-    for path, limit in PROMPT_SERIES_CAPS.items():
+    def tail(series, limit):
+        return series[-limit:] if isinstance(series, list) and len(series) > limit else series
+
+    for path, limit in caps.items():
         key, _, field = path.partition('.')
         holder = trimmed.get(key)
+
+        if not field:
+            # The value is the series itself.
+            trimmed[key] = tail(holder, limit)
+            continue
+
         if not isinstance(holder, dict):
             continue
-        series = holder.get(field)
-        if isinstance(series, list) and len(series) > limit:
-            # Copy the holder so the cap never propagates back into `data`.
+
+        # Copy the holder so a cap never propagates back into `data`.
+        if field == '*':
+            trimmed[key] = {f: tail(v, limit) for f, v in holder.items()}
+        elif isinstance(holder.get(field), list):
             holder = dict(holder)
-            holder[field] = series[-limit:]
+            holder[field] = tail(holder[field], limit)
             trimmed[key] = holder
 
     return trimmed
@@ -347,7 +360,7 @@ def _prepare_data_summary(data, edition='daily'):
         # that contradict the weekly totals shown on the card.
         exclude_keys |= {'etf_flows', 'etf_history_data'}
     summary = {k: v for k, v in data.items() if k not in exclude_keys}
-    return _trim_for_prompt(summary)
+    return _trim_for_prompt(summary, edition=edition)
 
 
 
