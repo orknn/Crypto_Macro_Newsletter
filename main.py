@@ -587,7 +587,6 @@ def run_pipeline():
         data['news_commentaries'] = None
         data['futures_note'] = None
         data['etf_note'] = None
-        data['options_note'] = None
         data['indicators_note'] = None
         data['weekly_themes'] = []
     else:
@@ -653,15 +652,11 @@ def run_pipeline():
             print("  → Araştırma Masası...")
             research_result = ResearchDeskAgent().analyze(data)
             if research_result.get('success'):
-                brief = {
-                    'has_featured_topics': True,
-                    'featured_topics': research_result['featured_topics'],
-                }
+                brief = {'featured_topics': research_result['featured_topics']}
                 # The desk runs after the editor, so it needs its own pass.
                 brief, _rejected = validators.validate_research_brief(brief, data)
                 if not brief['featured_topics']:
                     print("    ❌ Denetimden geçen araştırma konusu kalmadı — bölüm gizlenecek.")
-                    brief['has_featured_topics'] = False
                 data['research_brief'] = brief
                 try:
                     os.makedirs('out', exist_ok=True)

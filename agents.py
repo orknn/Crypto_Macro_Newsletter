@@ -677,11 +677,7 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme."""
                 return {'success': False, 'featured_topics': []}
 
             print(f"    ✅ Stratejik Araştırma Gündemi üretildi ({len(topics)} konu).")
-            return {
-                'success': True,
-                'has_featured_topics': True,
-                'featured_topics': topics,
-            }
+            return {'success': True, 'featured_topics': topics}
 
         except Exception as e:
             print(f"    ⚠️  Araştırma Masası hatası: {e}")

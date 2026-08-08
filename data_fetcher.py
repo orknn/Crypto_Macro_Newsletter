@@ -2325,7 +2325,14 @@ def _kalshi_cut_odds(next_fomc_dt):
     Ticker date format is YYMON (year+month, not day). Prices are often
     None (illiquid) — caller must handle a None return.
     """
-    ticker_tag = next_fomc_dt.strftime('%y%b').upper()  # e.g. 26JUL
+    # e.g. 26JUL. Built from a fixed table rather than strftime('%b'), which
+    # returns the month in the machine's locale — on a Turkish system August
+    # comes back "Ağu" and the ticker never matches. CI runs in C locale, so
+    # this only ever failed off the runner, which is the worst kind of failure
+    # to leave lying around: it works everywhere you would test it.
+    _MONTHS = ('JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+               'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC')
+    ticker_tag = f"{next_fomc_dt.strftime('%y')}{_MONTHS[next_fomc_dt.month - 1]}"
     url = "https://api.elections.kalshi.com/trade-api/v2/markets?series_ticker=KXFEDDECISION&status=open"
     resp = requests.get(url, timeout=15)
     resp.raise_for_status()

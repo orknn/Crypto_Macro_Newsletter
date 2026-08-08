@@ -136,7 +136,7 @@ def _collect_snapshot_numbers(data):
 
     AI_KEYS = {'tr', 'en', 'ai_summary', 'news_commentaries', 'research_brief',
                'regime', 'weekly_themes', 'futures_note', 'etf_note',
-               'indicators_note', 'options_note'}
+               'indicators_note'}
 
     def walk(obj):
         numbers = set()
