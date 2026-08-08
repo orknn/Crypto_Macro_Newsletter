@@ -126,23 +126,25 @@ def validate_and_sanitize(data):
     return data
 
 
-def validate_ai_notes(data):
-    """
-    Scan AI generated notes for percentage figures (regex: [+-]?\d+\.\d+%).
-    If a mentioned value does not exist in the non-AI metrics of data,
-    the note is hidden (cleared to None) and 'ai_note_rejected': 'value_mismatch'
-    is logged to fetch_report.json.
+def _collect_snapshot_numbers(data):
+    """Every number the bulletin actually fetched, rounded to 4dp.
+
+    The AI layers are skipped: checking the model's prose against the model's
+    own prose would let a fabricated figure vouch for itself.
     """
     import re
-    
-    # 1. Recursively extract all numbers (int/float) from the snapshot data dictionary
-    def collect_numbers(obj):
+
+    AI_KEYS = {'tr', 'en', 'ai_summary', 'news_commentaries', 'research_brief',
+               'regime', 'weekly_themes', 'futures_note', 'etf_note',
+               'indicators_note', 'options_note'}
+
+    def walk(obj):
         numbers = set()
+        if isinstance(obj, bool):
+            return numbers
         if isinstance(obj, (int, float)):
-            # Round to 4 decimal places to prevent floating point issues
             numbers.add(round(float(obj), 4))
         elif isinstance(obj, str):
-            # Extract decimals, e.g. "0.61" or "-0.27" or "1.80"
             for match in re.findall(r'[+-]?\d+\.\d+', obj):
                 try:
                     numbers.add(round(float(match), 4))
@@ -150,82 +152,176 @@ def validate_ai_notes(data):
                     pass
         elif isinstance(obj, dict):
             for k, v in obj.items():
-                # Skip the AI-generated language layers to avoid self-referencing
-                if k in ['tr', 'en', 'ai_summary', 'news_commentaries']:
+                if k in AI_KEYS:
                     continue
-                numbers.update(collect_numbers(v))
+                numbers.update(walk(v))
         elif isinstance(obj, list):
             for item in obj:
-                numbers.update(collect_numbers(item))
+                numbers.update(walk(item))
         return numbers
 
-    snapshot_numbers = collect_numbers(data)
-    
-    # Debug print
-    print(f"      🔍 Snapshot numbers collected for AI consistency check: {sorted(list(snapshot_numbers))}")
-    
-    mismatch_detected = False
-    rejected_notes = []
-    
-    # 2. Iterate through notes in TR and EN
-    for lang in ['tr', 'en']:
-        lang_data = data.get(lang, {})
-        notes = lang_data.get('notes', {})
-        if isinstance(notes, dict):
-            for note_key, note_text in list(notes.items()):
-                if isinstance(note_text, str) and note_text.strip() and note_text.strip() != 'None':
-                    # Both orders (+0.61% and %+0.61), both decimal marks, and
-                    # whole numbers. The old pattern required a dot, so it
-                    # matched nothing at all in the Turkish edition — where the
-                    # model writes %4,68 — leaving TR notes unchecked.
-                    # Turkish writes the sign outside the percent sign (-%3,27),
-                    # so the sign has to be picked up before the % as well —
-                    # otherwise -3.27 is read as +3.27 and rejected as unmatched.
-                    percentage_matches = (
-                        re.findall(r'[+-]?\d+(?:[.,]\d+)?%', note_text)
-                        + re.findall(r'[+-]?%[+-]?\d+(?:[.,]\d+)?', note_text)
-                    )
-                    for match in percentage_matches:
-                        val_str = match.replace('%', '').replace(',', '.').strip()
-                        try:
-                            val_float = float(val_str)
-                        except ValueError:
-                            continue
-                        
-                        # A figure counts as backed by the data if some real
-                        # number sits within AI_NOTE_TOLERANCE of it — matched
-                        # on the signed value, or on magnitude alone.
-                        #
-                        # Magnitude matters because prose carries direction in
-                        # words, not in the sign: a -47.93% drawdown is written
-                        # "%47,92 geri çekilme" / "a 47.92% drawdown", and the
-                        # signed test read that as +47.92, found nothing near
-                        # it, and suppressed a correct note.
-                        found = False
-                        for sn in snapshot_numbers:
-                            if (abs(sn - val_float) <= AI_NOTE_TOLERANCE
-                                    or abs(abs(sn) - abs(val_float)) <= AI_NOTE_TOLERANCE):
-                                found = True
-                                break
+    return walk(data)
 
-                        if not found:
-                            print(f"      ⚠️  AI Note Mismatch: {note_key} in {lang} mentions {match} which is not in snapshot.")
-                            mismatch_detected = True
-                            notes[note_key] = None  # Clear the note so it is hidden in layout
-                            rejected_notes.append({
-                                "lang": lang,
-                                "note": note_key,
-                                "unmatched_value": match
-                            })
-                            break  # Invalidate the entire note on first mismatch
-                            
-    if mismatch_detected:
-        _log_ai_note_rejection(rejected_notes)
-        
+
+def _unsourced_figures(text, pool):
+    """Percentages in `text` that no fetched number backs up.
+
+    Both orders (+0.61% and %+0.61), both decimal marks, and whole numbers.
+    An earlier pattern required a dot, so it matched nothing at all in the
+    Turkish edition — where the model writes %4,68 — leaving TR unchecked.
+    Turkish also writes the sign outside the percent sign (-%3,27), so the
+    sign has to be picked up before the % as well, or -3.27 reads as +3.27.
+    """
+    import re
+
+    if not isinstance(text, str) or not text.strip() or text.strip() == 'None':
+        return []
+
+    matches = (re.findall(r'[+-]?\d+(?:[.,]\d+)?%', text)
+               + re.findall(r'[+-]?%[+-]?\d+(?:[.,]\d+)?', text))
+
+    unsourced = []
+    for match in matches:
+        try:
+            value = float(match.replace('%', '').replace(',', '.').strip())
+        except ValueError:
+            continue
+        # Backed by the data if a real number sits within AI_NOTE_TOLERANCE,
+        # matched on the signed value or on magnitude alone. Magnitude matters
+        # because prose carries direction in words, not in the sign: a -47.93%
+        # drawdown is written "%47,92 geri çekilme", and the signed test read
+        # that as +47.92, found nothing near it, and suppressed a correct note.
+        if any(abs(sn - value) <= AI_NOTE_TOLERANCE
+               or abs(abs(sn) - abs(value)) <= AI_NOTE_TOLERANCE for sn in pool):
+            continue
+        unsourced.append(match)
+    return unsourced
+
+
+def validate_ai_numbers(data):
+    """Check every figure the model wrote against the data it was given.
+
+    This used to cover `notes` alone, which meant the bulletin's centrepiece —
+    the overview — plus the news insights and the weekly themes went out
+    unchecked. On a live run the model produced a 4.77% that appears nowhere in
+    the payload; it was caught only because it happened to land in a note.
+
+    The response to an unsourced figure is scaled to what it costs to lose:
+
+      regime_line, notes  hidden, the way a note has always been
+      insights[i]         blanked; the list keeps its length, because main.py
+                          matches insights to headlines by position
+      themes[i]           dropped, a theme built on a bad number is not worth
+                          repairing
+      overview            blanked and reported, because it cannot be quietly
+                          dropped — an empty overview trips the quality gate,
+                          which is the correct outcome. Publishing the figure
+                          would be worse than publishing nothing.
+
+    Records what it rejected in data['ai_validation'] so the gate can say why
+    the overview is missing instead of only that it is.
+    """
+    pool = _collect_snapshot_numbers(data)
+    print(f"      🔍 AI tutarlılık kontrolü: {len(pool)} gerçek sayıya karşı denetleniyor.")
+
+    rejected = []
+
+    def reject(lang, field, figures):
+        for figure in figures:
+            print(f"      ⚠️  {lang.upper()} {field}: {figure} veride yok — gizlendi.")
+            rejected.append({'lang': lang, 'field': field, 'unmatched_value': figure})
+
+    for lang in ('tr', 'en'):
+        lang_data = data.get(lang)
+        if not isinstance(lang_data, dict):
+            continue
+
+        for field in ('regime_line', 'overview'):
+            bad = _unsourced_figures(lang_data.get(field), pool)
+            if bad:
+                reject(lang, field, bad)
+                lang_data[field] = None
+
+        notes = lang_data.get('notes')
+        if isinstance(notes, dict):
+            for key, text in list(notes.items()):
+                bad = _unsourced_figures(text, pool)
+                if bad:
+                    reject(lang, f'notes.{key}', bad)
+                    notes[key] = None
+
+        insights = lang_data.get('insights')
+        if isinstance(insights, list):
+            for i, text in enumerate(insights):
+                bad = _unsourced_figures(text, pool)
+                if bad:
+                    reject(lang, f'insights[{i}]', bad)
+                    insights[i] = ""
+
+        themes = lang_data.get('themes')
+        if isinstance(themes, list):
+            kept = []
+            for i, theme in enumerate(themes):
+                if not isinstance(theme, dict):
+                    kept.append(theme)
+                    continue
+                bad = (_unsourced_figures(theme.get('title'), pool)
+                       + _unsourced_figures(theme.get('description'), pool))
+                if bad:
+                    reject(lang, f'themes[{i}]', bad)
+                else:
+                    kept.append(theme)
+            lang_data['themes'] = kept
+
+    data['ai_validation'] = {
+        'rejected': rejected,
+        'overview_rejected': sorted({r['lang'] for r in rejected
+                                     if r['field'] == 'overview'}),
+    }
+    if rejected:
+        _log_ai_note_rejection(rejected)
     return data
 
+
+def validate_research_brief(brief, data):
+    """Same check for the Research Desk, which runs after the editor.
+
+    Topics are dropped whole rather than patched: a research question resting
+    on a number that was never fetched is not a research question. If nothing
+    survives, the caller hides the section — the same rule the desk already
+    applies when the model returns no usable topic.
+    """
+    if not isinstance(brief, dict):
+        return brief, []
+
+    pool = _collect_snapshot_numbers(data)
+    rejected = []
+    kept = []
+
+    for i, topic in enumerate(brief.get('featured_topics') or []):
+        bad = []
+        for lang in ('tr', 'en'):
+            block = topic.get(lang) if isinstance(topic, dict) else None
+            if not isinstance(block, dict):
+                continue
+            bad += _unsourced_figures(block.get('title'), pool)
+            bad += _unsourced_figures(block.get('topic'), pool)
+        if bad:
+            for figure in bad:
+                print(f"      ⚠️  Araştırma konusu {i + 1}: {figure} veride yok — konu düşürüldü.")
+                rejected.append({'lang': '-', 'field': f'research.topic[{i}]',
+                                 'unmatched_value': figure})
+        else:
+            kept.append(topic)
+
+    if rejected:
+        _log_ai_note_rejection(rejected)
+    brief['featured_topics'] = kept
+    return brief, rejected
+
+
 def _log_ai_note_rejection(rejected_notes):
-    """Write ai_note_rejected: value_mismatch to fetch_report.json."""
+    """Record rejected AI figures in fetch_report.json."""
     report_path = "fetch_report.json"
     report_data = {}
     if os.path.exists(report_path):

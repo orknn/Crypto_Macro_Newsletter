@@ -570,8 +570,8 @@ def run_pipeline():
             data['en'] = editor_result.get('en', {})
             
             # Post-generation consistency check for AI notes
-            print("  → Running AI note consistency checks...")
-            data = validators.validate_ai_notes(data)
+            print("  → Running AI number consistency checks...")
+            data = validators.validate_ai_numbers(data)
             
             # Map legacy properties for compatibility
             data['ai_summary'] = data['tr'].get('overview')
@@ -622,10 +622,16 @@ def run_pipeline():
             print("  → Araştırma Masası...")
             research_result = ResearchDeskAgent().analyze(data)
             if research_result.get('success'):
-                data['research_brief'] = {
+                brief = {
                     'has_featured_topics': True,
                     'featured_topics': research_result['featured_topics'],
                 }
+                # The desk runs after the editor, so it needs its own pass.
+                brief, _rejected = validators.validate_research_brief(brief, data)
+                if not brief['featured_topics']:
+                    print("    ❌ Denetimden geçen araştırma konusu kalmadı — bölüm gizlenecek.")
+                    brief['has_featured_topics'] = False
+                data['research_brief'] = brief
                 try:
                     os.makedirs('out', exist_ok=True)
                     with open('out/research_brief_daily.json', 'w', encoding='utf-8') as f:
@@ -668,7 +674,13 @@ def run_pipeline():
         quality_failures.append("BTC fiyatı yok")
 
     if not (data.get('tr', {}).get('overview') or '').strip():
-        quality_failures.append("TR genel değerlendirme boş")
+        # Say which one it is. An overview suppressed for quoting a figure the
+        # payload never contained is a different incident from one the model
+        # never wrote, and the log should not make them look alike.
+        if 'tr' in (data.get('ai_validation') or {}).get('overview_rejected', []):
+            quality_failures.append("TR genel değerlendirme denetimde reddedildi (veride olmayan rakam)")
+        else:
+            quality_failures.append("TR genel değerlendirme boş")
     if not (data.get('fear_and_greed') or {}).get('value'):
         quality_failures.append("Fear & Greed yok")
     if not (data.get('crypto_market_overview') or {}).get('total_market_cap'):
