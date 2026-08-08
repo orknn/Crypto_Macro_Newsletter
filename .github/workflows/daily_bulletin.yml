@@ -18,6 +18,10 @@ concurrency:
   group: bulletin-website-push
   cancel-in-progress: false
 
+# Needed to commit the day's snapshot back to this repo (see the step below).
+permissions:
+  contents: write
+
 jobs:
   generate-and-send:
     runs-on: ubuntu-latest
@@ -112,6 +116,39 @@ jobs:
           else
             echo "No changes to commit."
           fi
+
+      - name: Persist daily snapshot
+        # CI checks out fresh every run, so the snapshot written during the run
+        # died with the runner. Two features depended on it and were quietly
+        # dead in production: the open-interest change, which compares against
+        # yesterday, and the economic calendar's fallback to the most recent
+        # snapshot that has one. Committing it back is what makes tomorrow's
+        # run able to see today. main.py prunes past the retention window.
+        #
+        # No workflow in this repo triggers on push, so writing here cannot
+        # start a loop.
+        if: success()
+        run: |
+          git config user.name "nocashflow-bulletin-bot"
+          git config user.email "bot@nocashflow.net"
+          git add -A snapshots/
+          if git diff --cached --quiet; then
+            echo "Snapshot unchanged, nothing to commit."
+            exit 0
+          fi
+          git commit -m "snapshot: $(date +%Y-%m-%d)"
+          for attempt in 1 2 3; do
+            if git push; then
+              echo "Snapshot pushed on attempt $attempt."
+              exit 0
+            fi
+            echo "Push rejected, rebasing and retrying ($attempt/3)..."
+            git pull --rebase
+            sleep 5
+          done
+          # A lost snapshot degrades tomorrow's run; it does not invalidate
+          # today's bulletin, which has already been sent.
+          echo "::warning title=Snapshot not persisted::Could not push after 3 attempts."
 
       - name: Upload bulletin as artifact
         uses: actions/upload-artifact@v4

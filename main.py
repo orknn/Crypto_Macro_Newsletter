@@ -75,6 +75,37 @@ def html_to_pdf(html_path, pdf_path):
         return False
 
 
+# Snapshots are committed back to this repo so a CI run can see yesterday.
+# Only two things read them and neither reaches far back: the open-interest
+# delta wants yesterday, or last week for the weekly edition, and the economic
+# calendar falls back to the newest snapshot that has one. 60 days is generous
+# for both and keeps the directory at roughly 3 MB.
+SNAPSHOT_RETENTION_DAYS = 60
+
+
+def prune_snapshots(retention_days=SNAPSHOT_RETENTION_DAYS):
+    """Drop snapshots older than the retention window."""
+    import glob
+
+    cutoff = datetime.now() - timedelta(days=retention_days)
+    removed = 0
+    for path in glob.glob('snapshots/*.json'):
+        stem = os.path.basename(path).replace('.json', '')
+        try:
+            taken = datetime.strptime(stem, '%Y-%m-%d')
+        except ValueError:
+            # Not a dated snapshot — leave it alone rather than guess.
+            continue
+        if taken < cutoff:
+            try:
+                os.remove(path)
+                removed += 1
+            except OSError as e:
+                print(f"  ⚠️  {path} silinemedi: {e}")
+    if removed:
+        print(f"  🧹 {removed} eski snapshot temizlendi (>{retention_days} gün).")
+
+
 def validate_snapshot(snapshot_data):
     """Validate daily snapshot JSON against schema."""
     try:
@@ -653,9 +684,11 @@ def run_pipeline():
         with open(snapshot_path, 'w', encoding='utf-8') as f:
             json.dump(serializable_data, f, ensure_ascii=False, indent=2)
         print(f"  ✅ Snapshot saved to {snapshot_path}")
-        
+
         # Validate snapshot schema
         validate_snapshot(serializable_data)
+
+        prune_snapshots()
 
     # ── 4b. Content quality gate ──
     # Until now every failure mode still produced a green run: if the AI died

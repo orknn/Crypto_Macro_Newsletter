@@ -2459,17 +2459,32 @@ def calculate_oi_change_from_snapshots(current_oi, edition='daily'):
             return current_oi
             
         parsed_files.sort(key=lambda x: x[1])
-        
+
+        # How far off the target date a snapshot may sit and still be used.
+        #
+        # The daily figure is published as a 24-hour change, so it gets one day
+        # of slack and no more. Three days used to be allowed here, which was
+        # harmless only because CI never had a snapshot to find; now that they
+        # persist, and now that no bulletin runs on Saturday or Sunday, that
+        # window would have Monday comparing against Friday and printing the
+        # result as an overnight move. Monday simply shows no OI change, which
+        # is the same choice this pipeline makes everywhere else: no number
+        # beats a number that means something other than its label.
+        #
+        # The weekly figure spans a week already, so a day or two of drift does
+        # not change what it describes.
+        max_variance = timedelta(days=1) if edition == 'daily' else timedelta(days=3)
+
         # Find the file closest to target_date
         target_dt = datetime.now() - timedelta(days=target_delta)
         closest_file = None
         min_diff = timedelta(days=365)
         for f, dt in parsed_files:
             diff = abs(dt - target_dt)
-            if diff < min_diff and diff <= timedelta(days=3): # Max 3 days variance allowed
+            if diff < min_diff and diff <= max_variance:
                 min_diff = diff
                 closest_file = f
-        
+
         if closest_file:
             snap_path = closest_file
         else:
