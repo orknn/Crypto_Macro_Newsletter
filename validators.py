@@ -3,6 +3,17 @@ import os
 import json
 from datetime import datetime
 
+# How far a percentage quoted in an AI note may sit from the nearest real
+# figure before the note is treated as unsourced and hidden.
+#
+# This is deliberately an absolute band, not a relative one. A relative band
+# scales with the number, and the numbers that get fabricated are not small:
+# on a live run the model wrote 4.77% against a payload whose nearest value
+# was 4.7285 — 0.87% away, so a ±2% relative band would have published it.
+# The same 0.02 absolute band rejects it while still absorbing the rounding
+# drift this is meant to forgive (47.92 against a real -47.93).
+AI_NOTE_TOLERANCE = 0.02
+
 def validate_and_sanitize(data):
     """
     Validate metrics in data dictionary against predefined sane ranges.
@@ -181,13 +192,22 @@ def validate_ai_notes(data):
                         except ValueError:
                             continue
                         
-                        # Check if the float exists in snapshot_numbers within 0.015 tolerance
+                        # A figure counts as backed by the data if some real
+                        # number sits within AI_NOTE_TOLERANCE of it — matched
+                        # on the signed value, or on magnitude alone.
+                        #
+                        # Magnitude matters because prose carries direction in
+                        # words, not in the sign: a -47.93% drawdown is written
+                        # "%47,92 geri çekilme" / "a 47.92% drawdown", and the
+                        # signed test read that as +47.92, found nothing near
+                        # it, and suppressed a correct note.
                         found = False
                         for sn in snapshot_numbers:
-                            if abs(sn - val_float) <= 0.015:
+                            if (abs(sn - val_float) <= AI_NOTE_TOLERANCE
+                                    or abs(abs(sn) - abs(val_float)) <= AI_NOTE_TOLERANCE):
                                 found = True
                                 break
-                        
+
                         if not found:
                             print(f"      ⚠️  AI Note Mismatch: {note_key} in {lang} mentions {match} which is not in snapshot.")
                             mismatch_detected = True
