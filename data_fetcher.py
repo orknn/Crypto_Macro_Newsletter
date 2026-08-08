@@ -8,6 +8,8 @@ import io
 import os
 import json
 
+from config.prompt_budget import MAX_NEWS_ITEMS
+
 # ═══════════════════════════════════════════
 # CACHING & UTILITY FUNCTIONS
 # ═══════════════════════════════════════════
@@ -1345,8 +1347,8 @@ def get_macro_news():
                 final_selection = other_items
                 pipeline_log["after_scoring_fallback"] = len(final_selection)
             
-            # Select top 5, but ONLY items with a real URL (not '#' or empty)
-            for item in final_selection[:5]:
+            # Select the top items, but ONLY those with a real URL (not '#' or empty)
+            for item in final_selection[:MAX_NEWS_ITEMS]:
                 item_url = item.get('url', '')
                 if not item_url or item_url == '#':
                     continue  # Skip items without real source links

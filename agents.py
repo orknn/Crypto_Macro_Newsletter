@@ -6,6 +6,8 @@ import os
 import json
 import time
 
+from config.prompt_budget import PROMPT_EXCLUDED_KEYS, PROMPT_SERIES_CAPS
+
 
 def _call_with_retry(client, system_prompt, user_prompt, max_tokens=4000, max_retries=3):
     """Call Claude API with automatic retry on rate limit errors and logging."""
@@ -308,11 +310,35 @@ CANONICAL_SOURCES = {
 # HELPER: Prepare data summary for LLM
 # ═══════════════════════════════════════════
 
+def _trim_for_prompt(payload):
+    """Drop render-only keys and shorten long point-series for the LLM copy.
+
+    Returns a new dict. `data` itself is never touched, so the bulletin, the
+    charts and the snapshot still see every point that was fetched — this only
+    decides what the model is billed to read. See config/prompt_budget.py.
+    """
+    trimmed = {k: v for k, v in payload.items() if k not in PROMPT_EXCLUDED_KEYS}
+
+    for path, limit in PROMPT_SERIES_CAPS.items():
+        key, _, field = path.partition('.')
+        holder = trimmed.get(key)
+        if not isinstance(holder, dict):
+            continue
+        series = holder.get(field)
+        if isinstance(series, list) and len(series) > limit:
+            # Copy the holder so the cap never propagates back into `data`.
+            holder = dict(holder)
+            holder[field] = series[-limit:]
+            trimmed[key] = holder
+
+    return trimmed
+
+
 def _prepare_data_summary(data, edition='daily'):
     """Create a clean copy of the newsletter data for the LLM, excluding AI outputs."""
     exclude_keys = {
         'tr', 'en', 'ai_summary', 'news_commentaries',
-        'design_improvement_report', 'futures_note',
+        'futures_note',
         'etf_note', 'indicators_note', 'weekly_themes'
     }
     if edition == 'weekly':
@@ -321,7 +347,7 @@ def _prepare_data_summary(data, edition='daily'):
         # that contradict the weekly totals shown on the card.
         exclude_keys |= {'etf_flows', 'etf_history_data'}
     summary = {k: v for k, v in data.items() if k not in exclude_keys}
-    return summary
+    return _trim_for_prompt(summary)
 
 
 
@@ -472,7 +498,9 @@ class ResearchDeskAgent:
     """
 
     # Research-relevant slice of the newsletter data. The full payload is
-    # ~10x bigger and mostly chart series the desk does not need.
+    # ~10x bigger and mostly chart series the desk does not need. The slice is
+    # still put through _trim_for_prompt: coinbase_premium alone carried 168
+    # hourly points, half of this agent's prompt.
     CONTEXT_KEYS = (
         'date', 'crypto_market_overview', 'macro_indicators', 'fear_and_greed',
         'funding_rates', 'open_interest', 'economic_calendar', 'coinbase_premium',
@@ -504,7 +532,9 @@ class ResearchDeskAgent:
                 }
                 for n in news_items
             ]
-            context = {k: data.get(k) for k in self.CONTEXT_KEYS if data.get(k)}
+            context = _trim_for_prompt(
+                {k: data.get(k) for k in self.CONTEXT_KEYS if data.get(k)}
+            )
 
             allowed_sources = dict(CANONICAL_SOURCES)
             for n in news_inputs:
