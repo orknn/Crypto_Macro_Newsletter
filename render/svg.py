@@ -706,17 +706,33 @@ def generate_coinbase_premium_chart(trend, current, width=600, height=140):
     # X-axis time labels
     time_labels_svg = []
     label_count = min(6, n)
-    
-    # Auto-detect resolution (daily if time delta between bars > 12 hours)
+
+    # Points arrive as datetimes from a live fetch and as strings from a
+    # snapshot, which json.dump stringifies on the way out. Reading a snapshot
+    # back used to raise here on str - str, so the snapshots the pipeline
+    # writes could not be replayed through the renderer — awkward when they
+    # are the only record of what a past bulletin was built from.
+    def _as_dt(value):
+        if hasattr(value, 'strftime'):
+            return value
+        for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d'):
+            try:
+                return datetime.strptime(str(value)[:19], fmt)
+            except ValueError:
+                continue
+        return None
+
+    times = [_as_dt(d.get('time')) for d in trend]
+
+    # Daily resolution if the step between bars is more than half a day.
     is_daily = False
-    if len(trend) >= 2:
-        diff = (trend[1]['time'] - trend[0]['time']).total_seconds()
-        if diff > 12 * 3600:
+    if len(times) >= 2 and times[0] and times[1]:
+        if (times[1] - times[0]).total_seconds() > 12 * 3600:
             is_daily = True
-            
+
     for j in range(label_count):
         idx = int(j * (n - 1) / max(label_count - 1, 1))
-        t = trend[idx]['time']
+        t = times[idx] if times[idx] else trend[idx].get('time')
         if is_daily:
             time_str = t.strftime('%d %b') if hasattr(t, 'strftime') else str(t)
         else:

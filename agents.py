@@ -16,6 +16,12 @@ from schemas.agent_responses import (CONTENT_EDITOR_DAILY_SCHEMA,
                                      RESEARCH_DESK_SCHEMA)
 
 
+# How much more room a truncated call gets on its one retry. Generous on
+# purpose: a second truncation costs another full call and leaves the section
+# hidden anyway, so shaving this saves nothing worth having.
+TRUNCATION_RETRY_FACTOR = 1.75
+
+
 def llm_available():
     """True when the active provider has a key to call with."""
     return bool(os.environ.get(llm.api_key_env(), '').strip())
@@ -100,18 +106,36 @@ def _call_anthropic(system_prompt, user_prompt, max_tokens):
 def _call_with_retry(system_prompt, user_prompt, max_tokens=4000,
                      schema=None, schema_name='response', max_retries=3,
                      agent='?'):
-    """Call the active provider, retrying only on rate limits."""
+    """Call the active provider, retrying on rate limits and on truncation.
+
+    A truncated answer is retried once with a larger budget. Cutting the JSON
+    mid-string is the failure this pipeline has shipped twice — a run that
+    printed a tick and mailed an empty bulletin (93da3df, cb2c5d8) — and it is
+    the one failure where trying again is almost certain to work, because the
+    cause is a number we control rather than anything about the request.
+    Retrying blind would be wasteful; retrying with more room is not.
+    """
+    budget = max_tokens
+    grown = False
+
     for attempt in range(max_retries):
         try:
             if llm.PROVIDER == 'openai':
                 text, usage = _call_openai(system_prompt, user_prompt,
-                                           max_tokens, schema, schema_name)
+                                           budget, schema, schema_name)
             else:
-                text, usage = _call_anthropic(system_prompt, user_prompt,
-                                              max_tokens)
-            _log_ai_call(agent=agent, max_tokens=max_tokens,
+                text, usage = _call_anthropic(system_prompt, user_prompt, budget)
+            _log_ai_call(agent=agent, max_tokens=budget,
                          prompt_chars=len(user_prompt) + len(system_prompt),
                          response_chars=len(text), status='success', **usage)
+
+            if usage.get('truncated') and not grown:
+                grown = True
+                budget = int(budget * TRUNCATION_RETRY_FACTOR)
+                print(f"    ↻ Kesik yanıt — max_output_tokens {max_tokens} → {budget} "
+                      "ile bir kez daha deneniyor.")
+                continue
+
             return text
         except Exception as e:
             error_str = str(e)
@@ -192,10 +216,12 @@ CONTENT_EDITOR_SYSTEM_PROMPT = """Sen, küresel piyasa analizi ve dijital yayın
 Görevin, günlük piyasa verilerini ve haber gelişmelerini analiz ederek hem Türkçe (tr) hem de İngilizce (en) dillerinde bülten içeriğini tek bir JSON nesnesinde üretmektir.
 
 Piyasa Durumu Rejimi (regime):
-Piyasa verilerine ve risk duyarlılığına dayanarak şu üç rejimden birini seç: "RISK_ON", "NEUTRAL" veya "RISK_OFF".
+Rejim SANA VERİLİR — piyasa verisinden deterministik olarak hesaplanmıştır, sen SEÇMEZSİN.
+Girdideki "regime" alanını oku ve "regime_line" cümleni O rejimi savunacak şekilde yaz.
+Rejimle çelişen bir hüküm kurma.
 
 Her dil (tr ve en) için aşağıdaki alanları doldurmalısın:
-1. "regime_line": Seçilen rejim için tek cümlelik, vurucu bir piyasa hükmü (Örn: TR: "Hisse senetlerindeki ralli ve ETF girişleri risk iştahını destekliyor." / EN: "Stock rally and ETF inflows support risk appetite.")
+1. "regime_line": VERİLEN rejim için tek cümlelik, vurucu bir piyasa hükmü (Örn: TR: "Hisse senetlerindeki ralli ve ETF girişleri risk iştahını destekliyor." / EN: "Stock rally and ETF inflows support risk appetite.")
 2. "overview" (Genel Değerlendirme):
    - Günün piyasa verilerini analiz eden profesyonel bir özet paragrafı (4-6 cümle).
    - Makroekonomik göstergeleri (VIX, DXY, 10Y Yield), kripto piyasasını (Fear & Greed, BTC Dominance, Total Market Cap) ve varsa günün öne çıkan ekonomik verilerini içermelidir.
@@ -218,7 +244,6 @@ DİL VE ANLATIM KURALLARI:
 
 ÇIKTI JSON ŞEMASI (MUTLAKA BU FORMATTA OLMALIDIR):
 {
-  "regime": "RISK_ON" | "NEUTRAL" | "RISK_OFF",
   "tr": {
     "regime_line": "...",
     "overview": "...",
@@ -247,10 +272,12 @@ WEEKLY_CONTENT_EDITOR_SYSTEM_PROMPT = """Sen, küresel piyasa analizi ve stratej
 Görevin, haftalık piyasa verilerini ve haber gelişmelerini analiz ederek hem Türkçe (tr) hem de İngilizce (en) dillerinde bülten içeriğini tek bir JSON nesnesinde üretmektir.
 
 Piyasa Durumu Rejimi (regime):
-Piyasa verilerine ve risk duyarlılığına dayanarak şu üç rejimden birini seç: "RISK_ON", "NEUTRAL" veya "RISK_OFF".
+Rejim SANA VERİLİR — piyasa verisinden deterministik olarak hesaplanmıştır, sen SEÇMEZSİN.
+Girdideki "regime" alanını oku ve "regime_line" cümleni O rejimi savunacak şekilde yaz.
+Rejimle çelişen bir hüküm kurma.
 
 Her dil (tr ve en) için aşağıdaki alanları doldurmalısın:
-1. "regime_line": Seçilen rejim için tek cümlelik, vurucu bir piyasa hükmü (Örn: TR: "Likidite daralması ve artan tahvil faizleri risk iştahını gölgeliyor." / EN: "Liquidity contraction and rising bond yields shadow risk appetite.")
+1. "regime_line": VERİLEN rejim için tek cümlelik, vurucu bir piyasa hükmü (Örn: TR: "Likidite daralması ve artan tahvil faizleri risk iştahını gölgeliyor." / EN: "Liquidity contraction and rising bond yields shadow risk appetite.")
 1b. "overview": Haftanın YÖNETİCİ ÖZETİ (executive summary) — 3-4 cümle. Haftanın en önemli makro gelişmesi, kripto piyasasının genel yönü, ETF/kurumsal akım resmi ve önümüzdeki haftanın en kritik katalizörünü tek paragrafta birleştir. Bültenin tamamını okumayan birinin haftayı anlaması için yeterli olmalı. Önemli sayıları <strong> etiketiyle vurgulayabilirsin.
 2. "themes":
    - Haftanın en önemli 3 makro/kripto teması. Her tema bir başlık ("title", en fazla 2-3 kelime, örn: "LIKIDITE RUZGARI" veya "JEOPOLITIK GERILIM") ve 2-3 cümlelik açıklama ("description") içermelidir.
@@ -277,7 +304,6 @@ DİL VE ANLATIM KURALLARI:
 
 ÇIKTI JSON ŞEMASI (MUTLAKA BU FORMATTA OLMALIDIR):
 {
-  "regime": "RISK_ON" | "NEUTRAL" | "RISK_OFF",
   "tr": {
     "regime_line": "...",
     "overview": "...",
@@ -475,21 +501,20 @@ class ContentEditorAgent:
         """
         if not llm_available():
             print(f"    ⚠️  {llm.api_key_env()} tanımlı değil — İçerik Editörü atlanıyor ({edition}).")
-            return {
-                'success': False,
-                'regime': 'NEUTRAL',
-                'tr': {},
-                'en': {}
-            }
+            return {'success': False, 'tr': {}, 'en': {}}
 
         try:
             data_summary = _prepare_data_summary(data, edition=edition)
+            # The regime is decided before the model is called; it reads it.
+            computed_regime = data.get('regime', 'NEUTRAL')
             
             raw_news = data.get('macro_news', {}).get('news', [])
             news_inputs = [{"title": n.get('title'), "summary": n.get('summary')} for n in raw_news]
 
             if edition == 'weekly':
-                user_prompt = f"""Aşağıda bu haftanın bülten verileri ve haber gelişmeleri yer almaktadır.
+                user_prompt = f"""HESAPLANMIŞ PİYASA REJİMİ: {computed_regime}
+
+Aşağıda bu haftanın bülten verileri ve haber gelişmeleri yer almaktadır.
 Bu verileri analiz ederek haftalık bülten için tek bir dual-language JSON çıktısı oluştur:
 
 Haber Maddeleri:
@@ -509,16 +534,14 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme. JSON içindeki metin alanl
                 result = self._parse_response(raw_response)
                 if not result.get('tr') and not result.get('en'):
                     print("    ❌ Haftalık editör yanıtı parse edilemedi — AI bölümleri gizlenecek.")
-                    return {'success': False, 'regime': 'NEUTRAL', 'tr': {}, 'en': {}}
+                    return {'success': False, 'tr': {}, 'en': {}}
                 print("    ✅ Haftalık Temalar ve Dinamik KPI Notları (TR/EN) üretildi.")
-                return {
-                    'success': True,
-                    'regime': result.get('regime', 'NEUTRAL'),
-                    'tr': result.get('tr', {}),
-                    'en': result.get('en', {})
-                }
+                return {'success': True,
+                        'tr': result.get('tr', {}), 'en': result.get('en', {})}
             else:
-                user_prompt = f"""Aşağıda bugünkü finans bülteninin tüm canlı piyasa verileri ve haber gelişmeleri yer almaktadır.
+                user_prompt = f"""HESAPLANMIŞ PİYASA REJİMİ: {computed_regime}
+
+Aşağıda bugünkü finans bülteninin tüm canlı piyasa verileri ve haber gelişmeleri yer almaktadır.
 Bu verileri analiz ederek günlük bülten için tek bir dual-language JSON çıktısı oluştur:
 
 Haber Maddeleri:
@@ -538,23 +561,14 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme. JSON içindeki metin alanl
                 result = self._parse_response(raw_response)
                 if not result.get('tr') and not result.get('en'):
                     print("    ❌ Günlük editör yanıtı parse edilemedi — AI bölümleri gizlenecek.")
-                    return {'success': False, 'regime': 'NEUTRAL', 'tr': {}, 'en': {}}
+                    return {'success': False, 'tr': {}, 'en': {}}
                 print("    ✅ Genel Değerlendirme, Haber Yorumları ve Dinamik KPI Notları (TR/EN) üretildi.")
-                return {
-                    'success': True,
-                    'regime': result.get('regime', 'NEUTRAL'),
-                    'tr': result.get('tr', {}),
-                    'en': result.get('en', {})
-                }
+                return {'success': True,
+                        'tr': result.get('tr', {}), 'en': result.get('en', {})}
 
         except Exception as e:
             print(f"    ⚠️  İçerik Editörü hatası: {e}")
-            return {
-                'success': False,
-                'regime': 'NEUTRAL',
-                'tr': {},
-                'en': {}
-            }
+            return {'success': False, 'tr': {}, 'en': {}}
 
     def _parse_response(self, raw):
         """Extract JSON from the AI response, handling markdown code blocks."""

@@ -24,7 +24,6 @@ def _obj(properties):
 
 _STR = {'type': 'string'}
 _STR_LIST = {'type': 'array', 'items': _STR}
-_REGIME = {'type': 'string', 'enum': ['RISK_ON', 'NEUTRAL', 'RISK_OFF']}
 
 
 def _language_block(note_fields, extra=None):
@@ -56,13 +55,11 @@ _THEMES = {
 }
 
 CONTENT_EDITOR_DAILY_SCHEMA = _obj({
-    'regime': _REGIME,
     'tr': _language_block(DAILY_NOTE_FIELDS),
     'en': _language_block(DAILY_NOTE_FIELDS),
 })
 
 CONTENT_EDITOR_WEEKLY_SCHEMA = _obj({
-    'regime': _REGIME,
     'tr': _language_block(WEEKLY_NOTE_FIELDS, extra={'themes': _THEMES}),
     'en': _language_block(WEEKLY_NOTE_FIELDS, extra={'themes': _THEMES}),
 })

@@ -28,6 +28,7 @@ from data_fetcher import (
 )
 from agents import ContentEditorAgent, ResearchDeskAgent
 import validators
+from regime import compute_regime
 from render.daily import render_daily
 from render.weekly import render_weekly
 from ai_report_generator import generate_ai_report
@@ -576,10 +577,18 @@ def run_pipeline():
     print("  → Running metric validation checks...")
     data = validators.validate_and_sanitize(data)
 
-    # ── 3. AI Agent Analysis ──
+    # ── 3. Market regime — counted from the tape, before any model runs ──
+    # The editor used to return this, which left the bulletin's headline verdict
+    # dependent on sampling and free to contradict the Macro Scoreboard printed
+    # just below it. It is now an input to the model rather than an output.
+    data['regime'], data['regime_detail'] = compute_regime(data)
+    _rd = data['regime_detail']
+    print(f"\n📐 Rejim: {data['regime']} (skor {_rd.get('score')}, "
+          f"{_rd.get('available', 0)}/6 gösterge) — {_rd.get('votes')}")
+
+    # ── 4. AI Agent Analysis ──
     if skip_agents:
         print("\n⏭️  AI Agent'lar atlanıyor (--no-agents)")
-        data['regime'] = 'NEUTRAL'
         data['tr'] = {}
         data['en'] = {}
         # Legacies for backward compatibility
@@ -595,7 +604,6 @@ def run_pipeline():
         editor_result = ContentEditorAgent().analyze(data, edition=edition)
         
         if editor_result.get('success'):
-            data['regime'] = editor_result.get('regime', 'NEUTRAL')
             data['tr'] = editor_result.get('tr', {})
             data['en'] = editor_result.get('en', {})
             
@@ -634,7 +642,6 @@ def run_pipeline():
                     "commentary": comm
                 })
         else:
-            data['regime'] = 'NEUTRAL'
             data['tr'] = {}
             data['en'] = {}
             data['ai_summary'] = None
