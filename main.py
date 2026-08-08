@@ -251,6 +251,35 @@ def get_winners_losers(crypto_prices):
     return winners, losers
 
 
+def _is_weekend_skip(edition):
+    """Second line of defence behind the Mon-Fri cron in daily_bulletin.yml.
+
+    The Daily Pulse is a weekday edition: Saturday has no bulletin and Sunday
+    belongs to the Weekly Deep Dive. If the schedule ever fires anyway — a bad
+    cron edit, a workflow copied without its day filter — this stops the run
+    before the first API call rather than after the bill.
+
+    Only scheduled runs are gated. A manual `workflow_dispatch` on a weekend is
+    someone deliberately testing, and local runs have no GITHUB_EVENT_NAME at
+    all, so neither is blocked.
+    """
+    if edition != 'daily':
+        return False
+    if os.environ.get('GITHUB_EVENT_NAME') != 'schedule':
+        return False
+
+    # The cron is UTC but the edition is a Madrid-morning product, so the
+    # weekday that matters is the local one.
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo('Europe/Madrid'))
+    if today.weekday() < 5:  # Mon-Fri
+        return False
+
+    print(f"SKIP: weekend — {today:%A %Y-%m-%d} (Europe/Madrid). "
+          "Daily Pulse is Mon-Fri; Sunday is the Weekly Deep Dive.")
+    return True
+
+
 def run_pipeline():
     # Parse CLI Arguments
     edition = 'daily'
@@ -283,7 +312,11 @@ def run_pipeline():
     print(f"Running pipeline in {edition.upper()} edition (Language: {lang_arg.upper()}, Theme: {theme.upper()})...")
     if dry_run:
         print("  ⚠️  DRY RUN mode active — no emails, no web push.")
-        
+
+    if _is_weekend_skip(edition):
+        return
+
+
     watchlist = [
         'BTC', 'ETH', 'XRP', 'SOL', 'TRX', 'DOGE', 'HYPE', 'LINK',
         'AVAX', 'SUI', 'TON', 'UNI', 'AAVE', 'PEPE', 'RENDER', 'JUP'

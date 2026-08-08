@@ -5,7 +5,13 @@ on:
     # 08:00 CET = 07:00 UTC (winter) / 06:00 UTC (summer)
     # GitHub Actions'ta tam saat başı (0) yoğunluktan dolayı gecikmeler yaşandığı için
     # 15 dakika erken (05:45 UTC) tetiklenmesi ayarlandı. (Yaz saati için 07:45 Avrupa)
-    - cron: '45 5 * * *'
+    #
+    # Pazartesi-Cuma. Cumartesi hiç bülten çıkmaz; Pazar'ı Haftalık Bülten
+    # devralır (weekly_bulletin.yml, 16:00 UTC), o yüzden Cuma ile Pazartesi
+    # arasında kapanmamış bir boşluk kalmaz.
+    # Cron UTC'dir: 05:45 UTC, Madrid'de yaz 07:45 / kış 06:45 — iki durumda da
+    # aynı gün, dolayısıyla 1-5 burada Pzt-Cum demek.
+    - cron: '45 5 * * 1-5'
   workflow_dispatch:  # Manuel tetikleme — test için
 
 concurrency:
