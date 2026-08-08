@@ -132,6 +132,60 @@ def render_daily(data, lang='tr', theme=None):
         </div>
         '''
         
+    # Liquidity strip. The Fed balance sheet, M2 and stablecoin supply were all
+    # being fetched and then thrown away — nothing rendered them, in either
+    # edition. Stablecoin supply was the worst of the three: indicators_note
+    # discusses it by name, so the analyst note referred to a figure the reader
+    # could not see anywhere in the bulletin.
+    #
+    # They sit together, before the crypto divider, because they are one idea:
+    # where the money is. A missing feed drops its own tile rather than
+    # printing a zero, and the strip disappears entirely if none survive.
+    liq_tiles = []
+
+    def _liq_tile(label, value, change, change_label):
+        chg_html = ""
+        if change is not None:
+            chg_text, chg_cls = _fmt_change(change)
+            chg_html = (f'<div class="{chg_cls}" style="font-family:var(--mono); font-size:10px;">'
+                        f'{chg_text} {change_label}</div>')
+        return f'''
+        <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:12px 14px;">
+          <div style="font-size:9px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:6px;">{label}</div>
+          <div style="font-family:var(--mono); font-size:15px; font-weight:600; color:var(--text); margin-bottom:3px;">{value}</div>
+          {chg_html}
+        </div>'''
+
+    _gl = data.get('global_liquidity') or {}
+    if _gl.get('value') is not None:
+        liq_tiles.append(_liq_tile(
+            STR['card_fed_balance_sheet'][lang],
+            _gl.get('value_formatted') or f"${_gl['value']:.2f}T",
+            _gl.get('weekly_change'), STR['chg_weekly_short'][lang]))
+
+    _m2 = data.get('m2_money_supply') or {}
+    if _m2.get('value') is not None:
+        liq_tiles.append(_liq_tile(
+            STR['card_m2'][lang],
+            _m2.get('value_formatted') or f"${_m2['value']:.2f}T",
+            _m2.get('monthly_change'), STR['chg_monthly_short'][lang]))
+
+    _sc = data.get('stablecoin_data') or {}
+    if _sc.get('combined_mcap'):
+        liq_tiles.append(_liq_tile(
+            STR['card_stablecoin_supply'][lang],
+            f"${_sc['combined_mcap']/1e9:.1f}B",
+            _sc.get('change_24h_pct'), '24s' if lang == 'tr' else '24H'))
+
+    liquidity_html = ""
+    if liq_tiles:
+        liquidity_html = f'''
+        {render_section_divider(STR['section_liquidity_daily'][lang])}
+        <div class="card-grid card-grid-{len(liq_tiles)}" style="margin-bottom:24px;">
+          {''.join(liq_tiles)}
+        </div>
+        '''
+
     # Crypto Divider
     crypto_divider = render_section_divider(STR['section_crypto_desk'][lang])
     
@@ -159,6 +213,11 @@ def render_daily(data, lang='tr', theme=None):
         {'label': STR['card_dominance'][lang], 'value': f"{btc_dom:.1f}%" if btc_dom else '—', 'change': '', 'cls': ''},
         {'label': STR['card_volume'][lang], 'value': f"${total_vol/1e9:.1f}B" if total_vol else '—', 'change': '', 'cls': ''},
     ]
+
+    total3 = crypto_ov.get('total3')
+    if total3:
+        kpis.append({'label': STR['card_total3'][lang],
+                     'value': f"${total3/1e12:.2f}T", 'change': '', 'cls': ''})
 
     # ETH/BTC ratio — the single best rotation gauge
     eth_btc = data.get('eth_btc') or {}
@@ -610,6 +669,7 @@ def render_daily(data, lang='tr', theme=None):
     {calendar_html}
     {equities_html}
     {sectors_html}
+    {liquidity_html}
     {crypto_divider}
     {kpi_html}
     {derivatives_html}
