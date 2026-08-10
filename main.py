@@ -26,7 +26,8 @@ from data_fetcher import (
     get_options_market_data, get_eth_etf_flows, get_rates_and_breakevens,
     get_nfci, get_fed_pricing, get_eth_btc_ratio, get_trending_coins
 )
-from agents import ContentEditorAgent, ResearchDeskAgent
+from agents import (ContentEditorAgent, ResearchDeskAgent,
+                    run_weekly_two_pass)
 import validators
 from regime import compute_regime
 from render.daily import render_daily
@@ -180,11 +181,11 @@ def calculate_crypto_sector_rotation(crypto_prices):
                 val = price_by_sym[sym].get('7d %')
                 if val is not None:
                     vals.append(val)
-        if vals:
-            results[sector] = sum(vals) / len(vals)
-        else:
-            results[sector] = 0.0
-            
+        # A category with no live prices has no average return. 0.0 printed
+        # "0.00%" next to the sectors that did move, which reads as a flat week
+        # rather than as an absent one.
+        results[sector] = (sum(vals) / len(vals)) if vals else None
+
     return results
 
 
@@ -348,6 +349,11 @@ def run_pipeline():
     if _is_weekend_skip(edition):
         return
 
+    # One cut for the whole bulletin. Every window the report quotes — 1H, 24H,
+    # 7D, 30D — is measured against this instant, and it is printed in the
+    # header so a reader never has to guess which minute the page describes.
+    run_as_of = datetime.now()
+
 
     watchlist = [
         'BTC', 'ETH', 'XRP', 'SOL', 'TRX', 'DOGE', 'HYPE', 'LINK',
@@ -484,7 +490,8 @@ def run_pipeline():
 
     # Combine into core data dict
     data = {
-        'date': datetime.now().strftime('%Y-%m-%d'),
+        'date': run_as_of.strftime('%Y-%m-%d'),
+        'as_of': run_as_of.isoformat(timespec='seconds'),
         'crypto_prices': crypto_prices,
         'crypto_prices_display': crypto_prices_display,
         'crypto_market_overview': crypto_market_overview,
@@ -573,9 +580,36 @@ def run_pipeline():
         print("  → ETF daily history...")
         data['etf_history_data'] = get_etf_flows_history(limit=10)
 
-    # Run data validation sanity checks immediately before AI and rendering
+    # Hold every specced number to config/metrics.py immediately before AI and
+    # rendering. Anything that fails becomes None here, so the model and the
+    # page see the same suppression rather than the model reasoning over a
+    # value the reader is shown as N/A.
+    # How old is each number, measured from when it was observed rather than
+    # when it was fetched. See data_fetcher.observation_times.
+    from data_fetcher import observation_times
+    from config.metrics import build_observed_at
+    _fred_obs, _yf_obs = observation_times()
+    data['_observed_at'] = {
+        path: stamp.isoformat(timespec='seconds')
+        for path, stamp in build_observed_at(_fred_obs, _yf_obs, run_as_of).items()
+    }
+
     print("  → Running metric validation checks...")
-    data = validators.validate_and_sanitize(data)
+    data, metric_findings = validators.apply_metric_specs(data, now=run_as_of)
+
+    # One spot price per asset across the whole bulletin, and one vintage per
+    # series. Both run after the specs so they work on validated numbers.
+    data = validators.unify_spot_prices(data)
+    series_conflicts = validators.reconcile_shared_series(data)
+    data['series_conflicts'] = series_conflicts
+
+    # Which readings currently disagree. Counted from the tape, before the
+    # model runs, so it is handed the conflicts rather than asked to find them.
+    import signals
+    data['signal_conflicts'] = signals.detect_conflicts(data)
+    if data['signal_conflicts']:
+        print(f"  ⚡ {len(data['signal_conflicts'])} çelişen sinyal çifti "
+              "bulundu: " + ", ".join(c['pair'] for c in data['signal_conflicts']))
 
     # ── 3. Market regime — counted from the tape, before any model runs ──
     # The editor used to return this, which left the bulletin's headline verdict
@@ -587,6 +621,10 @@ def run_pipeline():
           f"{_rd.get('available', 0)}/6 gösterge) — {_rd.get('votes')}")
 
     # ── 4. AI Agent Analysis ──
+    # Failures the writing layer can raise, collected here and folded into the
+    # content quality gate below.
+    quality_gate_extra = []
+
     if skip_agents:
         print("\n⏭️  AI Agent'lar atlanıyor (--no-agents)")
         data['tr'] = {}
@@ -600,16 +638,48 @@ def run_pipeline():
         data['weekly_themes'] = []
     else:
         print("\n🤖 AI Agent'lar çalıştırılıyor...")
-        print("  → Finansal İçerik Editörü...")
-        editor_result = ContentEditorAgent().analyze(data, edition=edition)
-        
+
+        if edition == 'weekly':
+            # Two passes: one call per section, then a single flagship call
+            # over their structured output. See config/models.py.
+            assembled, pass_one, digest = run_weekly_two_pass(data)
+            editor_result = {'success': bool(assembled),
+                             'tr': assembled.get('tr', {}),
+                             'en': assembled.get('en', {})}
+            data['_pass_one'] = pass_one
+            data['_digest'] = digest
+        else:
+            print("  → Finansal İçerik Editörü...")
+            editor_result = ContentEditorAgent().analyze(data, edition=edition)
+
         if editor_result.get('success'):
             data['tr'] = editor_result.get('tr', {})
             data['en'] = editor_result.get('en', {})
             
-            # Post-generation consistency check for AI notes
+            # Two passes over everything the model wrote, in this order: a
+            # field that narrates the pipeline is dropped before its figures
+            # are checked, so the log names the more useful of the two faults.
+            print("  → Running generated-text blocklist...")
+            data = validators.scrub_generated_text(data)
+
             print("  → Running AI number consistency checks...")
-            data = validators.validate_ai_numbers(data)
+            data = validators.validate_ai_numbers(data, edition=edition)
+
+            # Phase 2.5 gates. Both fail the build rather than being logged:
+            # a figure page one invented, or a theme resting on a metric no
+            # section produced, are not defects a reader can route around.
+            if edition == 'weekly' and data.get('_digest'):
+                unverified = validators.verify_exec_summary_numbers(
+                    data, data['_digest'])
+                if unverified:
+                    quality_gate_extra.append(
+                        f"yönetici özetinde {len(unverified)} doğrulanamayan sayı")
+
+                bad_themes = validators.verify_theme_metric_keys(
+                    data, data.get('_pass_one') or {})
+                if bad_themes:
+                    quality_gate_extra.append(
+                        f"{len(bad_themes)} tema metric_key denetiminden geçmedi")
             
             # Map legacy properties for compatibility
             data['ai_summary'] = data['tr'].get('overview')
@@ -720,6 +790,20 @@ def run_pipeline():
         quality_failures.append("Fear & Greed yok")
     if not (data.get('crypto_market_overview') or {}).get('total_market_cap'):
         quality_failures.append("toplam piyasa değeri yok")
+
+    # The same series printed twice with two values is the one data defect a
+    # reader can catch unaided, and it destroys trust in every other number on
+    # the page. It fails the run rather than being logged and shipped.
+    for conflict in series_conflicts:
+        readings = ', '.join(f"{k}={v}" for k, v in conflict['readings'].items())
+        quality_failures.append(
+            f"{conflict['series']} iki yerde farklı ({readings})")
+
+    quality_failures.extend(quality_gate_extra)
+
+    # Written before the quality gate decides anything, so a failed run still
+    # leaves behind the account of what went missing.
+    validators.write_build_report(data, metric_findings, edition=edition)
 
     if quality_failures:
         print(f"\n🚨 İÇERİK KALİTE KAPISI: {', '.join(quality_failures)}")

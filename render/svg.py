@@ -314,8 +314,19 @@ def generate_etf_flow_chart(etf_history, width=600, height=140):
     if not etf_history or len(etf_history) == 0:
         return '<div style="color:var(--dim); text-align:center; padding:15px;">No historical ETF flow data</div>'
         
-    values = [float(item['Total_flow_m']) for item in etf_history]
-    dates = [item['date'] for item in etf_history]
+    # Weeks whose flow is missing are dropped rather than coerced. float(None)
+    # raised here and took the whole bulletin down with it, and plotting a
+    # suppressed week as a zero bar would draw a week of no interest that was
+    # really a week of no data.
+    points = [(item.get('date'), item.get('Total_flow_m')) for item in etf_history]
+    points = [(d, float(v)) for d, v in points
+              if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    if len(points) < 1:
+        return ('<div style="color:var(--dim); text-align:center; padding:15px;">'
+                'No historical ETF flow data</div>')
+
+    dates = [d for d, _ in points]
+    values = [v for _, v in points]
     
     max_val = max(abs(v) for v in values) if values else 100.0
     if max_val == 0:
@@ -474,8 +485,25 @@ def generate_correlation_matrix_svg(corr_matrix, width=500, height=400):
         
     for r_idx, row_key in enumerate(keys):
         for c_idx, col_key in enumerate(keys):
-            val = float(corr_matrix[row_key][col_key])
-            
+            # A partial matrix is a real state — one leg of a pair can fail to
+            # fetch — and indexing it blind used to raise KeyError, which takes
+            # the whole bulletin down over one cell. The cell says N/A instead.
+            raw = (corr_matrix.get(row_key) or {}).get(col_key)
+            if not isinstance(raw, (int, float)) or isinstance(raw, bool):
+                cell_x = padding_left + c_idx * cell_w
+                cell_y = padding_top + r_idx * cell_h
+                svg_cells.append(
+                    f'<rect x="{cell_x:.1f}" y="{cell_y:.1f}" '
+                    f'width="{cell_w:.1f}" height="{cell_h:.1f}" '
+                    f'fill="var(--bg2)" stroke="var(--bg)" stroke-width="2"/>')
+                svg_cells.append(
+                    f'<text x="{cell_x + cell_w / 2:.1f}" '
+                    f'y="{cell_y + cell_h / 2 + 4:.1f}" fill="var(--dim)" '
+                    f'font-size="9" text-anchor="middle" opacity="0.65" '
+                    f'font-family="var(--mono)">N/A</text>')
+                continue
+            val = float(raw)
+
             # Color map based on correlation
             # Green for positive, Red for negative, Neutral/opacity for near 0
             abs_val = abs(val)
@@ -569,7 +597,19 @@ def generate_cycle_heatmap_svg(heatmap, width=500, height=180):
     return svg
 
 def generate_fear_greed_gauge_svg(value, label, width=400, height=240, lang='en'):
-    """Generate an SVG speedometer gauge for the Crypto Fear & Greed Index."""
+    """Generate an SVG speedometer gauge for the Crypto Fear & Greed Index.
+
+    With no reading there is no gauge. Drawing the needle at a defaulted 50
+    would put it dead centre — the most confident-looking place on the dial —
+    to say nothing at all.
+    """
+    if value is None:
+        msg = 'Veri alınamadı' if lang == 'tr' else 'Data unavailable'
+        return (f'<div style="text-align:center; padding:32px 12px; '
+                f'font-family:var(--sans); font-size:12px; color:var(--dim); '
+                f'opacity:0.65;">N/A<div style="font-size:10px; '
+                f'margin-top:4px;">{msg}</div></div>')
+
     cx, cy = width / 2, height - 60  # center of the arc
     radius = 110
     inner_radius = 90
@@ -586,9 +626,9 @@ def generate_fear_greed_gauge_svg(value, label, width=400, height=240, lang='en'
             'Greed': 'AÇGÖZLÜLÜK',
             'Extreme Greed': 'AŞIRI AÇGÖZLÜLÜK',
         }
-        display_label = label_map.get(label, label.upper())
+        display_label = label_map.get(label, (label or '').upper())
     else:
-        display_label = label.upper()
+        display_label = (label or '').upper()
 
     # Angle mapped to value (0=180°, 100=0°)
     needle_angle = 180 - (value / 100) * 180
@@ -867,6 +907,14 @@ def generate_stablecoin_mcap_share_chart(history, width=600, height=200):
     if not history or len(history) < 2:
         return '<div style="color:var(--dim); text-align:center; padding:20px;">No historical stablecoin data available</div>'
         
+    # Every point must carry all three fields. A partial series used to raise
+    # KeyError here, which takes the whole bulletin down over one chart — the
+    # rule everywhere else in this file is that a section hides itself.
+    required = ('total', 'usdt_share', 'usdc_share')
+    if not all(all(k in h for k in required) for h in history):
+        return ('<div style="color:var(--dim); text-align:center; padding:20px;">'
+                'No historical stablecoin data available</div>')
+
     totals = [h['total'] for h in history]
     usdt_shares = [h['usdt_share'] for h in history]
     usdc_shares = [h['usdc_share'] for h in history]

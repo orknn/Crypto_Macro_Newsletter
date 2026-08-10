@@ -9,11 +9,14 @@ import time
 from datetime import datetime
 
 from config import llm
+from config import models
 from config.prompt_budget import (PROMPT_EXCLUDED_KEYS, PROMPT_SERIES_CAPS,
-                                  PROMPT_SERIES_CAPS_WEEKLY)
+                                  PROMPT_SERIES_CAPS_WEEKLY, prune_unrendered)
 from schemas.agent_responses import (CONTENT_EDITOR_DAILY_SCHEMA,
                                      CONTENT_EDITOR_WEEKLY_SCHEMA,
-                                     RESEARCH_DESK_SCHEMA)
+                                     RESEARCH_DESK_SCHEMA,
+                                     SECTION_ANALYSIS_SCHEMA,
+                                     EXEC_SUMMARY_SCHEMA)
 
 
 # How much more room a truncated call gets on its one retry. Generous on
@@ -27,19 +30,29 @@ def llm_available():
     return bool(os.environ.get(llm.api_key_env(), '').strip())
 
 
-def _call_openai(system_prompt, user_prompt, max_tokens, schema, schema_name):
+def _call_openai(system_prompt, user_prompt, max_tokens, schema, schema_name,
+                 model=None):
     """One Responses API call. Returns (text, usage dict).
 
+    `model` is always passed explicitly by the two-pass code (config/models.py)
+    and falls back to config/llm.py only for the daily edition, which has not
+    been re-routed. Nothing here defaults to a bare alias: an unqualified
+    `gpt-5.6` routes to the flagship and bills at flagship rates.
+
     max_output_tokens covers reasoning and visible output together, which is
-    why config/llm.py turns reasoning off — otherwise the model can spend the
+    why reasoning effort is held down — otherwise the model can spend the
     budget thinking and return JSON that stops mid-string.
     """
     from openai import OpenAI
     client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
 
+    model = model or llm.OPENAI_MODEL
+    effort = (models.reasoning_effort(model) if model in models.PRICING
+              else llm.OPENAI_REASONING_EFFORT)
+
     kwargs = {
-        'model': llm.OPENAI_MODEL,
-        'reasoning': {'effort': llm.OPENAI_REASONING_EFFORT},
+        'model': model,
+        'reasoning': {'effort': effort},
         'max_output_tokens': max_tokens,
         'instructions': system_prompt,
         'input': user_prompt,
@@ -65,9 +78,13 @@ def _call_openai(system_prompt, user_prompt, max_tokens, schema, schema_name):
 
     u = r.usage
     details = getattr(u, 'output_tokens_details', None)
+    in_details = getattr(u, 'input_tokens_details', None)
     usage = {
         'model': r.model,
         'input_tokens': u.input_tokens,
+        # Cached input bills at a tenth. Reported so logs/cost.jsonl shows what
+        # caching actually saved rather than what it was expected to.
+        'cached_input_tokens': getattr(in_details, 'cached_tokens', 0) or 0,
         'output_tokens': u.output_tokens,
         'reasoning_tokens': getattr(details, 'reasoning_tokens', 0) or 0,
         'truncated': truncated,
@@ -105,7 +122,7 @@ def _call_anthropic(system_prompt, user_prompt, max_tokens):
 
 def _call_with_retry(system_prompt, user_prompt, max_tokens=4000,
                      schema=None, schema_name='response', max_retries=3,
-                     agent='?'):
+                     agent='?', model=None):
     """Call the active provider, retrying on rate limits and on truncation.
 
     A truncated answer is retried once with a larger budget. Cutting the JSON
@@ -122,7 +139,7 @@ def _call_with_retry(system_prompt, user_prompt, max_tokens=4000,
         try:
             if llm.PROVIDER == 'openai':
                 text, usage = _call_openai(system_prompt, user_prompt,
-                                           budget, schema, schema_name)
+                                           budget, schema, schema_name, model)
             else:
                 text, usage = _call_anthropic(system_prompt, user_prompt, budget)
             _log_ai_call(agent=agent, max_tokens=budget,
@@ -154,13 +171,14 @@ def _call_with_retry(system_prompt, user_prompt, max_tokens=4000,
 
 def _log_ai_call(agent, max_tokens, prompt_chars, response_chars, status,
                  model=None, input_tokens=0, output_tokens=0,
-                 reasoning_tokens=0, truncated=False):
+                 reasoning_tokens=0, truncated=False, cached_input_tokens=0):
     """Record one call to logs/cost.jsonl and to fetch_report.json.
 
     Token counts come from the provider's own usage block, so the cost here is
     what was billed rather than a guess from character counts.
     """
-    cost = llm.estimate_cost(model or '', input_tokens, output_tokens)
+    cost = models.estimate_cost(model or '', input_tokens, output_tokens,
+                                cached_input_tokens)
     entry = {
         'timestamp': datetime.now().isoformat(),
         'agent': agent,
@@ -168,6 +186,7 @@ def _log_ai_call(agent, max_tokens, prompt_chars, response_chars, status,
         'model': model,
         'max_tokens': max_tokens,
         'input_tokens': input_tokens,
+        'cached_input_tokens': cached_input_tokens,
         'output_tokens': output_tokens,
         'reasoning_tokens': reasoning_tokens,
         'estimated_usd': round(cost, 6),
@@ -281,17 +300,28 @@ Her dil (tr ve en) için aşağıdaki alanları doldurmalısın:
 1b. "overview": Haftanın YÖNETİCİ ÖZETİ (executive summary) — 3-4 cümle. Haftanın en önemli makro gelişmesi, kripto piyasasının genel yönü, ETF/kurumsal akım resmi ve önümüzdeki haftanın en kritik katalizörünü tek paragrafta birleştir. Bültenin tamamını okumayan birinin haftayı anlaması için yeterli olmalı. Önemli sayıları <strong> etiketiyle vurgulayabilirsin.
 2. "themes":
    - Haftanın en önemli 3 makro/kripto teması. Her tema bir başlık ("title", en fazla 2-3 kelime, örn: "LIKIDITE RUZGARI" veya "JEOPOLITIK GERILIM") ve 2-3 cümlelik açıklama ("description") içermelidir.
-3. "notes":
-   - "liquidity_note": Haftalık Fed Net Likiditesi ve para arzı (M2) üzerine analitik not (1-2 cümle).
-   - "inflation_note": ABD enflasyon patikası (CPI/PCE) üzerine analitik not (1-2 cümle).
-   - "stablecoin_note": Stablecoin arzlarındaki değişim ve pazar payı savaşı üzerine analitik not (1-2 cümle).
-   - "etf_note": Haftalık spot ETF akışları (IBIT, FBTC) ve kurumsal ilginin nasıl okunacağına dair (pozitif akış = alım baskısı, negatif akış = satış baskısı) eğitici analitik not (1-2 cümle).
-   - "rotation_note": Sektör rotasyon eğilimleri üzerine analitik not (1-2 cümle).
-   - "cycle_note": Bitcoin döngüsel göstergeleri (Mayer, 200WMA, drawdown) üzerine analitik not (1-2 cümle).
-   - "correlation_note": Varlıklar arası korelasyon matrisi üzerine analitik not (1-2 cümle).
-   - "futures_note": Vadeli yapı, funding ve konumlanma üzerine analitik not (1-2 cümle).
-   - "week_plan_note": Önümüzdeki haftanın stratejik planı ve beklentileri üzerine analitik not (1-2 cümle).
-   - "news_note": Haftanın en kritik haber gelişmelerinin makro etkileri üzerine analitik özet not (1-2 cümle).
+2b. "conflicting_signals":
+   - SANA "ÇELİŞEN SİNYALLER" başlığı altında, piyasa verisinden DETERMİNİSTİK olarak tespit edilmiş çelişki çiftleri verilir. Çelişkiyi sen BULMAZSIN; sana verilir.
+   - Her çift için "pair" alanını sana verilen değerle HARFİ HARFİNE aynı yaz.
+   - "reconciliation": iki ölçümün neden aynı anda doğru olabileceğini açıklayan 1-2 cümle. Piyasa YAPISINA dayanan mekanik bir açıklama ara (hangi alıcı tipi, hangi işlem yeri, hangi vade, hangi enstrüman).
+   - MUTLAK KURAL: Uzlaştıracak gerçek bir mekanizma bulamıyorsan "reconciliation" alanına tam olarak "UNRESOLVED" yaz. Çelişkinin sürdüğünü söylemek geçerli ve dürüst bir çıktıdır. ASLA uydurma açıklama üretme.
+   - Sana "mekanizma zaten biliniyor" diye işaretlenmiş bir çift verilirse onun için "UNRESOLVED" yaz; o çiftin metni koddan gelir.
+3. "notes" — HER NOT İKİ ALANDAN OLUŞUR:
+   - "what": Veriyi tekrar eden TEK cümle. Okuyucunun az önce baktığı sayıyı özetler.
+   - "so_what": O verinin NE ANLAMA GELDİĞİNİ söyleyen TEK cümle. Konumlanma veya varlık etkisi İÇERMEK ZORUNDA — hangi varlık, hangi yön, hangi vade, hangi eşik.
+   - "so_what" alanı ASLA "what"ın yeniden yazımı olamaz. Sayıyı tekrarlamak analiz değildir.
+   - MUTLAK KURAL: Bir bölüm için gerçek bir "so_what" üretemiyorsan o notun İKİ alanını da boş string ("") bırak. Bölüm bültenden tamamen çıkarılır. Yarım not basmak yerine bölümü kaybetmek tercih edilir.
+   Notlar:
+   - "liquidity_note": Haftalık Fed Net Likiditesi ve finansal koşullar (NFCI).
+   - "inflation_note": ABD enflasyon patikası (CPI/PCE).
+   - "stablecoin_note": Stablecoin TOPLAM ARZININ haftalık değişimi — bunu kenarda bekleyen alım gücü ("dry powder") sinyali olarak yorumla. "Pazar payı savaşı" anlatısı KULLANMA.
+   - "etf_note": Haftalık spot ETF akışları. DİKKAT: pozitif akışı doğrudan "yönlü kurumsal talep" diye SUNMA. ABD spot BTC ETF'leri nakit-yaratım modeliyle çalışır; net akışın bir bölümü delta-nötr baz işlemi (ETF long + vadeli short) olabilir ve bu yönlü talep DEĞİLDİR. Akışı funding oranı ve açık pozisyon (OI) değişimiyle BİRLİKTE değerlendir: yüksek akış + yükselen funding + artan OI baz işlemine işaret eder; yüksek akış + durgun funding yönlü talebe daha yakındır.
+   - "rotation_note": Sektör rotasyon eğilimleri.
+   - "cycle_note": Bitcoin döngüsel göstergeleri (Mayer, 200WMA, drawdown).
+   - "correlation_note": Varlıklar arası korelasyon.
+   - "futures_note": Vadeli yapı, funding ve konumlanma.
+   - "week_plan_note": Önümüzdeki haftanın stratejik planı.
+   - "news_note": Haftanın kritik haberlerinin makro etkileri.
 4. "insights":
    - Sana verilen her haber maddesi için sırasıyla 1-2 cümlelik profesyonel bir finansal yorum (commentary).
    - KRİTİK FİLTRE KURALI: Eğer haber zaten genel bir piyasa yorumu veya listicle ise (örneğin "Cramer'ın izlenmesi gereken listesi", "İşte piyasada bilmeniz gerekenler"), bu haber için insight üretme ve listedeki o elemanı boş string ("") olarak bırak.
@@ -312,17 +342,20 @@ DİL VE ANLATIM KURALLARI:
       {"title": "...", "description": "..."},
       {"title": "..." ,"description": "..."}
     ],
+    "conflicting_signals": [
+      {"pair": "...", "reconciliation": "... veya UNRESOLVED"}
+    ],
     "notes": {
-      "liquidity_note": "...",
-      "inflation_note": "...",
-      "stablecoin_note": "...",
-      "etf_note": "...",
-      "rotation_note": "...",
-      "cycle_note": "...",
-      "correlation_note": "...",
-      "futures_note": "...",
-      "week_plan_note": "...",
-      "news_note": "..."
+      "liquidity_note": {"what": "...", "so_what": "..."},
+      "inflation_note": {"what": "...", "so_what": "..."},
+      "stablecoin_note": {"what": "...", "so_what": "..."},
+      "etf_note": {"what": "...", "so_what": "..."},
+      "rotation_note": {"what": "...", "so_what": "..."},
+      "cycle_note": {"what": "...", "so_what": "..."},
+      "correlation_note": {"what": "...", "so_what": "..."},
+      "futures_note": {"what": "...", "so_what": "..."},
+      "week_plan_note": {"what": "...", "so_what": "..."},
+      "news_note": {"what": "...", "so_what": "..."}
     },
     "insights": ["...", "..."]
   },
@@ -334,17 +367,20 @@ DİL VE ANLATIM KURALLARI:
       {"title": "...", "description": "..."},
       {"title": "...", "description": "..."}
     ],
+    "conflicting_signals": [
+      {"pair": "...", "reconciliation": "... or UNRESOLVED"}
+    ],
     "notes": {
-      "liquidity_note": "...",
-      "inflation_note": "...",
-      "stablecoin_note": "...",
-      "etf_note": "...",
-      "rotation_note": "...",
-      "cycle_note": "...",
-      "correlation_note": "...",
-      "futures_note": "...",
-      "week_plan_note": "...",
-      "news_note": "..."
+      "liquidity_note": {"what": "...", "so_what": "..."},
+      "inflation_note": {"what": "...", "so_what": "..."},
+      "stablecoin_note": {"what": "...", "so_what": "..."},
+      "etf_note": {"what": "...", "so_what": "..."},
+      "rotation_note": {"what": "...", "so_what": "..."},
+      "cycle_note": {"what": "...", "so_what": "..."},
+      "correlation_note": {"what": "...", "so_what": "..."},
+      "futures_note": {"what": "...", "so_what": "..."},
+      "week_plan_note": {"what": "...", "so_what": "..."},
+      "news_note": {"what": "...", "so_what": "..."}
     },
     "insights": ["...", "..."]
   }
@@ -481,6 +517,10 @@ def _prepare_data_summary(data, edition='daily'):
         # that contradict the weekly totals shown on the card.
         exclude_keys |= {'etf_flows', 'etf_history_data'}
     summary = {k: v for k, v in data.items() if k not in exclude_keys}
+    # The model may only reason over what the reader will see. Anything the
+    # edition does not print is removed here, which is what stops a note from
+    # citing a real figure the reader cannot find on the page.
+    summary = prune_unrendered(summary, edition=edition)
     return _trim_for_prompt(summary, edition=edition)
 
 
@@ -512,7 +552,20 @@ class ContentEditorAgent:
             news_inputs = [{"title": n.get('title'), "summary": n.get('summary')} for n in raw_news]
 
             if edition == 'weekly':
+                conflicts = data.get('signal_conflicts') or []
+                conflict_inputs = [{
+                    'pair': c['pair'],
+                    'signal_a': f"{c['signal_a']['labels']['tr']} = {c['signal_a']['value']}",
+                    'signal_b': f"{c['signal_b']['labels']['tr']} = {c['signal_b']['value']}",
+                    # Mechanically explained pairs are answered by the code, so
+                    # the model is told not to spend a paragraph on them.
+                    'mekanizma_zaten_biliniyor': bool(c.get('mechanism')),
+                } for c in conflicts]
+
                 user_prompt = f"""HESAPLANMIŞ PİYASA REJİMİ: {computed_regime}
+
+ÇELİŞEN SİNYALLER (piyasa verisinden deterministik olarak tespit edildi — sen bulmadın, sana veriliyor):
+{json.dumps(conflict_inputs, ensure_ascii=False, indent=2) if conflict_inputs else "Bu hafta çelişen sinyal çifti tespit edilmedi. conflicting_signals: [] dön."}
 
 Aşağıda bu haftanın bülten verileri ve haber gelişmeleri yer almaktadır.
 Bu verileri analiz ederek haftalık bülten için tek bir dual-language JSON çıktısı oluştur:
@@ -745,3 +798,275 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme."""
         if stripped:
             print(f"    🧹 {stripped} uydurma/izinsiz kaynak URL'si temizlendi.")
         return clean_topics
+
+
+# ═══════════════════════════════════════════════════════════════════
+# TWO-PASS WEEKLY  (phase 2.5)
+# ═══════════════════════════════════════════════════════════════════
+#
+# Pass 1 runs one call per section over that section's slice of data, and
+# returns structure rather than prose. Pass 2 gets those structures plus a
+# compact numeric digest — never the raw payload.
+#
+# That restriction is the whole design. Under the single-call version the
+# executive summary and the section notes were written from the same undifferen-
+# tiated dump, and nothing stopped page one from quoting a figure the sections
+# below it never mentioned, or from reading the week differently than they did.
+# Pass 2 can only cite what pass 1 surfaced.
+
+# Which payload keys each section is allowed to see. Narrow on purpose: a
+# section note that draws on the whole bulletin is how notes end up citing
+# numbers that belong to some other section's chart.
+SECTION_CONTEXT = {
+    'liquidity_note': ('net_liquidity_history_data', 'nfci', 'global_liquidity'),
+    'inflation_note': ('inflation_history_data', 'economic_calendar', 'fed_pricing'),
+    'stablecoin_note': ('stablecoin_history_data',),
+    'etf_note': ('etf_weekly_history_data', 'eth_etf_weekly_data',
+                 'etf_cumulative_data', 'funding_rates', 'open_interest'),
+    'rotation_note': ('crypto_sector_rotation_data', 'eth_btc', 'winners', 'losers'),
+    'cycle_note': ('btc_cycle_metrics',),
+    'correlation_note': ('correlation_matrix', 'ytd_comparison_data'),
+    'futures_note': ('funding_rates', 'open_interest', 'crypto_futures_basis',
+                     'options_data', 'coinbase_premium', 'fear_and_greed'),
+    'week_plan_note': ('economic_calendar', 'fed_pricing'),
+    'news_note': ('macro_news',),
+}
+
+# The stable half of every pass-1 call. It is sent first and byte-identical
+# across all ~11 calls so prompt caching has a prefix to match; see
+# config/models.CACHEABLE_PREFIX_FIRST. Anything week-specific goes in the user
+# message, never here.
+SECTION_ANALYST_SYSTEM_PROMPT = """Sen bir finans yayınının kıdemli analistisin. Sana TEK BİR BÖLÜMÜN verisi verilir ve o bölüm için yapılandırılmış bir analiz üretirsin.
+
+ÇIKTI ALANLARI:
+- "section": Sana verilen bölüm adını harfi harfine kopyala.
+- "facts": Bölümdeki önemli sayıları `anahtar=değer` biçiminde listele (örn: "btc_etf_weekly_net=+865.3M"). SADECE sana verilen veriden al. Uydurma.
+- "direction": bullish | bearish | neutral — bu bölümün risk iştahına işareti.
+- "strength": 0.0-1.0 arası, sinyalin gücü.
+- "key_metric": Bu bölümün üzerinde döndüğü TEK figürün anahtarı ("facts" içindeki anahtarlardan biri).
+- "tr" ve "en": İkisi de {"what": "...", "so_what": "..."} biçiminde.
+
+"what" ve "so_what" KURALLARI:
+- "what": Veriyi özetleyen TEK cümle.
+- "so_what": O verinin NE ANLAMA GELDİĞİNİ söyleyen TEK cümle. Konumlanma veya varlık etkisi İÇERMEK ZORUNDA — hangi varlık, hangi yön, hangi vade, hangi eşik.
+- "so_what" ASLA "what"ın yeniden yazımı olamaz. Sayıyı tekrarlamak analiz değildir.
+- MUTLAK KURAL: Gerçek bir "so_what" üretemiyorsan her iki dilde de "what" ve "so_what" alanlarını boş string ("") bırak. Bölüm bültenden tamamen çıkarılır. Yarım not basmaktansa bölümü kaybetmek tercih edilir.
+
+SAYI KURALI: Yazdığın her sayı sana verilen veride BULUNMAK ZORUNDA. Hesaplama yapma, yuvarlama uydurma.
+DİL: İki dil aynı analizi anlatır; sayılar birebir aynı olmalıdır."""
+
+
+def _section_payload(section, data):
+    """The slice of the bulletin one section is allowed to reason over."""
+    keys = SECTION_CONTEXT.get(section, ())
+    slice_ = {k: data.get(k) for k in keys if data.get(k) is not None}
+    return _trim_for_prompt(slice_, edition='weekly')
+
+
+class SectionAnalystAgent:
+    """Pass 1. One call, one section, structured output."""
+
+    def analyze(self, section, data):
+        payload = _section_payload(section, data)
+        if not payload:
+            print(f"    ℹ️  {section}: veri yok — bölüm atlanıyor.")
+            return None
+
+        # Volatile content last: the cacheable prefix is the system prompt.
+        user_prompt = f"""BÖLÜM: {section}
+
+Bu bölümün verileri:
+```json
+{json.dumps(payload, ensure_ascii=False, indent=2, default=str)}
+```
+
+YANITINI SADECE JSON OLARAK VER."""
+
+        try:
+            raw = _call_with_retry(
+                SECTION_ANALYST_SYSTEM_PROMPT, user_prompt, max_tokens=1500,
+                schema=SECTION_ANALYSIS_SCHEMA, schema_name='section_analysis',
+                agent=f'Pass1/{section}', model=models.MODEL.SECTION_NOTE)
+            result = ContentEditorAgent()._parse_response(raw)
+            if not result:
+                return None
+            result['section'] = section
+            return result
+        except Exception as e:
+            print(f"    ⚠️  {section} analiz hatası: {e}")
+            return None
+
+
+def run_pass_one(data, sections=None):
+    """Every section's structured analysis, keyed by section name.
+
+    Sections are independent, so a failure is contained: one dead section costs
+    that section, not the run.
+    """
+    sections = sections or [s for s in SECTION_CONTEXT if _section_payload(s, data)]
+    print(f"\n🔷 Pass 1 — {len(sections)} bölüm ({models.MODEL.SECTION_NOTE})")
+
+    results = {}
+    agent = SectionAnalystAgent()
+    for section in sections:
+        analysis = agent.analyze(section, data)
+        if analysis:
+            results[section] = analysis
+            print(f"    ✅ {section}: {analysis.get('direction')} "
+                  f"({analysis.get('key_metric')})")
+    return results
+
+
+def build_digest(pass_one, data):
+    """The compact numeric record pass 2 is allowed to quote from.
+
+    Deliberately not the payload. Pass 2 sees each section's own `facts` plus
+    the handful of headline figures, and nothing else — so every number it can
+    write is a number some section already published.
+    """
+    digest = {'sections': {}, 'headline': {}}
+    for section, analysis in pass_one.items():
+        digest['sections'][section] = {
+            'facts': analysis.get('facts', []),
+            'direction': analysis.get('direction'),
+            'strength': analysis.get('strength'),
+            'key_metric': analysis.get('key_metric'),
+        }
+
+    fng = (data.get('fear_and_greed') or {}).get('value')
+    if fng is not None:
+        digest['headline']['fear_greed'] = fng
+    overview = data.get('crypto_market_overview') or {}
+    for key in ('total_market_cap', 'btc_dominance'):
+        if overview.get(key) is not None:
+            digest['headline'][key] = overview[key]
+    for row in data.get('crypto_prices') or []:
+        if row.get('Symbol') == 'BTC':
+            digest['headline']['btc_price'] = row.get('Current Price USD')
+            digest['headline']['btc_7d_pct'] = row.get('7d %')
+            break
+    return digest
+
+
+EXEC_SUMMARY_SYSTEM_PROMPT = """Sen bir finans yayınının baş editörüsün. Haftanın TÜM bölüm analizleri sana YAPILANDIRILMIŞ biçimde verilir; senin işin onları tek bir yönetici görüşüne sıkıştırmaktır.
+
+MUTLAK KURAL — SAYILAR: Yazdığın her sayı sana verilen digest'te BULUNMAK ZORUNDA. Digest dışından sayı getiremezsin, hesap yapamazsın, yuvarlayamazsın. Bu kural denetleniyor; ihlal eden çıktı reddedilir ve build FAIL olur.
+
+ÜRETECEKLERİN (her biri hem "tr" hem "en"):
+1. "regime_line": VERİLEN rejim için tek cümlelik vurucu piyasa hükmü. Rejimi sen SEÇMEZSİN, sana verilir.
+2. "regime_rationale": Rejimi savunan en fazla 2 cümle.
+3. "overview": Haftanın yönetici özeti, 3-4 cümle. Bültenin tamamını okumayanın haftayı anlaması için yeterli olmalı.
+4. "themes": TAM OLARAK 3 tema. Her tema:
+   - "title": 2-3 kelime.
+   - "body": en fazla 2 cümle.
+   - "metric_key": ZORUNLU. Sana verilen bölüm analizlerindeki "key_metric" değerlerinden BİRİ olmak zorunda. Uydurulmuş bir metric_key build'i düşürür.
+5. "conflicting_signals": Sana verilen çelişki çiftleri için uzlaştırma. "pair" alanını harfi harfine kopyala. Gerçek bir mekanizma bulamıyorsan "reconciliation" alanına tam olarak "UNRESOLVED" yaz. ASLA uydurma açıklama üretme.
+6. "scenarios": bear / base / bull. Her biri {"label", "condition", "transmission"}. "condition" olayın eşiği, "transmission" o eşik gerçekleşirse zincirin nasıl işleyeceği. Fiyat seviyesi UYDURMA — seviyeler koddan gelir.
+
+DİL: İki dil aynı analizi anlatır; sayılar birebir aynı olmalıdır."""
+
+
+class ExecutiveSummaryAgent:
+    """Pass 2. One call, flagship tier, over pass 1's output only."""
+
+    def analyze(self, data, pass_one):
+        if not llm_available():
+            print(f"    ⚠️  {llm.api_key_env()} yok — yönetici özeti atlanıyor.")
+            return {}
+        if not pass_one:
+            print("    ⚠️  Pass 1 hiçbir bölüm üretmedi — yönetici özeti atlanıyor.")
+            return {}
+
+        digest = build_digest(pass_one, data)
+        conflicts = [{
+            'pair': c['pair'],
+            'signal_a': f"{c['signal_a']['labels']['tr']} = {c['signal_a']['value']}",
+            'signal_b': f"{c['signal_b']['labels']['tr']} = {c['signal_b']['value']}",
+            'mekanizma_zaten_biliniyor': bool(c.get('mechanism')),
+        } for c in (data.get('signal_conflicts') or [])]
+
+        user_prompt = f"""HESAPLANMIŞ PİYASA REJİMİ: {data.get('regime', 'NEUTRAL')}
+
+BÖLÜM ANALİZLERİ VE SAYISAL DIGEST (yazabileceğin TÜM sayılar burada):
+```json
+{json.dumps(digest, ensure_ascii=False, indent=2, default=str)}
+```
+
+ÇELİŞEN SİNYALLER (deterministik olarak tespit edildi):
+{json.dumps(conflicts, ensure_ascii=False, indent=2) if conflicts else "Bu hafta çelişki yok. conflicting_signals: [] dön."}
+
+YANITINI SADECE JSON OLARAK VER."""
+
+        print(f"\n🔶 Pass 2 — yönetici özeti ({models.MODEL.EXEC_SUMMARY})")
+        try:
+            raw = _call_with_retry(
+                EXEC_SUMMARY_SYSTEM_PROMPT, user_prompt, max_tokens=6000,
+                schema=EXEC_SUMMARY_SCHEMA, schema_name='exec_summary',
+                agent='Pass2/exec', model=models.MODEL.EXEC_SUMMARY)
+            return ContentEditorAgent()._parse_response(raw) or {}
+        except Exception as e:
+            print(f"    ⚠️  Yönetici özeti hatası: {e}")
+            return {}
+
+
+def assemble_weekly(pass_one, pass_two):
+    """Fold the two passes into the shape render/weekly.py already reads.
+
+    Notes come from pass 1 (one section, one call, its own data); everything
+    above them — the regime line, the overview, the themes, the reconciliations
+    — comes from pass 2. Nothing is merged from both, so no field has two
+    authors.
+    """
+    assembled = {}
+    for lang in ('tr', 'en'):
+        block = pass_two.get(lang) or {}
+        themes = []
+        for theme in (block.get('themes') or [])[:3]:
+            if not isinstance(theme, dict):
+                continue
+            themes.append({
+                'title': theme.get('title', ''),
+                # render/weekly.py reads `description`; pass 2 calls it `body`.
+                'description': theme.get('body', ''),
+                'metric_key': theme.get('metric_key'),
+            })
+
+        notes = {}
+        for section, analysis in pass_one.items():
+            note = analysis.get(lang)
+            if isinstance(note, dict):
+                notes[section] = {'what': note.get('what', ''),
+                                  'so_what': note.get('so_what', '')}
+
+        assembled[lang] = {
+            'regime_line': block.get('regime_line', ''),
+            'overview': block.get('overview', ''),
+            'regime_rationale': block.get('regime_rationale', ''),
+            'themes': themes,
+            'conflicting_signals': block.get('conflicting_signals') or [],
+            'scenarios': block.get('scenarios') or {},
+            'notes': notes,
+            # Pass 1 has no news-insight call yet; the news section carries its
+            # own note instead, and an empty list keeps main.py's
+            # length-matching guard from shifting commentary onto wrong
+            # headlines.
+            'insights': [],
+        }
+    return assembled
+
+
+def run_weekly_two_pass(data):
+    """The weekly writing layer: pass 1 per section, then one pass 2.
+
+    Returns (assembled, pass_one, digest). The digest goes back to the caller
+    because the executive summary's figures are checked against it — that check
+    is the only thing standing between the most-quoted paragraph in the report
+    and a number nobody printed.
+    """
+    pass_one = run_pass_one(data)
+    if not pass_one:
+        return {}, {}, {}
+
+    pass_two = ExecutiveSummaryAgent().analyze(data, pass_one)
+    digest = build_digest(pass_one, data)
+    return assemble_weekly(pass_one, pass_two), pass_one, digest
