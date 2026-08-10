@@ -1193,5 +1193,134 @@ class ModelRoutingTests(unittest.TestCase):
         self.assertEqual(validators.verify_theme_metric_keys(data, pass_one), [])
 
 
+class CompressionAndLayoutTests(unittest.TestCase):
+    """Phases 4 and 5: less page, in the order a reader needs it."""
+
+    # ── 4: compression ───────────────────────────────────────────────
+
+    def test_correlation_is_one_row_not_a_mirrored_grid(self):
+        from render.svg import generate_correlation_matrix_svg
+        corr = {'base': 'BTC', 'peers': {
+            'NDX': {'30d': 0.62, '90d': 0.41},
+            'GOLD': {'30d': -0.12, '90d': 0.05},
+            'DXY': {'30d': -0.58, '90d': None},
+            'US10Y': {'30d': 0.09, '90d': 0.22}}}
+        html = generate_correlation_matrix_svg(corr)
+
+        self.assertEqual(html.count('BTC &times;'), 4)
+        self.assertIn('30G', html)
+        self.assertIn('90G', html)
+        # A window we could not compute says so rather than printing 0.00.
+        self.assertIn('N/A', html)
+
+    def test_watchlist_is_six_rows_chosen_by_what_moved(self):
+        from render.weekly import _weekly_watchlist
+        rows = [{'Symbol': s, '7d %': p} for s, p in
+                [('BTC', 1.0), ('ETH', 0.5), ('SOL', 2.0), ('XRP', -1.0),
+                 ('TRX', 0.2), ('DOGE', 14.0), ('HYPE', -9.0),
+                 ('LINK', 1.1), ('AVAX', 0.9), ('SUI', 3.0)]]
+        picked = [r['Symbol'] for r in _weekly_watchlist(rows)]
+
+        self.assertEqual(len(picked), 6)
+        for core in ('BTC', 'ETH', 'SOL', 'XRP'):
+            self.assertIn(core, picked)
+        self.assertIn('DOGE', picked)   # best
+        self.assertIn('HYPE', picked)   # worst
+
+    def test_commodities_dropped_the_three_that_transmitted_nothing(self):
+        import inspect
+        from data_fetcher import get_commodities
+        src = inspect.getsource(get_commodities)
+        for kept in ('GC=F', 'SI=F', 'HG=F', 'BZ=F'):
+            self.assertIn(kept, src)
+        for dropped in ('CC=F', 'KC=F', 'NG=F'):
+            self.assertNotIn(dropped, src)
+
+    def test_hype_radar_is_out_of_the_pdf(self):
+        data = DataIntegrityTests._weekly()
+        data['trending_coins'] = [{'symbol': 'TUT', 'name': 'Tutorial',
+                                   'rank': 400, 'chg_24h': 93.43}]
+        body = render_weekly(data, lang='tr').split('</head>')[-1]
+        self.assertNotIn('TUT', body)
+        self.assertNotIn(STR['section_hype_radar']['tr'], body)
+
+    def test_winners_and_rotation_are_one_section(self):
+        data = DataIntegrityTests._weekly()
+        data['crypto_sector_rotation_data'] = {'Layer 1 Protocols': 2.1}
+        data['winners'] = [{'Symbol': 'SOL', 'Change %': 9.0}]
+        data['losers'] = [{'Symbol': 'HYPE', 'Change %': -7.0}]
+        data['tr']['notes']['rotation_note'] = {'what': 'L1 sepeti önde.',
+                                                'so_what': 'Risk iştahı kripto içinde yukarı kayıyor.'}
+        body = render_weekly(data, lang='tr').split('</head>')[-1]
+
+        self.assertIn(STR['section_rotation_merged']['tr'], body)
+        self.assertNotIn(STR['section_winners_losers']['tr'], body)
+
+    def test_turkey_desk_stays(self):
+        """Kept by explicit decision — the alternative was deleting it."""
+        data = DataIntegrityTests._weekly()
+        data['bist_try'] = {'bist100': 13779.0, 'bist100_chg': 1.2,
+                            'usd_try': 47.6937, 'try_chg': 0.3}
+        body = render_weekly(data, lang='tr').split('</head>')[-1]
+        self.assertIn(STR['section_turkey_desk']['tr'], body)
+        self.assertIn('13,779', body)
+
+    # ── 5: layout ────────────────────────────────────────────────────
+
+    def test_pages_appear_in_the_briefed_order(self):
+        data = DataIntegrityTests._weekly()
+        data['bist_try'] = {'bist100': 13779.0, 'bist100_chg': 1.2,
+                            'usd_try': 47.69, 'try_chg': 0.3}
+        data['crypto_prices'] = [{'Symbol': 'BTC', 'Current Price USD': 65210.0,
+                                  '7d %': 1.2, 'Market Cap': 1.3e12}]
+        data['btc_cycle_metrics'] = {'spot': 65210.0, 'wma200': 48000.0,
+                                     'mayer_multiple': 1.2, 'ath': 126000.0,
+                                     'drawdown': -48.2,
+                                     'distance_to_200wma': 35.8,
+                                     'monthly_heatmap': None}
+        data['tr']['notes']['cycle_note'] = {'what': 'x', 'so_what': 'y'}
+        body = render_weekly(data, lang='tr').split('</head>')[-1]
+
+        order = ['section_macro_regime', 'section_cross_asset',
+                 'section_crypto_market', 'section_btc_regime']
+        positions = [body.find(STR[key]['tr']) for key in order]
+        for key, pos in zip(order, positions):
+            self.assertNotEqual(pos, -1, f'{key} missing')
+        self.assertEqual(positions, sorted(positions),
+                         f'page order is wrong: {list(zip(order, positions))}')
+
+    def test_empty_group_prints_no_heading(self):
+        """A page title with nothing under it is worse than no page title."""
+        from render.weekly import _group
+        self.assertEqual(_group('CROSS-ASSET', '', '   ', None), '')
+        self.assertIn('CROSS-ASSET', _group('CROSS-ASSET', '<div>x</div>'))
+
+    def test_news_renders_as_transmission(self):
+        data = DataIntegrityTests._weekly()
+        data['tr']['news_transmission'] = [{
+            'title': 'Hormuz / İran',
+            'chain': 'Petrol arzı → enflasyon → faiz → risk varlıkları',
+            'this_week': 'Brent 83,55$ (7g -%7,29) — piyasa manşet riskini fiyatlıyor.'}]
+        data['tr']['notes']['news_note'] = {'what': 'Jeopolitik risk primi geriledi.',
+                                            'so_what': 'Enerji hedge ihtiyacı azaldı.'}
+        body = render_weekly(data, lang='tr').split('</head>')[-1]
+
+        self.assertIn('Hormuz', body)
+        self.assertIn('Zincir', body)
+        self.assertIn('→', body)
+        self.assertIn('Bu hafta', body)
+
+    def test_story_without_a_chain_is_dropped(self):
+        data = DataIntegrityTests._weekly()
+        data['tr']['news_transmission'] = [
+            {'title': 'İyi haber', 'chain': 'A → B', 'this_week': 'x'},
+            {'title': 'Zincirsiz haber', 'chain': '', 'this_week': 'y'}]
+        data['tr']['notes']['news_note'] = {'what': 'a', 'so_what': 'b'}
+        body = render_weekly(data, lang='tr').split('</head>')[-1]
+
+        self.assertIn('İyi haber', body)
+        self.assertNotIn('Zincirsiz haber', body)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -29,6 +29,46 @@ from render.i18n import STR, tr_upper
 REQUIRE_SO_WHAT = True
 
 
+# The four assets the report always discusses, plus whatever actually moved.
+WATCHLIST_CORE = ('BTC', 'ETH', 'SOL', 'XRP')
+
+
+def _weekly_watchlist(rows, limit=6):
+    """Six rows: the four constants plus the week's best and worst.
+
+    Ten rows of which six never got mentioned is a table nobody finishes. The
+    two variable slots are the only ones that carry news, so they are chosen by
+    what happened rather than by market cap.
+    """
+    if not rows:
+        return []
+    core = [r for sym in WATCHLIST_CORE
+            for r in rows if r.get('Symbol') == sym]
+    rest = [r for r in rows if r not in core
+            and isinstance(r.get('7d %'), (int, float))]
+    if rest:
+        ranked = sorted(rest, key=lambda r: r['7d %'])
+        extras = [ranked[-1]]                      # best
+        if len(ranked) > 1:
+            extras.append(ranked[0])               # worst
+    else:
+        extras = []
+    return (core + extras)[:limit]
+
+
+def _group(title, *sections):
+    """A page heading and its sections, or '' when every section is empty.
+
+    Sections drop themselves for two reasons now — no data, or no reading to
+    print beside the data — so a heading has to earn its place from what
+    survived rather than from the layout.
+    """
+    body = ''.join(part for part in sections if part and part.strip())
+    if not body.strip():
+        return ''
+    return f"{render_section_divider(title)}\n{body}"
+
+
 def _section_with_note(section_html, note, lang, accent):
     """Section plus its two-line note, or '' when the note has no `so_what`."""
     note_html = render_analyst_note(note, lang, accent)
@@ -136,9 +176,14 @@ def render_weekly(data, lang='tr', theme=None):
         if source_date:
             title += f" (önceki veri · {source_date})" if lang == 'tr' else f" (previous data · {source_date})"
             
+        # The group heading above says "what matters next"; a second heading
+        # saying the same thing is a line of vertical space for nothing.
         calendar_weekly_html = f'''
-        {render_section_divider(title)}
         {render_fed_strip(data.get('fed_pricing'), lang=lang)}'''
+        if source_date:
+            calendar_weekly_html += (
+                f'<div style="font-size:9.5px; color:var(--dim); '
+                f'margin:-6px 0 10px;">{title}</div>')
         if events:
             calendar_weekly_html += f'''
         {render_economic_calendar(events, lang=lang)}'''
@@ -324,12 +369,38 @@ def render_weekly(data, lang='tr', theme=None):
     commodities = data.get('commodities', [])
     asset_sparklines = data.get('asset_sparklines', {})
     if mag7 or commodities:
-        mag7_table = render_asset_table(mag7, "equities", lang=lang, sparklines=asset_sparklines) if mag7 else ""
+        # Seven rows of megacap prices restated a single fact: whether big tech
+        # was bid. One line says it, and the names that moved say the rest.
+        mag7_line = ""
+        if mag7:
+            moves = [(m.get('Symbol', ''), m.get('Change %')) for m in mag7]
+            moves = [(sym, chg) for sym, chg in moves
+                     if isinstance(chg, (int, float)) and not isinstance(chg, bool)]
+            if moves:
+                avg = sum(c for _, c in moves) / len(moves)
+                best = max(moves, key=lambda x: x[1])
+                worst = min(moves, key=lambda x: x[1])
+                avg_txt, avg_cls = _fmt_change(avg, lang)
+                best_txt, best_cls = _fmt_change(best[1], lang)
+                worst_txt, worst_cls = _fmt_change(worst[1], lang)
+                spark = generate_sparkline(asset_sparklines.get('NVDA') or [], 90, 22)
+                mag7_line = f'''
+        <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:14px 16px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; page-break-inside:avoid; break-inside:avoid;">
+          <div>
+            <div style="font-size:9.5px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:4px;">MAGNIFICENT 7</div>
+            <span class="{avg_cls}" style="font-family:var(--mono); font-size:16px; font-weight:700;">{avg_txt}</span>
+            <span style="font-size:10.5px; color:var(--dim); margin-left:10px;">
+              {STR['best'][lang]} {best[0]} <span class="{best_cls}">{best_txt}</span>
+              &nbsp;·&nbsp; {STR['worst'][lang]} {worst[0]} <span class="{worst_cls}">{worst_txt}</span>
+            </span>
+          </div>
+          <div>{spark}</div>
+        </div>'''
+
         comm_table = render_asset_table(commodities, "commodities", lang=lang, sparklines=asset_sparklines) if commodities else ""
         equities_html = f'''
         {render_section_divider(STR['section_equities_commodities'][lang])}
-        {mag7_table}
-        <div style="margin-top:16px;"></div>
+        {mag7_line}
         {comm_table}
         '''
 
@@ -410,9 +481,6 @@ def render_weekly(data, lang='tr', theme=None):
           </div>
         </div>
         '''
-
-    # Crypto Divider
-    crypto_divider = render_section_divider(STR['section_crypto_desk'][lang])
 
     # 10. Stablecoin Supply
     stablecoin_html = ""
@@ -538,66 +606,34 @@ def render_weekly(data, lang='tr', theme=None):
         else:
             etf_weekly_html += '</div>'
 
-    # 12. Winners & Losers
+    # 12. Winners & Losers — folded into ROTATION below (phase 4).
+    # The same story was being told in four places: the winners chart, the
+    # losers chart, the sector table and the ETH/BTC card all answer "what is
+    # money moving into". One section, one answer.
     winners_losers_html = ""
-    winners = data.get('winners', [])
-    losers = data.get('losers', [])
-    if winners or losers:
-        wl_chart = generate_winners_losers_chart(winners, losers)
-        winners_losers_html = f'''
-        {render_section_divider(STR['section_winners_losers'][lang])}
-        <div class="sparkline-wrap" style="padding:20px 24px; margin-bottom:24px; page-break-inside:avoid; break-inside:avoid;">
-          {wl_chart}
-        </div>
-        '''
 
     # 13. Watchlist Weekly (top 10 by market cap)
     watchlist_html = ""
-    watchlist_rows = data.get('crypto_prices_display') or data.get('crypto_prices', [])
+    watchlist_rows = _weekly_watchlist(
+        data.get('crypto_prices_display') or data.get('crypto_prices', []))
     if watchlist_rows:
         watchlist_html = f'''
         {render_section_divider(STR['section_watchlist'][lang])}
         {render_asset_table(watchlist_rows, "crypto", lang=lang)}
         '''
 
-    # 13b. Hype Radar — CoinGecko trending searches
+    # 13b. Hype Radar — removed from the PDF (phase 4).
+    #
+    # "TUT +93.43%" is a fact with nowhere to go: it does not feed the regime,
+    # it is not referenced by any note, and a reader cannot act on it. The
+    # trending list still ships in data['trending_coins'] for the web
+    # dashboard; it just stops taking a page here.
     hype_html = ""
-    trending = data.get('trending_coins') or []
-    if trending:
-        rows = []
-        for i, t in enumerate(trending):
-            chg = t.get('chg_24h')
-            chg_txt, chg_cls = _fmt_change(chg, lang)
-            rank = t.get('rank')
-            rank_str = f"#{rank}" if rank else "—"
-            rows.append(f'''
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
-              <td class="mono" style="padding:8px 12px; color:var(--gold); font-weight:700; width:30px;">{i + 1}</td>
-              <td style="padding:8px 12px;"><strong style="color:var(--text);">{t.get('symbol', '')}</strong>&nbsp;<span style="color:var(--dim); font-size:10px;">{t.get('name', '')}</span></td>
-              <td class="mono" style="padding:8px 12px; color:var(--dim); text-align:right;">{rank_str}</td>
-              <td class="mono {chg_cls}" style="padding:8px 12px; text-align:right;">{chg_txt}</td>
-            </tr>''')
-        hype_html = f'''
-        {render_section_divider(STR['section_hype_radar'][lang])}
-        <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; overflow:hidden; padding:12px; margin-bottom:12px; page-break-inside:avoid; break-inside:avoid;">
-          <table width="100%" style="border-collapse:collapse; font-size:12px;">
-            <thead>
-              <tr style="border-bottom:1px solid var(--border);">
-                <th style="text-align:left; padding:8px 12px; color:var(--dim);">#</th>
-                <th style="text-align:left; padding:8px 12px; color:var(--dim);">{STR['col_asset'][lang]}</th>
-                <th style="text-align:right; padding:8px 12px; color:var(--dim);">{STR['col_mcap_rank'][lang]}</th>
-                <th style="text-align:right; padding:8px 12px; color:var(--dim);">{STR['col_24h'][lang]}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {''.join(rows)}
-            </tbody>
-          </table>
-        </div>
-        <div style="font-size:9.5px; color:var(--dim); margin-bottom:24px;">{STR['hype_radar_hint'][lang]}</div>'''
 
     # 14. Crypto Sector Rotation
     rotation_html = ""
+    winners = data.get('winners', [])
+    losers = data.get('losers', [])
     rotation_data = data.get('crypto_sector_rotation_data', {})
     rotation_note = lang_data.get('notes', {}).get('rotation_note') or data.get('rotation_note', '')
 
@@ -621,15 +657,23 @@ def render_weekly(data, lang='tr', theme=None):
     if rotation_data:
         rows = []
         for sector, score in rotation_data.items():
-            score_txt, score_cls = _fmt_change(score, lang)
+            score_txt, score_cls = _fmt_change(score, lang)   # None -> N/A
             rows.append(f'''
             <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
               <td style="padding:8px 12px; font-weight:600; color:var(--text);">{sector}</td>
               <td class="mono {score_cls}" style="padding:8px 12px; text-align:right;">{score_txt}</td>
             </tr>''')
+        wl_chart = ""
+        if winners or losers:
+            wl_chart = f'''
+        <div class="sparkline-wrap" style="padding:16px 20px; margin-bottom:12px; page-break-inside:avoid; break-inside:avoid;">
+          {generate_winners_losers_chart(winners, losers)}
+        </div>'''
+
         rotation_html = f'''
-        {render_section_divider(STR['section_rotation'][lang])}
+        {render_section_divider(STR['section_rotation_merged'][lang])}
         {eth_btc_card}
+        {wl_chart}
         <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; overflow:hidden; padding:12px; margin-bottom:24px; page-break-inside:avoid; break-inside:avoid;">
           <table width="100%" style="border-collapse:collapse; font-size:12px;">
             <thead>
@@ -640,9 +684,13 @@ def render_weekly(data, lang='tr', theme=None):
             </tbody>
           </table>'''
           
-        rotation_html = _section_with_note(rotation_html, rotation_note, lang, 'var(--gold2)')
-            
+        # The wrapper div has to close before the section can be dropped, or a
+        # bare </div> escapes into the page — and an unbalanced tag makes
+        # _group think the section still has content, so the heading prints
+        # over nothing. Same shape as the ETF card's close.
         rotation_html += '</div>'
+        rotation_html = _section_with_note(rotation_html, rotation_note, lang,
+                                           'var(--gold2)')
 
     # 15. Cycle Panel
     cycle_html = ""
@@ -662,7 +710,6 @@ def render_weekly(data, lang='tr', theme=None):
         heatmap_svg = generate_cycle_heatmap_svg(cycle.get('monthly_heatmap'))
         
         cycle_html = f'''
-        {render_section_divider(STR['section_cycle'][lang])}
         <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:4px; overflow:hidden; margin-bottom:20px;">
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_mayer_multiple'][lang]}</div>
@@ -838,8 +885,6 @@ def render_weekly(data, lang='tr', theme=None):
         '''
 
     positioning_html = f'''
-    {render_section_divider(STR['section_positioning'][lang])}
-    
     {cp_card_html}
     
     <div class="pair-grid" style="page-break-inside:avoid; break-inside:avoid;">
@@ -906,47 +951,71 @@ def render_weekly(data, lang='tr', theme=None):
         {''.join(cards)}
         """
 
-    # 18. Stories (Weekly News)
+    # 18. Stories — as transmission, not as summary (phase 5).
+    #
+    # The reader has seen the headline. What they have not seen is the path
+    # from the event to their portfolio, so each story prints the chain and
+    # where the tape currently sits on it. A story with no chain is dropped:
+    # the agent is told to skip anything with no transmission path, and an
+    # untransmitted headline is news, not analysis.
     stories_html = ""
-    macro_news = data.get('macro_news', {})
-    news_note = lang_data.get('notes', {}).get('news_note') or data.get('news_note', '')
-    if macro_news and macro_news.get('news'):
-        news_rendered = render_news_section(macro_news, lang_data.get('insights'), lang=lang)
-        if news_rendered:  # Only show section if renderer produced valid content
-            stories_html = f'''
-            {render_section_divider(STR['section_stories'][lang])}
-            {news_rendered}'''
-            
-            stories_html = _section_with_note(stories_html, news_note, lang, 'var(--gold2)')
+    transmissions = [t for t in (lang_data.get('news_transmission') or [])
+                     if isinstance(t, dict) and (t.get('chain') or '').strip()]
+    news_note = lang_data.get('notes', {}).get('news_note')
+    if transmissions:
+        items = []
+        for i, t in enumerate(transmissions, 1):
+            this_week = (t.get('this_week') or '').strip()
+            week_html = ''
+            if this_week:
+                week_html = (f'<div style="margin-top:5px;"><strong style="color:var(--text); '
+                             f'font-weight:600;">{STR["news_this_week"][lang]}:</strong> '
+                             f'{this_week}</div>')
+            items.append(f'''
+        <div style="margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--border); page-break-inside:avoid; break-inside:avoid;">
+          <div style="font-family:var(--sans); font-size:12.5px; font-weight:700; color:var(--text); margin-bottom:5px;">
+            <span style="color:var(--gold);">{i}.</span> {t.get('title', '')}
+          </div>
+          <div style="font-family:var(--mono); font-size:11px; color:var(--gold2); margin-bottom:4px;">
+            {STR['news_chain'][lang]}: {t.get('chain', '')}
+          </div>
+          <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6;">
+            {week_html}
+          </div>
+        </div>''')
+
+        stories_html = f'''
+        {render_section_divider(STR['section_themes_risks'][lang])}
+        {''.join(items)}
+        '''
+        stories_html = _section_with_note(stories_html, news_note, lang, 'var(--gold2)')
 
     # Footer
     footer_html = render_footer(lang=lang, is_weekly=True)
 
-    # Combine everything
+    # ── Page order (phase 5) ────────────────────────────────────────
+    #
+    # The old order was the order the data happened to be fetched in, so the
+    # report opened with whatever loaded first and a reader had to assemble the
+    # week themselves. This is the order a reader needs it in: the verdict,
+    # then what set it, then what could change it, then the evidence.
+    #
+    # Sections hide themselves when their data is absent, so the two phase-3
+    # slots below (the scenario matrix and last week's scorecard) simply do not
+    # render until they exist.
+    scenario_html = data.get('_scenario_html', '')
+    scorecard_html = data.get('_scorecard_html', '')
+
     content_html = f'''
     {header_html}
-    {regime_html}
-    {overview_html}
-    {themes_html}
-    {calendar_weekly_html}
-    {liq_html}
-    {macro_scoreboard_html}
-    {equities_html}
-    {sectors_html}
-    <div style="margin-top:16px;"></div>
-    {ytd_html}
-    {turkey_html}
-    {crypto_divider}
-    {stablecoin_html}
-    {etf_weekly_html}
-    {winners_losers_html}
-    {watchlist_html}
-    {hype_html}
-    {rotation_html}
-    {cycle_html}
-    {correlation_html}
-    {positioning_html}
-    {conflicts_html}
+    {_group(STR['section_week_in_one_minute'][lang], regime_html, overview_html, themes_html)}
+    {_group(STR['section_macro_regime'][lang], macro_scoreboard_html, liq_html)}
+    {_group(STR['section_what_matters_next'][lang], calendar_weekly_html, scenario_html, scorecard_html)}
+    {_group(STR['section_cross_asset'][lang], equities_html, sectors_html, ytd_html, correlation_html, turkey_html)}
+    {_group(STR['section_crypto_flows'][lang], etf_weekly_html, stablecoin_html, conflicts_html)}
+    {_group(STR['section_crypto_market'][lang], watchlist_html, rotation_html)}
+    {_group(STR['section_btc_regime'][lang], cycle_html)}
+    {_group(STR['section_positioning'][lang], positioning_html)}
     {stories_html}
     {footer_html}
     '''

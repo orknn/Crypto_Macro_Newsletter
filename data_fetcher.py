@@ -896,13 +896,14 @@ def get_commodities():
     """
     Fetch commodity prices from yfinance: Gold, Copper, Cocoa, Coffee, Brent Oil.
     """
+    # Cocoa, coffee and natural gas were priced every week and never once
+    # transmitted into anything else the bulletin says. The four left are the
+    # ones the macro sections actually reference: two monetary metals, the
+    # growth metal, and the energy input to inflation.
     tickers = {
         'Gold': 'GC=F',
         'Silver': 'SI=F',
         'Copper': 'HG=F',
-        'Natural Gas': 'NG=F',
-        'Cocoa': 'CC=F',
-        'Coffee': 'KC=F',
         'Brent Oil': 'BZ=F',
     }
     
@@ -2227,9 +2228,18 @@ def get_btc_cycle_metrics():
         print(f"      ⚠️  Error fetching BTC cycle metrics: {e}")
         return None
 
+CORRELATION_PEERS = ('NDX', 'GOLD', 'DXY', 'US10Y')
+
+
 def get_correlation_matrix():
-    """
-    Calculate 30-day rolling correlation of daily returns for BTC, Nasdaq, Gold, DXY, and 10Y Yield.
+    """BTC's correlation with four assets, over 30 and 90 days.
+
+    This used to be a full 5x5. Half of a symmetric matrix is its own mirror
+    and the diagonal is five ones, so twenty of the twenty-five cells were
+    either duplicated or known in advance — a quarter page spent on four
+    numbers. Only the BTC row is read in practice, so only the BTC row is
+    computed, and the space buys a second window instead: 30 days says what is
+    happening now, 90 says whether it is a change.
     """
     try:
         tickers = {
@@ -2237,37 +2247,47 @@ def get_correlation_matrix():
             'NDX': '^NDX',
             'GOLD': 'GC=F',
             'DXY': 'DX-Y.NYB',
-            'US10Y': '^TNX'
+            'US10Y': '^TNX',
         }
-        
+
         dfs = {}
         for name, ticker in tickers.items():
-            df = get_yfinance_data(ticker, period='35d')
+            df = get_yfinance_data(ticker, period='6mo')
             if not df.empty and 'Close' in df:
                 close_col = df['Close']
                 if isinstance(close_col, pd.DataFrame):
                     close_col = close_col.iloc[:, 0]
                 dfs[name] = close_col
-                
-        if len(dfs) < 5:
-            print("      ⚠️  Not all tickers available for correlation matrix.")
+
+        if 'BTC' not in dfs or len(dfs) < 2:
+            print("      ⚠️  Not enough tickers for the correlation row.")
             return None
-            
-        combined = pd.DataFrame(dfs)
-        combined = combined.ffill().dropna()
-        
-        returns = combined.pct_change(fill_method=None).dropna().tail(30)
-        corr = returns.corr()
-        
-        corr_dict = {}
-        for col in corr.columns:
-            corr_dict[col] = {}
-            for idx in corr.index:
-                corr_dict[col][idx] = round(float(corr.loc[idx, col]), 3)
-                
-        return corr_dict
+
+        combined = pd.DataFrame(dfs).ffill().dropna()
+        returns = combined.pct_change(fill_method=None).dropna()
+
+        row = {}
+        for peer in CORRELATION_PEERS:
+            if peer not in returns.columns:
+                # A peer we could not fetch is absent, not zero-correlated.
+                row[peer] = {'30d': None, '90d': None}
+                continue
+            entry = {}
+            for label, window in (('30d', 30), ('90d', 90)):
+                sample = returns.tail(window)
+                # Below about two thirds of the window the number is a small
+                # sample dressed as a statistic.
+                if len(sample) < window * 0.66:
+                    entry[label] = None
+                    continue
+                value = sample['BTC'].corr(sample[peer])
+                entry[label] = (None if value != value else round(float(value), 2))
+            row[peer] = entry
+
+        print(f"      ✅ BTC korelasyon satırı: {len(row)} varlık × 2 pencere")
+        return {'base': 'BTC', 'peers': row}
     except Exception as e:
-        print(f"      ⚠️  Error generating correlation matrix: {e}")
+        print(f"      ⚠️  Error generating correlation row: {e}")
         return None
 
 def get_etf_flows_history(limit=10, all_data=False, asset='btc'):

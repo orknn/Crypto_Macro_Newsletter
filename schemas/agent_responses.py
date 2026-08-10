@@ -163,3 +163,30 @@ _EXEC_LANG = _obj({
 # itself is not here — regime.py counts it from the tape before any model runs,
 # so the model argues the verdict rather than choosing it.
 EXEC_SUMMARY_SCHEMA = _obj({'tr': _EXEC_LANG, 'en': _EXEC_LANG})
+
+
+# Phase 5: news as transmission rather than summary.
+#
+# A headline restated is not analysis — the reader already saw the headline.
+# What they cannot see is the path from the event to their portfolio, so each
+# story carries the chain and this week's reading of it, and nothing else.
+_TRANSMISSION = _obj({
+    # "Petrol arzı → enflasyon → faiz → risk varlıkları"
+    'chain': _STR,
+    # What the tape currently says about that chain, with a figure.
+    'this_week': _STR,
+})
+
+NEWS_TRANSMISSION_SCHEMA = _obj({
+    'items': {
+        'type': 'array',
+        'items': _obj({
+            # Position in the headline list handed to the model. Explicit so a
+            # dropped item cannot slide every commentary onto the wrong story.
+            'index': _NUM,
+            'title': _STR,
+            'tr': _TRANSMISSION,
+            'en': _TRANSMISSION,
+        }),
+    },
+})

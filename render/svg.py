@@ -456,80 +456,56 @@ def generate_winners_losers_chart(winners, losers, width=600, height=180):
     '''
     return svg
 
-def generate_correlation_matrix_svg(corr_matrix, width=500, height=400):
-    """Draw a correlation matrix heatmap."""
-    if not corr_matrix:
-        return '<div style="color:var(--dim); text-align:center; padding:15px;">No correlation matrix data</div>'
-        
-    keys = list(corr_matrix.keys())
-    n = len(keys)
-    
-    padding_left = 60
-    padding_right = 10
-    padding_top = 40
-    padding_bottom = 20
-    
-    cell_w = (width - padding_left - padding_right) / n
-    cell_h = (height - padding_top - padding_bottom) / n
-    
-    svg_cells = []
-    
-    # Headers
-    for idx, key in enumerate(keys):
-        # Column header
-        col_x = padding_left + idx * cell_w + cell_w / 2
-        svg_cells.append(f'<text x="{col_x:.1f}" y="{padding_top - 10}" fill="var(--dim)" font-size="10" font-weight="600" text-anchor="middle" font-family="var(--sans)">{key}</text>')
-        # Row header
-        row_y = padding_top + idx * cell_h + cell_h / 2 + 3
-        svg_cells.append(f'<text x="{padding_left - 10}" y="{row_y:.1f}" fill="var(--dim)" font-size="10" font-weight="600" text-anchor="end" font-family="var(--sans)">{key}</text>')
-        
-    for r_idx, row_key in enumerate(keys):
-        for c_idx, col_key in enumerate(keys):
-            # A partial matrix is a real state — one leg of a pair can fail to
-            # fetch — and indexing it blind used to raise KeyError, which takes
-            # the whole bulletin down over one cell. The cell says N/A instead.
-            raw = (corr_matrix.get(row_key) or {}).get(col_key)
-            if not isinstance(raw, (int, float)) or isinstance(raw, bool):
-                cell_x = padding_left + c_idx * cell_w
-                cell_y = padding_top + r_idx * cell_h
-                svg_cells.append(
-                    f'<rect x="{cell_x:.1f}" y="{cell_y:.1f}" '
-                    f'width="{cell_w:.1f}" height="{cell_h:.1f}" '
-                    f'fill="var(--bg2)" stroke="var(--bg)" stroke-width="2"/>')
-                svg_cells.append(
-                    f'<text x="{cell_x + cell_w / 2:.1f}" '
-                    f'y="{cell_y + cell_h / 2 + 4:.1f}" fill="var(--dim)" '
-                    f'font-size="9" text-anchor="middle" opacity="0.65" '
-                    f'font-family="var(--mono)">N/A</text>')
-                continue
-            val = float(raw)
+def generate_correlation_matrix_svg(corr, width=600, lang='tr'):
+    """One row: BTC against four assets, 30d and 90d side by side.
 
-            # Color map based on correlation
-            # Green for positive, Red for negative, Neutral/opacity for near 0
-            abs_val = abs(val)
-            if val >= 0:
-                color = STYLE_TOKENS['colors']['green']
-            else:
-                color = STYLE_TOKENS['colors']['red']
-                
-            cell_x = padding_left + c_idx * cell_w
-            cell_y = padding_top + r_idx * cell_h
-            
-            # draw cell rectangle with opacity matching the strength of correlation
-            cell_opacity = max(0.04, abs_val * 0.9)
-            text_color = '#ffffff' if abs_val > 0.4 else 'var(--text)'
-            
-            svg_cells.append(f'''
-            <rect x="{cell_x + 1:.1f}" y="{cell_y + 1:.1f}" width="{cell_w - 2:.1f}" height="{cell_h - 2:.1f}" fill="{color}" opacity="{cell_opacity:.3f}" rx="2"/>
-            <text x="{cell_x + cell_w/2:.1f}" y="{cell_y + cell_h/2 + 3:.1f}" fill="{text_color}" font-size="9.5" font-family="var(--mono)" font-weight="700" text-anchor="middle">{val:+.2f}</text>
-            ''')
-            
-    svg = f'''
-    <svg width="100%" viewBox="0 0 {width} {height}" preserveAspectRatio="none" style="display:block; overflow:visible;">
-      {''.join(svg_cells)}
-    </svg>
-    '''
-    return svg
+    The old 5x5 grid spent a quarter page restating its own mirror image. This
+    keeps the four numbers anyone read and adds the second window that makes
+    them mean something — a 0.62 that was 0.31 a quarter ago is a different
+    fact from a 0.62 that has always been 0.62.
+    """
+    if not isinstance(corr, dict) or not corr.get('peers'):
+        return ('<div style="color:var(--dim); text-align:center; padding:15px;">'
+                'No correlation data</div>')
+
+    def band(value):
+        """Colour by strength, not by sign alone."""
+        if value is None:
+            return 'var(--dim)'
+        if value >= 0.5:
+            return STYLE_TOKENS['colors']['green']
+        if value <= -0.5:
+            return STYLE_TOKENS['colors']['red']
+        return STYLE_TOKENS['colors']['gold']
+
+    def cell(value):
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return ('<span style="color:var(--dim); opacity:0.65; '
+                    'font-family:var(--mono); font-size:13px;">N/A</span>')
+        return (f'<span style="color:{band(value)}; font-family:var(--mono); '
+                f'font-size:15px; font-weight:700;">{value:+.2f}</span>')
+
+    base = corr.get('base', 'BTC')
+    cols = []
+    for peer, windows in corr['peers'].items():
+        cols.append(f'''
+        <div style="flex:1; min-width:110px; background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:12px; text-align:center;">
+          <div style="font-size:9px; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:8px; font-weight:600;">{base} &times; {peer}</div>
+          <div style="display:flex; justify-content:center; gap:14px; align-items:baseline;">
+            <div>
+              <div style="font-size:8px; color:var(--dim); margin-bottom:2px;">30G</div>
+              {cell(windows.get('30d'))}
+            </div>
+            <div style="width:1px; height:22px; background:var(--border);"></div>
+            <div>
+              <div style="font-size:8px; color:var(--dim); margin-bottom:2px;">90G</div>
+              {cell(windows.get('90d'))}
+            </div>
+          </div>
+        </div>''')
+
+    return (f'<div style="display:flex; flex-wrap:wrap; gap:8px;">'
+            f'{"".join(cols)}</div>')
 
 def generate_cycle_heatmap_svg(heatmap, width=500, height=180):
     """Draw a monthly BTC returns heatmap table."""

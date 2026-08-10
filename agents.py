@@ -16,7 +16,8 @@ from schemas.agent_responses import (CONTENT_EDITOR_DAILY_SCHEMA,
                                      CONTENT_EDITOR_WEEKLY_SCHEMA,
                                      RESEARCH_DESK_SCHEMA,
                                      SECTION_ANALYSIS_SCHEMA,
-                                     EXEC_SUMMARY_SCHEMA)
+                                     EXEC_SUMMARY_SCHEMA,
+                                     NEWS_TRANSMISSION_SCHEMA)
 
 
 # How much more room a truncated call gets on its one retry. Generous on
@@ -1067,6 +1068,75 @@ def run_weekly_two_pass(data):
     if not pass_one:
         return {}, {}, {}
 
+    news_items = NewsTransmissionAgent().analyze(data)
     pass_two = ExecutiveSummaryAgent().analyze(data, pass_one)
     digest = build_digest(pass_one, data)
-    return assemble_weekly(pass_one, pass_two), pass_one, digest
+
+    assembled = assemble_weekly(pass_one, pass_two)
+    for lang in ('tr', 'en'):
+        assembled[lang]['news_transmission'] = [
+            {'title': item.get('title', ''),
+             **(item.get(lang) or {})}
+            for item in news_items
+        ]
+    return assembled, pass_one, digest
+
+
+NEWS_TRANSMISSION_SYSTEM_PROMPT = """Sen bir makro analistsin. Sana haftanın gerçek haber başlıkları verilir; her biri için haberin piyasaya ULAŞMA ZİNCİRİNİ yazarsın.
+
+Bu bir haber özeti DEĞİLDİR. Okuyucu başlığı zaten gördü. Göremediği şey, olayın onun portföyüne hangi yoldan geldiğidir.
+
+HER HABER İÇİN:
+- "index": Sana verilen listedeki sırasını AYNEN kopyala.
+- "title": Başlığı kısalt (2-4 kelime, örn: "Hormuz / İran").
+- "chain": İletim zinciri, ok işaretiyle. Örnek: "Petrol arzı → enflasyon → faiz → risk varlıkları". En fazla 4 halka.
+- "this_week": Zincirin BU HAFTA nerede olduğunu söyleyen tek cümle, İÇİNDE SANA VERİLEN VERİDEN BİR RAKAMLA. Örnek: "Brent 83,55$ (7g -%7,29) — piyasa manşet riskini fiyatlıyor, kalıcı arz şokunu fiyatlamıyor."
+
+KURALLAR:
+- Rakam UYDURMA. Sadece sana verilen piyasa verisindeki sayıları kullan; uygun sayı yoksa rakamsız yaz.
+- Piyasaya iletim yolu olmayan haberi ATLA — listede o maddeyi hiç döndürme. Genel piyasa yorumu ve listicle haberleri de atla.
+- Haber UYDURMA. Sadece sana verilen başlıklar için yaz.
+DİL: "tr" ve "en" aynı analizi anlatır; sayılar birebir aynı olmalıdır."""
+
+
+class NewsTransmissionAgent:
+    """Pass 1, news. One call for every headline, in transmission form."""
+
+    CONTEXT_KEYS = ('commodities', 'macro_indicators', 'macro_scoreboard',
+                    'fed_pricing', 'economic_calendar')
+
+    def analyze(self, data):
+        stories = (data.get('macro_news') or {}).get('news') or []
+        if not stories:
+            print("    ℹ️  Haber yok — iletim analizi atlanıyor.")
+            return []
+
+        headlines = [{'index': i, 'title': n.get('title'),
+                      'summary': n.get('summary')}
+                     for i, n in enumerate(stories)]
+        context = _trim_for_prompt(
+            {k: data.get(k) for k in self.CONTEXT_KEYS if data.get(k)},
+            edition='weekly')
+
+        user_prompt = f"""HAFTANIN HABERLERİ:
+{json.dumps(headlines, ensure_ascii=False, indent=2)}
+
+PİYASA VERİSİ (rakamları SADECE buradan alabilirsin):
+```json
+{json.dumps(context, ensure_ascii=False, indent=2, default=str)}
+```
+
+YANITINI SADECE JSON OLARAK VER."""
+
+        try:
+            raw = _call_with_retry(
+                NEWS_TRANSMISSION_SYSTEM_PROMPT, user_prompt, max_tokens=3000,
+                schema=NEWS_TRANSMISSION_SCHEMA, schema_name='news_transmission',
+                agent='Pass1/news_transmission', model=models.MODEL.NEWS_INSIGHT)
+            result = ContentEditorAgent()._parse_response(raw) or {}
+            items = [i for i in (result.get('items') or []) if isinstance(i, dict)]
+            print(f"    ✅ {len(items)}/{len(stories)} haber için iletim zinciri.")
+            return items
+        except Exception as e:
+            print(f"    ⚠️  Haber iletim analizi hatası: {e}")
+            return []
