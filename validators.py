@@ -584,6 +584,77 @@ def validate_ai_numbers(data, edition='weekly'):
     return data
 
 
+def rejected_overview_figures(data):
+    """The figures that cost the overview its place, for the retry prompt.
+
+    Read off the record validate_ai_numbers already wrote rather than
+    recomputed, so the retry is told about exactly what was rejected and not
+    about a second opinion.
+    """
+    rejected = (data.get('ai_validation') or {}).get('rejected') or []
+    figures = []
+    for entry in rejected:
+        if entry.get('field') == 'overview':
+            figure = entry.get('unmatched_value')
+            if figure and figure not in figures:
+                figures.append(figure)
+    return figures
+
+
+def audit_overview(data, langs, edition='weekly'):
+    """Hold a rewritten overview to the same two checks the first one failed.
+
+    The retry earns its place only if what comes back is audited as strictly as
+    what it replaces. A second attempt waved through on the grounds that it is
+    a second attempt would convert the quality gate from a guarantee into a
+    formality — and the failure it exists to catch, a figure the reader cannot
+    find, does not become acceptable for having been written twice.
+
+    Same pool, same tolerance, same blocklist as the first pass. An overview
+    that fails again is blanked again and the language keeps its place in
+    `overview_rejected`, so the gate fires exactly as it would have without any
+    of this. One that passes is cleared from the record, which is what lets the
+    mail go out.
+    """
+    pool = _collect_snapshot_numbers(prune_unrendered(data, edition=edition))
+    existing = data.get('ai_validation') or {}
+    still_rejected = set(existing.get('overview_rejected') or [])
+    recovered, failed = [], []
+
+    for lang in langs:
+        lang_data = data.get(lang)
+        if not isinstance(lang_data, dict):
+            continue
+        text = lang_data.get('overview')
+
+        phrases = blocklisted_phrases(text)
+        figures = _unsourced_figures(text, pool)
+        if phrases or figures:
+            fault = ', '.join(phrases + figures)
+            print(f"      ❌ {lang.upper()} yeniden yazılan genel değerlendirme "
+                  f"de geçemedi ({fault}) — gizlendi.")
+            lang_data['overview'] = None
+            still_rejected.add(lang)
+            failed.append(lang)
+            existing.setdefault('rejected', []).extend(
+                {'lang': lang, 'field': 'overview', 'unmatched_value': f}
+                for f in figures)
+        else:
+            print(f"      ✅ {lang.upper()} genel değerlendirme yeniden yazıldı "
+                  "ve denetimden geçti.")
+            still_rejected.discard(lang)
+            recovered.append(lang)
+
+    existing['overview_rejected'] = sorted(still_rejected)
+    existing['overview_retry'] = {
+        'attempted': sorted(langs),
+        'recovered': sorted(recovered),
+        'failed': sorted(failed),
+    }
+    data['ai_validation'] = existing
+    return data
+
+
 def validate_research_brief(brief, data):
     """Same check for the Research Desk, which runs after the editor.
 

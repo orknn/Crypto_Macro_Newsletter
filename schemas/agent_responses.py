@@ -190,3 +190,15 @@ NEWS_TRANSMISSION_SCHEMA = _obj({
         }),
     },
 })
+
+
+# The overview's second attempt, after the figure audit rejected the first.
+#
+# Deliberately the smallest schema in this file: the retry rewrites one field
+# and nothing else. Regenerating the whole bulletin to recover one paragraph
+# would put every note and insight that survived the audit back at risk, for
+# no gain — they were already checked and they already passed.
+OVERVIEW_RETRY_SCHEMA = _obj({
+    'tr': _obj({'overview': _STR}),
+    'en': _obj({'overview': _STR}),
+})

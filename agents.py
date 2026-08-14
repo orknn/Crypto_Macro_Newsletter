@@ -17,7 +17,8 @@ from schemas.agent_responses import (CONTENT_EDITOR_DAILY_SCHEMA,
                                      RESEARCH_DESK_SCHEMA,
                                      SECTION_ANALYSIS_SCHEMA,
                                      EXEC_SUMMARY_SCHEMA,
-                                     NEWS_TRANSMISSION_SCHEMA)
+                                     NEWS_TRANSMISSION_SCHEMA,
+                                     OVERVIEW_RETRY_SCHEMA)
 
 
 # How much more room a truncated call gets on its one retry. Generous on
@@ -662,6 +663,125 @@ YANITINI SADECE JSON OLARAK VER, başka metin ekleme. JSON içindeki metin alanl
             print(f"RAW TEXT WAS: {raw}")
             print("    ⚠️  AI yanıtı JSON olarak parse edilemedi, fallback kullanılıyor.")
             return {}
+
+
+OVERVIEW_RETRY_SYSTEM_PROMPT = """Sen, bir finans bülteninin Kıdemli İçerik Editörüsün.
+
+Bültenin GENEL DEĞERLENDİRME paragrafı yazıldı ve sayı denetiminden geçemedi:
+içinde, sana verilen veride karşılığı olmayan en az bir rakam vardı. O paragraf
+silindi. Görevin onu bir kez daha yazmak.
+
+Bu bir düzeltme değil, yeniden yazımdır: reddedilen rakamı "düzeltmeye"
+çalışma, doğru değerini tahmin etme. O rakamın ne olduğunu bilmiyorsun.
+
+MUTLAK KURALLAR:
+1. Yazdığın HER yüzde ve HER fiyat, sana aşağıda verilen veride birebir
+   bulunmalıdır. Veride olmayan hiçbir sayıyı yazma.
+2. REDDEDİLEN RAKAMLAR listesindeki değerleri bir daha kullanma.
+3. Bir hareketten emin değilsen sayıyı hiç yazma — yönü kelimeyle anlat
+   ("geriledi", "sınırlı toparlanma", "yatay seyretti"). Sayısız bir cümle,
+   uydurma rakamlı bir cümleden her zaman iyidir.
+4. Paragrafta hiç rakam olmaması kabul edilebilir bir sonuçtur.
+
+BİÇİM:
+- 4-6 cümlelik profesyonel bir özet paragrafı, tek parça metin.
+- Verilen rejimi savunur, onunla çelişmez.
+- <strong> ve <span class='highlight'> etiketleri kullanılabilir.
+- tr ve en aynı analizi anlatır; motamot çeviri şart değil, ama iki dildeki
+  SAYILAR birebir aynı olmalıdır.
+
+ÇIKTI JSON ŞEMASI:
+{"tr": {"overview": "..."}, "en": {"overview": "..."}}
+"""
+
+
+class OverviewRetryAgent:
+    """Rewrites the overview once, after the figure audit rejected the first.
+
+    The overview is the only generated field with no graceful degradation. A
+    note that fails the audit is hidden, an insight is blanked, a theme is
+    dropped — the bulletin ships without them. The overview instead trips the
+    content quality gate, which skips the mail and fails the run, so a single
+    invented percentage costs subscribers the whole day's bulletin. That is
+    what happened on 13 Aug: the model wrote %4,8, no fetched number was within
+    tolerance of it, and both editions went unsent.
+
+    Failing there is right — publishing the figure would be worse. But failing
+    there *without asking again* is not, because the fault is not in the data.
+    Nothing was missing and nothing was stale; the writer simply wrote a number
+    it should not have. That is the class of failure a second attempt fixes,
+    and this pipeline already accepts that reasoning elsewhere: a truncated
+    response is retried with a larger budget for exactly the same reason.
+
+    One attempt, not a loop. If the second overview also quotes an unsourced
+    figure, the model is wrong about the data in a way that repetition will not
+    settle, and the gate does its original job.
+
+    The retry is told which figures were rejected and forbidden from reusing
+    them, because a bare "try again" over an unchanged prompt is a coin flip.
+    It is also told, explicitly, that a paragraph with no numbers at all is an
+    acceptable answer — the failure mode being escaped is a model that reaches
+    for a figure it does not have.
+    """
+
+    def analyze(self, data, langs, rejected_figures, edition='daily'):
+        """Return {lang: overview} for the languages that came back clean.
+
+        Languages absent from the result keep their blanked overview, so a
+        partial success is honoured: TR recovering while EN does not is a
+        better outcome than discarding both.
+        """
+        if not llm_available():
+            print(f"    ⚠️  {llm.api_key_env()} yok — genel değerlendirme yeniden denenmiyor.")
+            return {}
+
+        # Each edition's retry sees exactly what that edition's writer saw. For
+        # the weekly that is the digest, never the raw payload — page one is
+        # not allowed to reach past the sections below it on a retry any more
+        # than it was on the first pass.
+        if edition == 'weekly':
+            payload = data.get('_digest')
+            model = models.MODEL.EXEC_SUMMARY
+            if not payload:
+                print("    ⚠️  Digest yok — genel değerlendirme yeniden denenmiyor.")
+                return {}
+        else:
+            payload = _prepare_data_summary(data, edition=edition)
+            model = models.MODEL.DAILY_EDITOR
+
+        user_prompt = f"""HESAPLANMIŞ PİYASA REJİMİ: {data.get('regime', 'NEUTRAL')}
+
+REDDEDİLEN RAKAMLAR (bunlar veride yok — bir daha yazma):
+{json.dumps(rejected_figures, ensure_ascii=False)}
+
+YENİDEN YAZILACAK DİLLER: {', '.join(langs)}
+
+Yazabileceğin TÜM sayılar aşağıdaki veridedir. Burada olmayan bir sayı yazma.
+
+```json
+{json.dumps(payload, ensure_ascii=False, indent=2, default=str)}
+```
+
+YANITINI SADECE JSON OLARAK VER."""
+
+        print(f"    ↻ Genel değerlendirme yeniden yazılıyor ({model}) — "
+              f"reddedilen: {', '.join(rejected_figures)}")
+        try:
+            raw = _call_with_retry(
+                OVERVIEW_RETRY_SYSTEM_PROMPT, user_prompt, max_tokens=2000,
+                schema=OVERVIEW_RETRY_SCHEMA, schema_name='overview_retry',
+                agent=f'OverviewRetry/{edition}', model=model)
+            parsed = ContentEditorAgent()._parse_response(raw) or {}
+        except Exception as e:
+            print(f"    ⚠️  Genel değerlendirme yeniden yazılamadı: {e}")
+            return {}
+
+        out = {}
+        for lang in langs:
+            text = (parsed.get(lang) or {}).get('overview')
+            if isinstance(text, str) and text.strip():
+                out[lang] = text.strip()
+        return out
 
 
 class ResearchDeskAgent:

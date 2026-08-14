@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import subprocess
 from datetime import datetime, timedelta
+from unittest.mock import patch
 from data_fetcher import normalize_funding, calculate_oi_change_from_snapshots
 import validators
 import signals
@@ -1320,6 +1321,188 @@ class CompressionAndLayoutTests(unittest.TestCase):
 
         self.assertIn('İyi haber', body)
         self.assertNotIn('Zincirsiz haber', body)
+
+
+class OverviewRetryTests(unittest.TestCase):
+    """The 13 Aug incident: one invented figure, no bulletin.
+
+    The model wrote %4,8 into the overview, no fetched number was within
+    tolerance of it, the audit blanked the paragraph and the content quality
+    gate skipped the mail — for both languages, on a day when every feed had
+    worked and every other section was fine.
+
+    These tests hold the two halves of the fix apart: the rewrite must be
+    audited exactly as strictly as the draft it replaces, and the gate must
+    still fire when the rewrite fails too. No test here calls a model.
+    """
+
+    # 4.8 is deliberately absent from this payload, 2.27 deliberately present.
+    @staticmethod
+    def _data(tr_overview, en_overview='Bitcoin rose 2.27% on the day.'):
+        return {
+            'crypto_prices': [{'Symbol': 'BTC', 'Current Price USD': 65210,
+                               'Change 24h %': 2.27}],
+            'fear_and_greed': {'value': 61, 'classification': 'Greed'},
+            'tr': {'overview': tr_overview},
+            'en': {'overview': en_overview},
+        }
+
+    def test_the_figure_that_shipped_is_rejected(self):
+        data = self._data('Bitcoin günü <strong>%4,8</strong> yükselişle kapattı.')
+        validators.validate_ai_numbers(data, edition='daily')
+
+        self.assertIsNone(data['tr']['overview'])
+        self.assertIn('tr', data['ai_validation']['overview_rejected'])
+
+    def test_rejected_figures_reach_the_retry(self):
+        """A bare 'try again' over an unchanged prompt is a coin flip."""
+        data = self._data('Bitcoin %4,8 yükseldi.', 'Bitcoin rose 4.8%.')
+        validators.validate_ai_numbers(data, edition='daily')
+
+        figures = validators.rejected_overview_figures(data)
+        self.assertIn('%4,8', figures)
+        self.assertIn('4.8%', figures)
+
+    def test_clean_rewrite_clears_the_gate(self):
+        data = self._data('Bitcoin %4,8 yükseldi.')
+        validators.validate_ai_numbers(data, edition='daily')
+
+        data['tr']['overview'] = 'Bitcoin günü %2,27 yükselişle kapattı.'
+        validators.audit_overview(data, langs=['tr'], edition='daily')
+
+        self.assertEqual(data['ai_validation']['overview_rejected'], [])
+        self.assertEqual(data['ai_validation']['overview_retry']['recovered'], ['tr'])
+        self.assertTrue(data['tr']['overview'])
+
+    def test_numberless_rewrite_is_accepted(self):
+        """The prompt offers this as a way out, so the audit must allow it."""
+        data = self._data('Bitcoin %4,8 yükseldi.')
+        validators.validate_ai_numbers(data, edition='daily')
+
+        data['tr']['overview'] = 'Bitcoin günü sınırlı bir yükselişle kapattı.'
+        validators.audit_overview(data, langs=['tr'], edition='daily')
+
+        self.assertEqual(data['ai_validation']['overview_rejected'], [])
+
+    def test_second_invented_figure_fails_again(self):
+        """One attempt, not a loop — the gate keeps its original job."""
+        data = self._data('Bitcoin %4,8 yükseldi.')
+        validators.validate_ai_numbers(data, edition='daily')
+
+        data['tr']['overview'] = 'Bitcoin %9,1 yükseldi.'
+        validators.audit_overview(data, langs=['tr'], edition='daily')
+
+        self.assertIsNone(data['tr']['overview'])
+        self.assertIn('tr', data['ai_validation']['overview_rejected'])
+        self.assertEqual(data['ai_validation']['overview_retry']['failed'], ['tr'])
+
+    def test_rewrite_is_held_to_the_blocklist_too(self):
+        data = self._data('Bitcoin %4,8 yükseldi.')
+        validators.validate_ai_numbers(data, edition='daily')
+
+        data['tr']['overview'] = BlocklistTests.LEAKED
+        validators.audit_overview(data, langs=['tr'], edition='daily')
+
+        self.assertIsNone(data['tr']['overview'])
+        self.assertIn('tr', data['ai_validation']['overview_rejected'])
+
+    def test_partial_recovery_is_honoured(self):
+        """TR back while EN stays lost beats discarding both."""
+        data = self._data('Bitcoin %4,8 yükseldi.', 'Bitcoin rose 4.8%.')
+        validators.validate_ai_numbers(data, edition='daily')
+
+        data['tr']['overview'] = 'Bitcoin %2,27 yükseldi.'
+        data['en']['overview'] = 'Bitcoin rose 7.4%.'
+        validators.audit_overview(data, langs=['tr', 'en'], edition='daily')
+
+        self.assertTrue(data['tr']['overview'])
+        self.assertIsNone(data['en']['overview'])
+        self.assertEqual(data['ai_validation']['overview_rejected'], ['en'])
+
+    # ── the agent, with the model stubbed out ────────────────────────
+
+    def test_agent_asks_only_for_the_lost_languages(self):
+        import agents
+
+        captured = {}
+
+        def fake_call(system_prompt, user_prompt, **kwargs):
+            captured['user'] = user_prompt
+            captured['model'] = kwargs.get('model')
+            return json.dumps({'tr': {'overview': 'Yeniden yazıldı.'},
+                               'en': {'overview': 'Rewritten.'}})
+
+        with patch.object(agents, 'llm_available', return_value=True), \
+             patch.object(agents, '_call_with_retry', side_effect=fake_call):
+            out = agents.OverviewRetryAgent().analyze(
+                self._data('x'), langs=['tr'], rejected_figures=['%4,8'],
+                edition='daily')
+
+        self.assertEqual(list(out), ['tr'])
+        # The forbidden figure has to be in the prompt or the retry is blind.
+        self.assertIn('%4,8', captured['user'])
+        # Daily stays on the fast tier; a recovery call must not silently
+        # reroute the edition to the flagship.
+        self.assertEqual(captured['model'], 'gpt-5.6-luna')
+
+    def test_agent_returns_nothing_without_a_key(self):
+        import agents
+
+        with patch.object(agents, 'llm_available', return_value=False):
+            out = agents.OverviewRetryAgent().analyze(
+                self._data('x'), langs=['tr'], rejected_figures=['%4,8'],
+                edition='daily')
+
+        self.assertEqual(out, {})
+
+    def test_agent_survives_a_model_error(self):
+        """A failed retry leaves the gate to fail the run, not the exception."""
+        import agents
+
+        with patch.object(agents, 'llm_available', return_value=True), \
+             patch.object(agents, '_call_with_retry',
+                          side_effect=RuntimeError('502 upstream')):
+            out = agents.OverviewRetryAgent().analyze(
+                self._data('x'), langs=['tr'], rejected_figures=['%4,8'],
+                edition='daily')
+
+        self.assertEqual(out, {})
+
+    def test_weekly_retry_sees_the_digest_not_the_payload(self):
+        """Page one may not reach past its sections on a retry either."""
+        import agents
+
+        captured = {}
+
+        def fake_call(system_prompt, user_prompt, **kwargs):
+            captured['user'] = user_prompt
+            captured['model'] = kwargs.get('model')
+            return json.dumps({'tr': {'overview': 'Yeniden yazıldı.'}})
+
+        data = self._data('x')
+        data['_digest'] = {'btc_change': 2.27}
+        data['secret_unrendered_number'] = 4.8
+
+        with patch.object(agents, 'llm_available', return_value=True), \
+             patch.object(agents, '_call_with_retry', side_effect=fake_call):
+            agents.OverviewRetryAgent().analyze(
+                data, langs=['tr'], rejected_figures=['%4,8'], edition='weekly')
+
+        self.assertIn('btc_change', captured['user'])
+        self.assertNotIn('secret_unrendered_number', captured['user'])
+        self.assertEqual(captured['model'], 'gpt-5.6-sol')
+
+    def test_weekly_without_a_digest_does_not_retry(self):
+        import agents
+
+        with patch.object(agents, 'llm_available', return_value=True), \
+             patch.object(agents, '_call_with_retry') as call:
+            out = agents.OverviewRetryAgent().analyze(
+                self._data('x'), langs=['tr'], rejected_figures=['%4,8'],
+                edition='weekly')
+
+        self.assertEqual(out, {})
+        call.assert_not_called()
 
 
 if __name__ == '__main__':

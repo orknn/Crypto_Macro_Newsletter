@@ -26,7 +26,7 @@ from data_fetcher import (
     get_options_market_data, get_eth_etf_flows, get_rates_and_breakevens,
     get_nfci, get_fed_pricing, get_eth_btc_ratio, get_trending_coins
 )
-from agents import (ContentEditorAgent, ResearchDeskAgent,
+from agents import (ContentEditorAgent, OverviewRetryAgent, ResearchDeskAgent,
                     run_weekly_two_pass)
 import validators
 from regime import compute_regime
@@ -665,6 +665,28 @@ def run_pipeline():
             print("  → Running AI number consistency checks...")
             data = validators.validate_ai_numbers(data, edition=edition)
 
+            # One rewrite for the only field the audit cannot degrade
+            # gracefully. Notes hide, insights blank, themes drop — the
+            # bulletin ships without them. A rejected overview instead trips
+            # the quality gate and costs subscribers the entire day's mail, so
+            # it is worth one more call before accepting that. Runs before the
+            # weekly gates below, because verify_exec_summary_numbers reads the
+            # overview and must see the text that will actually be published.
+            _lost = list((data.get('ai_validation') or {}).get('overview_rejected') or [])
+            if _lost:
+                rewritten = OverviewRetryAgent().analyze(
+                    data,
+                    langs=_lost,
+                    rejected_figures=validators.rejected_overview_figures(data),
+                    edition=edition)
+                if rewritten:
+                    for _lang, _text in rewritten.items():
+                        data[_lang]['overview'] = _text
+                    data = validators.audit_overview(
+                        data, langs=list(rewritten), edition=edition)
+                else:
+                    print("    ⚠️  Yeniden yazım boş döndü — kalite kapısı devrede.")
+
             # Phase 2.5 gates. Both fail the build rather than being logged:
             # a figure page one invented, or a theme resting on a metric no
             # section produced, are not defects a reader can route around.
@@ -783,7 +805,14 @@ def run_pipeline():
         # payload never contained is a different incident from one the model
         # never wrote, and the log should not make them look alike.
         if 'tr' in (data.get('ai_validation') or {}).get('overview_rejected', []):
-            quality_failures.append("TR genel değerlendirme denetimde reddedildi (veride olmayan rakam)")
+            # Whether the rewrite was tried matters more than the rejection by
+            # now: a gate that fires after two independent attempts is a model
+            # that will not stop quoting a figure it does not have, which is a
+            # different thing to look into than a single bad draft.
+            _retry = (data.get('ai_validation') or {}).get('overview_retry') or {}
+            _twice = ' (yeniden yazım da geçemedi)' if 'tr' in (_retry.get('failed') or []) else ''
+            quality_failures.append(
+                f"TR genel değerlendirme denetimde reddedildi (veride olmayan rakam){_twice}")
         else:
             quality_failures.append("TR genel değerlendirme boş")
     if not (data.get('fear_and_greed') or {}).get('value'):
