@@ -49,3 +49,9 @@ out/research_brief_daily.json
 
 # Per-run LLM cost log (collected from the CI artifact, not source)
 logs/
+
+# Per-run build report (phase 1 validation layer)
+build_report.json
+
+# Local render/demo artifacts
+out/

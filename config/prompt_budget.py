@@ -69,3 +69,71 @@ PROMPT_SERIES_CAPS_WEEKLY = {
 # tokens plus one TR and one EN insight in the response, so this knob moves
 # both sides of the bill. data_fetcher applies it during selection.
 MAX_NEWS_ITEMS = 5
+
+
+# ═══════════════════════════════════════════════════════════════════
+# What the Weekly page does NOT print
+# ═══════════════════════════════════════════════════════════════════
+#
+# Two of the nine defects in the 8 Aug bulletin were the same defect: the model
+# quoted a figure that was real, was in the payload, and was nowhere on the
+# page. The note said "max pain 70.000$" (the quarterly strike) while the table
+# printed 65.000$ (the nearest expiry); another note cited "put/call 0,575",
+# which the weekly edition renders nowhere at all.
+#
+# Neither could be caught by checking prose against the payload, because the
+# payload contained both numbers. The check has to be against what was printed.
+#
+# So this list is the difference between the two, and it is used twice: to
+# decide what the model is shown, and to decide what its figures are checked
+# against. One list, so the two can never drift apart.
+WEEKLY_UNRENDERED_PATHS = (
+    # Deribit: the weekly page prints only the 25Δ risk reversal and the
+    # per-expiry max pain table. The quarterly strike, put/call, DVOL and total
+    # OI are daily-edition tiles.
+    'options_data.max_pain_price',
+    'options_data.put_call_ratio',
+    'options_data.dvol_index',
+    'options_data.dvol_change_24h',
+    'options_data.open_interest_btc',
+    # A verdict string the model could quote back as a finding of its own.
+    'crypto_futures_basis.sentiment',
+    # Macro tiles the weekly scoreboard does not carry.
+    'macro_scoreboard.M2',
+    'macro_scoreboard.M2_chg',
+    'macro_indicators.NASDAQ 100 Futures',
+    'macro_indicators.NASDAQ 100 Futures_chg',
+    'macro_indicators.SMH (Semiconductor ETF)',
+    'macro_indicators.SMH (Semiconductor ETF)_chg',
+    # Weekly charts liquidity as the Fed net-liquidity and NFCI series; the
+    # single-point WALCL and M2 readings belong to the daily edition.
+    'global_liquidity',
+    'm2_money_supply',
+    'stablecoin_data',
+    # The rotation card shows the 7-day move only.
+    'eth_btc.chg_24h',
+)
+
+UNRENDERED_PATHS = {'weekly': WEEKLY_UNRENDERED_PATHS, 'daily': ()}
+
+
+def prune_unrendered(payload, edition='weekly'):
+    """A copy of `payload` without the fields that edition never prints.
+
+    Returns a new dict; nested holders are copied only where something is
+    actually removed, so the cost is proportional to the list above rather
+    than to the payload.
+    """
+    pruned = dict(payload)
+    for path in UNRENDERED_PATHS.get(edition, ()):
+        parts = path.split('.')
+        if len(parts) == 1:
+            pruned.pop(parts[0], None)
+            continue
+        holder = pruned.get(parts[0])
+        if not isinstance(holder, dict) or parts[1] not in holder:
+            continue
+        holder = dict(holder)
+        holder.pop(parts[1], None)
+        pruned[parts[0]] = holder
+    return pruned

@@ -95,6 +95,33 @@ STR = {
         "en": "Positive values indicate US institutional buying pressure. Sustained positive premium is a bullish signal for BTC."
     },
     "analyst_note": {"tr": "Analist Notu", "en": "Analyst Note"},
+    # An analyst note is two sentences with different jobs. The second one is
+    # the product; the first is context for it.
+    "note_what": {"tr": "Ne oldu", "en": "What happened"},
+    "note_so_what": {"tr": "Ne demek", "en": "What it means"},
+    "section_conflicts": {"tr": "ÇELİŞEN SİNYALLER", "en": "CONFLICTING SIGNALS"},
+    "conflict_unresolved": {
+        "tr": "Çelişki devam ediyor — iki ölçüm farklı yöne işaret etmeye sürüyor "
+              "ve elimizde bunu açıklayan bir mekanizma yok.",
+        "en": "The conflict stands — the two readings still point opposite ways "
+              "and we have no mechanism that explains it.",
+    },
+    "conflict_reads": {"tr": "Okuma", "en": "Reading"},
+    "prev_week": {"tr": "Önceki hafta", "en": "Previous week"},
+    "flow_context": {"tr": "Bağlam", "en": "Context"},
+    "best": {"tr": "en iyi", "en": "best"},
+    "worst": {"tr": "en kötü", "en": "worst"},
+    "section_rotation_merged": {"tr": "ROTASYON", "en": "ROTATION"},
+    "section_week_in_one_minute": {"tr": "HAFTA BİR DAKİKADA", "en": "WEEK IN ONE MINUTE"},
+    "section_macro_regime": {"tr": "MAKRO REJİM", "en": "MACRO REGIME"},
+    "section_what_matters_next": {"tr": "ÖNÜMÜZDEKİ HAFTA NE ÖNEMLİ", "en": "WHAT MATTERS NEXT"},
+    "section_cross_asset": {"tr": "VARLIKLAR ARASI", "en": "CROSS-ASSET"},
+    "section_crypto_flows": {"tr": "KRİPTO AKIŞLARI", "en": "CRYPTO FLOWS"},
+    "section_crypto_market": {"tr": "KRİPTO PİYASASI", "en": "CRYPTO MARKET"},
+    "section_btc_regime": {"tr": "BTC REJİMİ", "en": "BTC REGIME"},
+    "section_themes_risks": {"tr": "TEMALAR & RİSKLER", "en": "THEMES / RISKS"},
+    "news_chain": {"tr": "Zincir", "en": "Chain"},
+    "news_this_week": {"tr": "Bu hafta", "en": "This week"},
     "outlook_strategy": {"tr": "Haftalık Görünüm & Strateji", "en": "Weekly Outlook & Strategy"},
     
     # Footers
@@ -132,6 +159,14 @@ STR = {
     "chart_correlation_title": {"tr": "Makro & Kripto Varlık Korelasyon Matrisi (30 Günlük Getiriler)", "en": "Macro & Crypto Assets Correlation Matrix (30-Day Rolling Daily Returns)"},
     "chart_ytd_title": {"tr": "BTC vs NDX vs ALTIN (Yılbaşından Bugüne Getiri)", "en": "BTC vs NDX vs GOLD (YTD Performance)"},
     "label_realtime": {"tr": "Anlık", "en": "Real-time"},
+    # Sub-line for tiles that show a state rather than a move. Prevents a level
+    # being dressed up as a change just because the tile has a second row.
+    "label_level": {"tr": "seviye", "en": "level"},
+    # The single cut every price and rate in the bulletin was taken at.
+    "data_cutoff": {"tr": "Veri kesim", "en": "Data cut"},
+    # A series published on its own schedule carries its own observation date,
+    # because the run's cut says nothing about when a weekly release last moved.
+    "series_as_of": {"tr": "seri tarihi", "en": "series date"},
     "card_volume": {"tr": "24s TOPLAM HACİM", "en": "24H TOTAL VOLUME"},
 
     # Phase 4: new data points
@@ -147,7 +182,12 @@ STR = {
     "fed_days_left": {"tr": "gün kaldı", "en": "days away"},
     "fed_dots": {"tr": "Medyan Nokta Tahmini", "en": "Median Dot"},
     "fed_cut_odds": {"tr": "Faiz İndirim İhtimali", "en": "Rate Cut Odds"},
+    # Copper/gold is a growth-vs-safety gauge, so the label must follow the
+    # ratio's direction. It used to be a constant, and a -5.75% week still read
+    # "büyüme sinyali" — the opposite of what the number said.
     "growth_signal": {"tr": "büyüme sinyali", "en": "growth signal"},
+    "growth_slowdown_signal": {"tr": "büyüme yavaşlama sinyali",
+                               "en": "growth slowdown signal"},
     "section_hype_radar": {"tr": "HYPE RADARI", "en": "Hype Radar"},
     "col_mcap_rank": {"tr": "MCap Sırası", "en": "MCap Rank"},
     "hype_radar_hint": {

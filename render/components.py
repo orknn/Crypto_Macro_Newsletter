@@ -14,6 +14,19 @@ from render.themes import apply_theme
 def _na(v):
     return v is None or (isinstance(v, float) and v != v)
 
+
+# Every absent number prints this and nothing else. Not 0.0, which claims a
+# measurement; not an em dash, which is ambiguous between "zero", "not
+# applicable" and "we could not reach the feed". The title attribute carries
+# the reason to anyone hovering the HTML edition; the PDF keeps the grey.
+NA_TOOLTIP = {'tr': 'Veri alınamadı', 'en': 'Data unavailable'}
+
+
+def na(lang='tr'):
+    """The one rendering of a missing value."""
+    return (f'<span class="na" title="{NA_TOOLTIP.get(lang, NA_TOOLTIP["en"])}">'
+            f'N/A</span>')
+
 def maybe(template, value):
     """
     Layout guard: returns rendered template only if value is truthy and not literal 'None'.
@@ -27,9 +40,9 @@ def maybe(template, value):
             return ""
     return template
 
-def _fmt_price(price, fmt="price2"):
+def _fmt_price(price, fmt="price2", lang="tr"):
     if _na(price) or price == 0:
-        return "—"
+        return na(lang)
     if fmt == "index":
         return f"{price:,.0f}" if price >= 1000 else f"{price:.2f}"
     if fmt == "fx4":
@@ -51,9 +64,9 @@ def _fmt_price(price, fmt="price2"):
         return f"{price:.2f}%"
     return f"{price:.2f}"
 
-def _fmt_change(val):
+def _fmt_change(val, lang="tr"):
     if _na(val):
-        return "—", ""
+        return na(lang), ""
     # A flat asset rounds to 0.00 — printing it green with ▲ read as a gain.
     if abs(val) < 0.005:
         return "● 0.00%", ""
@@ -62,10 +75,10 @@ def _fmt_change(val):
     arrow = "▲" if val > 0 else "▼"
     return f"{arrow} {sign}{val:.2f}%", cls
 
-def _fmt_funding(val):
+def _fmt_funding(val, lang="tr"):
     """Funding rates live around ±0.01%; two decimals would render as +0.00%."""
     if _na(val):
-        return "—", ""
+        return na(lang), ""
     sign = "+" if val >= 0 else ""
     cls = "up" if val >= 0 else "down"
     arrow = "▲" if val >= 0 else "▼"
@@ -174,6 +187,15 @@ def html_wrapper(title, content, accent_color="#3b82f6", lang="tr", is_weekly=Fa
     
     .up {{ color: var(--green); }}
     .down {{ color: var(--red); }}
+    /* Missing data. Deliberately the dimmest thing on the page and never
+       coloured up/down — an absent number must not read as a flat one. */
+    .na {{
+        color: var(--dim);
+        opacity: 0.65;
+        font-style: normal;
+        letter-spacing: 0.5px;
+        cursor: help;
+    }}
     
     /* Tables */
     /* Wide tables scroll inside their own box so the page body never
@@ -390,10 +412,98 @@ def html_wrapper(title, content, accent_color="#3b82f6", lang="tr", is_weekly=Fa
 '''
     return apply_theme(base_html, theme)
 
-def render_header(title, sub_title, accent_color, fng_data=None, lang='tr'):
+def format_as_of(as_of, lang='tr'):
+    """The run's data cut, in Istanbul time, as the header prints it.
+
+    Rendering time is not the cut. The two differ by however long the run takes
+    — minutes on a good day, and considerably more when a feed is retrying —
+    and the header used to print the former while the numbers described the
+    latter.
+    """
+    if not as_of:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+        stamp = datetime.fromisoformat(str(as_of))
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=ZoneInfo('UTC'))
+        local = stamp.astimezone(ZoneInfo('Europe/Istanbul'))
+    except Exception:
+        return None
+    suffix = 'TSİ' if lang == 'tr' else 'TRT'
+    return f"{STR['data_cutoff'][lang]}: {local:%Y-%m-%d %H:%M} {suffix}"
+
+
+def series_as_of_label(date_str, lang='tr'):
+    """Suffix for a chart whose series is published on its own schedule."""
+    if not date_str:
+        return ''
+    return (f' <span style="font-weight:400; color:var(--dim); font-size:10px;">'
+            f'· {STR["series_as_of"][lang]} {date_str}</span>')
+
+
+def normalize_note(note):
+    """A note as {what, so_what}, or None if it cannot be published.
+
+    Accepts the legacy free-text shape so the daily edition and stored
+    snapshots keep working: a plain string becomes `what` with no `so_what`,
+    which the caller will then reject. That is the intended outcome — an old
+    single-sentence note is exactly the thing this structure replaces.
+    """
+    if isinstance(note, dict):
+        what = (note.get('what') or '').strip()
+        so_what = (note.get('so_what') or '').strip()
+    elif isinstance(note, str):
+        what, so_what = note.strip(), ''
+    else:
+        return None
+
+    if what in ('', 'None', 'null'):
+        what = ''
+    if so_what in ('', 'None', 'null'):
+        so_what = ''
+    if not what and not so_what:
+        return None
+    return {'what': what, 'so_what': so_what}
+
+
+def render_analyst_note(note, lang='tr', accent='var(--accent)'):
+    """The two-line analyst note, or '' when there is nothing publishable.
+
+    An empty `so_what` returns '' rather than printing the `what` line alone.
+    A sentence that restates the number the reader just looked at is not
+    analysis, and printing it under a heading that says "Analist Notu" claims
+    otherwise.
+    """
+    normalized = normalize_note(note)
+    if not normalized or not normalized['so_what']:
+        return ''
+
+    what_html = ''
+    if normalized['what']:
+        what_html = (f'<div style="margin-bottom:6px;"><strong style="color:var(--dim); '
+                     f'font-weight:600;">{STR["note_what"][lang]}:</strong> '
+                     f'{normalized["what"]}</div>')
+
+    return (f'<div style="font-family:var(--sans); font-size:11.5px; '
+            f'color:var(--dim); line-height:1.6; margin-bottom:24px; '
+            f'background:var(--bg2); padding:12px 16px; border-left:3px solid '
+            f'{accent}; border-radius:0 4px 4px 0; page-break-inside:avoid; '
+            f'break-inside:avoid;">{what_html}'
+            f'<div><strong style="color:var(--text); font-weight:600;">'
+            f'{STR["note_so_what"][lang]}:</strong> {normalized["so_what"]}</div>'
+            f'</div>')
+
+
+def render_header(title, sub_title, accent_color, fng_data=None, lang='tr',
+                  as_of=None):
     """Render the premium header section with optional Fear & Greed index indicator."""
     now = datetime.now()
     date_str = format_bulletin_date(now, lang)
+    cutoff = format_as_of(as_of, lang)
+    cutoff_html = (f'<div style="font-family:var(--mono); font-size:9.5px; '
+                   f'color:var(--dim); margin-bottom:8px;">{cutoff}</div>'
+                   if cutoff else '')
     
     fng_html = ""
     if fng_data:
@@ -429,7 +539,8 @@ def render_header(title, sub_title, accent_color, fng_data=None, lang='tr'):
           <div style="font-family:var(--sans); font-size:11px; color:var(--dim); font-style:italic;">{sub_title}</div>
         </td>
         <td align="right" style="vertical-align:bottom; text-align:right;">
-          <div style="font-family:var(--mono); font-size:11px; font-weight:600; color:var(--text); margin-bottom:8px;">{date_str}</div>
+          <div style="font-family:var(--mono); font-size:11px; font-weight:600; color:var(--text); margin-bottom:4px;">{date_str}</div>
+          {cutoff_html}
           {fng_html}
         </td>
       </tr>
@@ -607,9 +718,12 @@ def render_economic_calendar(events, lang='tr'):
         forecast = ev.get('forecast')
         previous = ev.get('previous')
         
-        disp_actual = "" if actual == "" else ("—" if (actual is None or actual == 'None') else actual)
-        disp_forecast = "—" if (forecast is None or forecast == "" or forecast == 'None') else forecast
-        disp_previous = "—" if (previous is None or previous == "" or previous == 'None') else previous
+        # An event that has not printed yet has a genuinely empty actual — that
+        # is "not released", not "not fetched", so it stays blank. A forecast or
+        # previous that is missing is data we failed to get, and says N/A.
+        disp_actual = "" if actual == "" else (na(lang) if (actual is None or actual == 'None') else actual)
+        disp_forecast = na(lang) if (forecast is None or forecast == "" or forecast == 'None') else forecast
+        disp_previous = na(lang) if (previous is None or previous == "" or previous == 'None') else previous
         
         actual_style = 'color:var(--dim);'
         if actual is not None and actual != "" and actual != 'None' and actual != '—':
@@ -737,7 +851,7 @@ def render_asset_table(assets, type_name, lang='tr', sparklines=None):
 
             # Real 7-day price sparkline (keyed by the raw ticker, e.g. 'GC=F')
             history = sparklines.get(raw_symbol, [])
-            mom_svg = generate_sparkline(history, width=50, height=14) if len(history) >= 2 else '<span style="color:var(--dim);">—</span>'
+            mom_svg = generate_sparkline(history, width=50, height=14) if len(history) >= 2 else na(lang)
 
             rows.append(f'''
             <tr>
@@ -940,7 +1054,7 @@ def render_coinbase_premium_card(cp_data, period_label="7D", lang="tr"):
     if current is None:
         signal_text = STR['signal_neutral'][lang]
         signal_cls = 'color: var(--dim);'
-        current_str = '—'
+        current_str = na(lang)
     elif current > 0:
         signal_text = STR['signal_buying_active'][lang]
         signal_cls = 'color: var(--green); font-weight: 600;'

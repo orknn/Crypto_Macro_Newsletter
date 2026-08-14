@@ -14,12 +14,86 @@ from render.components import (
     html_wrapper, render_header, render_ticker, render_regime_strip,
     render_section_divider, render_economic_calendar, render_asset_table,
     render_news_section, render_footer, _fmt_change, _fmt_price, _fmt_funding,
-    render_coinbase_premium_card, maybe, render_fed_strip
+    render_coinbase_premium_card, maybe, render_fed_strip, na, _na,
+    series_as_of_label, render_analyst_note, normalize_note
 )
 from render.i18n import STR, tr_upper
 
-def fmt_notional(val):
-    if not val: return '—'
+# A data section whose analyst note has no "so what" is dropped whole rather
+# than printed bare. The brief's rule, and the point of the redesign: a chart
+# with no reading is the market-data dump this is meant to stop being.
+#
+# It is a real trade — a weak model run now costs sections rather than
+# producing thin ones — so it is one constant. Setting this False restores the
+# old behaviour of printing the section without its note.
+REQUIRE_SO_WHAT = True
+
+
+# The four assets the report always discusses, plus whatever actually moved.
+WATCHLIST_CORE = ('BTC', 'ETH', 'SOL', 'XRP')
+
+
+def _weekly_watchlist(rows, limit=6):
+    """Six rows: the four constants plus the week's best and worst.
+
+    Ten rows of which six never got mentioned is a table nobody finishes. The
+    two variable slots are the only ones that carry news, so they are chosen by
+    what happened rather than by market cap.
+    """
+    if not rows:
+        return []
+    core = [r for sym in WATCHLIST_CORE
+            for r in rows if r.get('Symbol') == sym]
+    rest = [r for r in rows if r not in core
+            and isinstance(r.get('7d %'), (int, float))]
+    if rest:
+        ranked = sorted(rest, key=lambda r: r['7d %'])
+        extras = [ranked[-1]]                      # best
+        if len(ranked) > 1:
+            extras.append(ranked[0])               # worst
+    else:
+        extras = []
+    return (core + extras)[:limit]
+
+
+def _group(title, *sections):
+    """A page heading and its sections, or '' when every section is empty.
+
+    Sections drop themselves for two reasons now — no data, or no reading to
+    print beside the data — so a heading has to earn its place from what
+    survived rather than from the layout.
+    """
+    body = ''.join(part for part in sections if part and part.strip())
+    if not body.strip():
+        return ''
+    return f"{render_section_divider(title)}\n{body}"
+
+
+def _section_with_note(section_html, note, lang, accent):
+    """Section plus its two-line note, or '' when the note has no `so_what`."""
+    note_html = render_analyst_note(note, lang, accent)
+    if note_html:
+        return section_html + note_html
+    return '' if REQUIRE_SO_WHAT else section_html
+
+
+def _num(value, spec, prefix='', suffix='', lang='tr'):
+    """A formatted number, or the one rendering of a missing one.
+
+    Every tile in this file goes through here. The alternative — an inline
+    conditional per tile — is how "MOVE 0.0", "$0.00" and a 1.000 Mayer
+    multiple all reached print: each of those was a per-tile default that
+    looked reasonable in isolation.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return na(lang)
+    if value != value:  # NaN
+        return na(lang)
+    return f"{prefix}{format(value, spec)}{suffix}"
+
+
+def fmt_notional(val, lang='tr'):
+    if _na(val) or not val: return na(lang)
     if val >= 1e9:
         return f"${val/1e9:.2f}B"
     elif val >= 1e6:
@@ -41,7 +115,8 @@ def render_weekly(data, lang='tr', theme=None):
         title=title,
         sub_title=sub_title,
         accent_color=gold_color, # Gold accent for weekly
-        lang=lang
+        lang=lang,
+        as_of=data.get('as_of'),
     )
     
     # 1b. Regime Strip + Executive Summary (AI Generated)
@@ -89,7 +164,7 @@ def render_weekly(data, lang='tr', theme=None):
     calendar_weekly_html = ""
     events = data.get('economic_calendar', [])
     strategy_note = lang_data.get('notes', {}).get('week_plan_note') or data.get('week_plan_note', '')
-    if events or (strategy_note and str(strategy_note).strip() and str(strategy_note).strip() != 'None'):
+    if events or normalize_note(strategy_note):
         source_date = None
         if events:
             for ev in events:
@@ -101,18 +176,19 @@ def render_weekly(data, lang='tr', theme=None):
         if source_date:
             title += f" (önceki veri · {source_date})" if lang == 'tr' else f" (previous data · {source_date})"
             
+        # The group heading above says "what matters next"; a second heading
+        # saying the same thing is a line of vertical space for nothing.
         calendar_weekly_html = f'''
-        {render_section_divider(title)}
         {render_fed_strip(data.get('fed_pricing'), lang=lang)}'''
+        if source_date:
+            calendar_weekly_html += (
+                f'<div style="font-size:9.5px; color:var(--dim); '
+                f'margin:-6px 0 10px;">{title}</div>')
         if events:
             calendar_weekly_html += f'''
         {render_economic_calendar(events, lang=lang)}'''
         
-        if strategy_note and str(strategy_note).strip() and str(strategy_note).strip() != 'None':
-            calendar_weekly_html += f'''
-            <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6; margin-top:16px; background:var(--bg2); padding:14px 18px; border-left:3px solid var(--gold2); border-radius:0 4px 4px 0; page-break-inside: avoid; break-inside: avoid;">
-              <strong style="color:var(--text);">{STR['outlook_strategy'][lang]}:</strong> {strategy_note}
-            </div>'''
+        calendar_weekly_html += render_analyst_note(strategy_note, lang, 'var(--gold2)')
         
     # 4. Liquidity Regime
     liq_html = ""
@@ -124,9 +200,12 @@ def render_weekly(data, lang='tr', theme=None):
 
         if net_liq:
             liq_chart = generate_net_liquidity_chart(net_liq)
+            # Fed net liquidity is a weekly release; the run's cut says nothing
+            # about when this series last moved, so it carries its own date.
+            liq_asof = series_as_of_label(net_liq[-1].get('date'), lang)
             liq_html += f'''
         <div class="sparkline-wrap" style="margin-bottom:12px;">
-          <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:8px;">{STR['chart_net_liq_title'][lang]}</div>
+          <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:8px;">{STR['chart_net_liq_title'][lang]}{liq_asof}</div>
           {liq_chart}
         </div>'''
 
@@ -141,55 +220,62 @@ def render_weekly(data, lang='tr', theme=None):
             liq_html += f'''
         <div class="sparkline-wrap" style="margin-bottom:12px; page-break-inside:avoid; break-inside:avoid;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <div style="font-size:12.5px; font-weight:600; color:var(--text);">{STR['chart_nfci_title'][lang]}</div>
+            <div style="font-size:12.5px; font-weight:600; color:var(--text);">{STR['chart_nfci_title'][lang]}{series_as_of_label((nfci.get('history') or [{}])[-1].get('date'), lang)}</div>
             {nfci_stat}
           </div>
           {nfci_chart}
           <div style="font-size:9.5px; color:var(--dim); margin-top:6px;">{STR['nfci_hint'][lang]}</div>
         </div>'''
 
-        if liq_note and str(liq_note).strip() and str(liq_note).strip() != 'None':
-            liq_html += f'''
-            <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6; margin-bottom:24px; background:var(--bg2); padding:10px 14px; border-left:3px solid var(--accent); border-radius:0 4px 4px 0;">
-              <strong style="color:var(--text);">{STR['analyst_note'][lang]}:</strong> {liq_note}
-            </div>'''
+        liq_html = _section_with_note(liq_html, liq_note, lang, 'var(--accent)')
 
     # 5. Macro Scoreboard & Inflation Path
     macro_scoreboard_html = ""
     ms = data.get('macro_scoreboard', {}) or {}
     inflation_history = data.get('inflation_history_data', [])
     if ms or inflation_history:
-        # Every tile prints "—" when its metric is missing. Defaulting to 0.0
+        # Every tile prints N/A when its metric is missing. Defaulting to 0.0
         # published "DXY 0.00" and "VIX 0.0" as if they had been measured.
         def _val(v, fmt):
-            return format(v, fmt) if isinstance(v, (int, float)) else '—'
+            return _num(v, fmt, lang=lang)
 
         dxy = ms.get('DXY')
         dxy_chg = ms.get('DXY_chg')
-        dxy_txt, dxy_cls = _fmt_change(dxy_chg)
+        dxy_txt, dxy_cls = _fmt_change(dxy_chg, lang)
 
         hy_oas = ms.get('HY_OAS')
         hy_chg = ms.get('HY_OAS_chg_bp')
-        hy_txt = f"{hy_chg:+.1f} bps" if hy_chg is not None else '—'
+        hy_txt = f"{hy_chg:+.1f} bps" if hy_chg is not None else na(lang)
         hy_cls = '' if hy_chg is None else ('down' if hy_chg > 0 else 'up')
 
         move_idx = ms.get('MOVE')
         move_chg = ms.get('MOVE_chg')
-        move_txt, move_cls = _fmt_change(move_chg)
+        move_txt, move_cls = _fmt_change(move_chg, lang)
 
         macro_indicators_data = data.get('macro_indicators', {}) or {}
         vix = macro_indicators_data.get('VIX')
         vix_chg = macro_indicators_data.get('VIX_chg')
-        vix_txt, vix_cls = _fmt_change(vix_chg)
+        vix_txt, vix_cls = _fmt_change(vix_chg, lang)
         
         yield_10y = macro_indicators_data.get('US 10-Year Treasury Yield')
         yield_10y_chg = macro_indicators_data.get('US 10-Year Treasury Yield_chg')
-        if yield_10y_chg is not None:
-            yield_10y_chg_txt, yield_10y_chg_cls = _fmt_change(yield_10y_chg)
+        # bps, not a percentage: the value is now a basis-point change, and
+        # printing it with a % sign is exactly the confusion T9 is about.
+        if yield_10y_chg is None:
+            yield_10y_chg_txt, yield_10y_chg_cls = na(lang), ''
         else:
-            yield_10y_chg_txt, yield_10y_chg_cls = '—', ''
+            yield_10y_chg_txt = f"{yield_10y_chg:+.1f} bps"
+            yield_10y_chg_cls = 'down' if yield_10y_chg > 0 else 'up'
+
+        # The 2s10s tile shows a LEVEL. It used to feed that level to
+        # _fmt_change as well, so the same number appeared twice on one tile —
+        # once as "0.41%" and once as "▲ +0.41%", inventing a weekly move out
+        # of a spread reading. The sub-line now carries the unit instead of a
+        # fabricated change; see MetricSpec unit=PERCENT vs PERCENT_CHANGE.
         spread_2s10s = macro_indicators_data.get('2s10s_spread')
-        spread_txt, spread_cls = _fmt_change(spread_2s10s)
+        spread_txt = (STR['label_level'][lang] if spread_2s10s is not None
+                      else na(lang))
+        spread_cls = ''
         
         inflation_chart = generate_inflation_chart(inflation_history, lang=lang) if inflation_history else ""
         inflation_note = lang_data.get('notes', {}).get('inflation_note') or data.get('inflation_note', '')
@@ -215,14 +301,22 @@ def render_weekly(data, lang='tr', theme=None):
             <div style="font-family:var(--mono); font-size:10px; color:var(--dim); margin-top:2px;">{chg_bp:+.1f} bps</div>
           </div>''')
         cg = ms.get('COPPER_GOLD')
-        if cg:
-            cg_chg = ms.get('COPPER_GOLD_chg', 0.0)
-            cg_cls = 'up' if cg_chg >= 0 else 'down'
+        if cg is not None:
+            cg_chg = ms.get('COPPER_GOLD_chg')
+            cg_cls = '' if cg_chg is None else ('up' if cg_chg >= 0 else 'down')
+            # Copper bid over gold is the growth signal; the reverse is the
+            # slowdown one. The label used to be a constant, so a -5.75% week
+            # was published as "büyüme sinyali".
+            if cg_chg is None:
+                cg_label = STR['growth_signal'][lang]
+            else:
+                cg_label = (STR['growth_signal'][lang] if cg_chg >= 0
+                            else STR['growth_slowdown_signal'][lang])
             rates_tiles.append(f'''
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_copper_gold'][lang]}</div>
             <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{cg:.3f}</div>
-            <div class="{cg_cls}" style="font-family:var(--mono); font-size:10px; margin-top:2px;">{cg_chg:+.2f}% · {STR['growth_signal'][lang]}</div>
+            <div class="{cg_cls}" style="font-family:var(--mono); font-size:10px; margin-top:2px;">{f"{cg_chg:+.2f}%" if cg_chg is not None else na(lang)} · {cg_label}</div>
           </div>''')
         rates_tiles_html = ''.join(rates_tiles)
         
@@ -263,15 +357,11 @@ def render_weekly(data, lang='tr', theme=None):
         </div>
         
         <div class="sparkline-wrap" style="margin-bottom:12px;">
-          <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:8px;">{STR['chart_inflation_title'][lang]}</div>
+          <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:8px;">{STR['chart_inflation_title'][lang]}{series_as_of_label(inflation_history[-1].get('date') if inflation_history else None, lang)}</div>
           {inflation_chart}
         </div>'''
         
-        if inflation_note:
-            macro_scoreboard_html += f'''
-            <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6; margin-bottom:24px; background:var(--bg2); padding:10px 14px; border-left:3px solid var(--gold); border-radius:0 4px 4px 0;">
-              <strong style="color:var(--text);">{STR['analyst_note'][lang]}:</strong> {inflation_note}
-            </div>'''
+        macro_scoreboard_html = _section_with_note(macro_scoreboard_html, inflation_note, lang, 'var(--gold)')
 
     # 6. Equities & Commodities (Weekly)
     equities_html = ""
@@ -279,12 +369,38 @@ def render_weekly(data, lang='tr', theme=None):
     commodities = data.get('commodities', [])
     asset_sparklines = data.get('asset_sparklines', {})
     if mag7 or commodities:
-        mag7_table = render_asset_table(mag7, "equities", lang=lang, sparklines=asset_sparklines) if mag7 else ""
+        # Seven rows of megacap prices restated a single fact: whether big tech
+        # was bid. One line says it, and the names that moved say the rest.
+        mag7_line = ""
+        if mag7:
+            moves = [(m.get('Symbol', ''), m.get('Change %')) for m in mag7]
+            moves = [(sym, chg) for sym, chg in moves
+                     if isinstance(chg, (int, float)) and not isinstance(chg, bool)]
+            if moves:
+                avg = sum(c for _, c in moves) / len(moves)
+                best = max(moves, key=lambda x: x[1])
+                worst = min(moves, key=lambda x: x[1])
+                avg_txt, avg_cls = _fmt_change(avg, lang)
+                best_txt, best_cls = _fmt_change(best[1], lang)
+                worst_txt, worst_cls = _fmt_change(worst[1], lang)
+                spark = generate_sparkline(asset_sparklines.get('NVDA') or [], 90, 22)
+                mag7_line = f'''
+        <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:14px 16px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; page-break-inside:avoid; break-inside:avoid;">
+          <div>
+            <div style="font-size:9.5px; font-weight:600; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:4px;">MAGNIFICENT 7</div>
+            <span class="{avg_cls}" style="font-family:var(--mono); font-size:16px; font-weight:700;">{avg_txt}</span>
+            <span style="font-size:10.5px; color:var(--dim); margin-left:10px;">
+              {STR['best'][lang]} {best[0]} <span class="{best_cls}">{best_txt}</span>
+              &nbsp;·&nbsp; {STR['worst'][lang]} {worst[0]} <span class="{worst_cls}">{worst_txt}</span>
+            </span>
+          </div>
+          <div>{spark}</div>
+        </div>'''
+
         comm_table = render_asset_table(commodities, "commodities", lang=lang, sparklines=asset_sparklines) if commodities else ""
         equities_html = f'''
         {render_section_divider(STR['section_equities_commodities'][lang])}
-        {mag7_table}
-        <div style="margin-top:16px;"></div>
+        {mag7_line}
         {comm_table}
         '''
 
@@ -297,7 +413,7 @@ def render_weekly(data, lang='tr', theme=None):
             sym = s.get('Symbol', '')
             name = s.get('Name', '')
             chg = s.get('Change %', 0)
-            chg_text, chg_cls = _fmt_change(chg)
+            chg_text, chg_cls = _fmt_change(chg, lang)
             bg = 'rgba(16,185,129,0.04)' if chg >= 0 else 'rgba(239,68,68,0.04)'
             border = 'rgba(16,185,129,0.18)' if chg >= 0 else 'rgba(239,68,68,0.18)'
             tiles.append(f'''
@@ -328,19 +444,22 @@ def render_weekly(data, lang='tr', theme=None):
     if bist_data:
         bist100 = bist_data.get('bist100')
         bist_chg = bist_data.get('bist100_chg')
-        bist_txt, bist_cls = _fmt_change(bist_chg)
+        bist_txt, bist_cls = _fmt_change(bist_chg, lang)
 
         usd_try = bist_data.get('usd_try')
         try_chg = bist_data.get('try_chg')
-        try_txt, try_cls = _fmt_change(try_chg)
+        try_txt, try_cls = _fmt_change(try_chg, lang)
 
         # BIST in dollars needs both legs; "$0.00" is not a fallback value.
         bist_usd = (bist100 / usd_try) if (bist100 and usd_try) else None
-        bist100_txt = f"{bist100:,.0f}" if bist100 else '—'
-        usd_try_txt = f"{usd_try:.4f}" if usd_try else '—'
-        bist_usd_txt = f"${bist_usd:.2f}" if bist_usd else '—'
-        bist_usd_chg = bist_chg - try_chg
-        usd_bist_txt, usd_bist_cls = _fmt_change(bist_usd_chg)
+        bist100_txt = f"{bist100:,.0f}" if bist100 else na(lang)
+        usd_try_txt = f"{usd_try:.4f}" if usd_try else na(lang)
+        bist_usd_txt = f"${bist_usd:.2f}" if bist_usd else na(lang)
+        # Same rule as the dollar level: a dollar-denominated move needs both
+        # legs, and subtracting a missing one used to raise TypeError.
+        bist_usd_chg = (bist_chg - try_chg) if (bist_chg is not None
+                                                and try_chg is not None) else None
+        usd_bist_txt, usd_bist_cls = _fmt_change(bist_usd_chg, lang)
         
         turkey_html = f'''
         {render_section_divider(STR['section_turkey_desk'][lang])}
@@ -363,9 +482,6 @@ def render_weekly(data, lang='tr', theme=None):
         </div>
         '''
 
-    # Crypto Divider
-    crypto_divider = render_section_divider(STR['section_crypto_desk'][lang])
-
     # 10. Stablecoin Supply
     stablecoin_html = ""
     stable_history = data.get('stablecoin_history_data', [])
@@ -375,15 +491,11 @@ def render_weekly(data, lang='tr', theme=None):
         stablecoin_html = f'''
         {render_section_divider(STR['section_stablecoin'][lang])}
         <div class="sparkline-wrap" style="margin-bottom:12px;">
-          <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:8px;">{STR['chart_stablecoin_title'][lang]}</div>
+          <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:8px;">{STR['chart_stablecoin_title'][lang]}{series_as_of_label(stable_history[-1].get('date') if stable_history else None, lang)}</div>
           {stable_chart}
         </div>'''
         
-        if stable_note:
-            stablecoin_html += f'''
-            <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6; margin-bottom:24px; background:var(--bg2); padding:10px 14px; border-left:3px solid var(--green); border-radius:0 4px 4px 0;">
-              <strong style="color:var(--text);">{STR['analyst_note'][lang]}:</strong> {stable_note}
-            </div>'''
+        stablecoin_html = _section_with_note(stablecoin_html, stable_note, lang, 'var(--green)')
 
     # 11. ETF Weekly Flows
     etf_weekly_html = ""
@@ -391,16 +503,39 @@ def render_weekly(data, lang='tr', theme=None):
     etf_note = lang_data.get('notes', {}).get('etf_note') or data.get('etf_note', '')
     if etf_weekly_history:
         latest_etf = etf_weekly_history[-1]
-        w_total = latest_etf.get('Total_flow_m', 0.0)
-        w_ibit = latest_etf.get('IBIT_flow_m', 0.0)
-        w_fbtc = latest_etf.get('FBTC_flow_m', 0.0)
+        # A missing leg is not a zero flow. 0.0 here printed "+0.0M" as a
+        # measured week of no interest.
+        w_total = latest_etf.get('Total_flow_m')
+        w_ibit = latest_etf.get('IBIT_flow_m')
+        w_fbtc = latest_etf.get('FBTC_flow_m')
         w_date = latest_etf.get('date', '')
         
-        total_cls = "up" if w_total >= 0 else "down"
-        ibit_cls = "up" if w_ibit >= 0 else "down"
-        fbtc_cls = "up" if w_fbtc >= 0 else "down"
+        total_cls = '' if w_total is None else ("up" if w_total >= 0 else "down")
+        ibit_cls = '' if w_ibit is None else ("up" if w_ibit >= 0 else "down")
+        fbtc_cls = '' if w_fbtc is None else ("up" if w_fbtc >= 0 else "down")
         
         etf_chart = generate_etf_flow_chart(etf_weekly_history)
+
+        # 2.3: the flow is shown next to what tells you how to read it. A net
+        # inflow is not evidence of directional demand on its own — part of it
+        # can be delta-neutral basis trade (long ETF, short futures) — and
+        # funding plus open interest are what separate the two.
+        prev_flow = (etf_weekly_history[-2].get('Total_flow_m')
+                     if len(etf_weekly_history) > 1 else None)
+        prev_txt = _num(prev_flow, '+.1f', suffix='M', lang=lang)
+        prev_cls = '' if prev_flow is None else ('up' if prev_flow >= 0 else 'down')
+
+        _eth_hdr = data.get('eth_etf_weekly_data') or []
+        eth_hdr_val = _eth_hdr[-1].get('Total_flow_m') if _eth_hdr else None
+        eth_hdr_txt = _num(eth_hdr_val, '+.1f', suffix='M', lang=lang)
+        eth_hdr_cls = '' if eth_hdr_val is None else ('up' if eth_hdr_val >= 0 else 'down')
+
+        _btc_funding = (data.get('funding_rates') or {}).get('BTC')
+        _btc_oi_chg = ((data.get('open_interest') or {}).get('BTC') or {}).get('oi_chg_7d')
+        flow_context = (
+            f"BTC funding {_num(_btc_funding, '+.4f', suffix='%', lang=lang)} · "
+            f"OI {STR['chg_weekly_short'][lang]} "
+            f"{_num(_btc_oi_chg, '+.1f', suffix='%', lang=lang)}")
         etf_weekly_html = f'''
         {render_section_divider(STR['section_etf_flows'][lang])}
         <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:18px; margin-bottom:24px; page-break-inside:avoid; break-inside:avoid;">
@@ -410,19 +545,23 @@ def render_weekly(data, lang='tr', theme=None):
               <div style="font-family:var(--mono); font-size:9px; color:var(--dim); margin-top:2px;">{STR['week_ending'][lang]} · {w_date}</div>
             </div>
           </div>
-          <div style="display:flex; gap:28px; margin-bottom:16px;">
+          <div style="display:flex; gap:28px; flex-wrap:wrap; margin-bottom:12px;">
             <div>
-              <div style="font-family:var(--sans); font-size:9px; font-weight:500; text-transform:uppercase; color:var(--dim); letter-spacing:1px; margin-bottom:4px;">{STR['card_weekly_total'][lang]}</div>
-              <div class="{total_cls}" style="font-family:var(--mono); font-size:17px; font-weight:600;">{w_total:+.1f}M</div>
+              <div style="font-family:var(--sans); font-size:9px; font-weight:500; text-transform:uppercase; color:var(--dim); letter-spacing:1px; margin-bottom:4px;">BTC ETF</div>
+              <div class="{total_cls}" style="font-family:var(--mono); font-size:17px; font-weight:600;">{_num(w_total, '+.1f', suffix='M', lang=lang)}</div>
             </div>
             <div>
-              <div style="font-family:var(--sans); font-size:9px; font-weight:500; text-transform:uppercase; color:var(--dim); letter-spacing:1px; margin-bottom:4px;">IBIT (BlackRock)</div>
-              <div class="{ibit_cls}" style="font-family:var(--mono); font-size:17px; font-weight:600;">{w_ibit:+.1f}M</div>
+              <div style="font-family:var(--sans); font-size:9px; font-weight:500; text-transform:uppercase; color:var(--dim); letter-spacing:1px; margin-bottom:4px;">ETH ETF</div>
+              <div class="{eth_hdr_cls}" style="font-family:var(--mono); font-size:17px; font-weight:600;">{eth_hdr_txt}</div>
             </div>
             <div>
-              <div style="font-family:var(--sans); font-size:9px; font-weight:500; text-transform:uppercase; color:var(--dim); letter-spacing:1px; margin-bottom:4px;">FBTC (Fidelity)</div>
-              <div class="{fbtc_cls}" style="font-family:var(--mono); font-size:17px; font-weight:600;">{w_fbtc:+.1f}M</div>
+              <div style="font-family:var(--sans); font-size:9px; font-weight:500; text-transform:uppercase; color:var(--dim); letter-spacing:1px; margin-bottom:4px;">{STR['prev_week'][lang]}</div>
+              <div class="{prev_cls}" style="font-family:var(--mono); font-size:17px; font-weight:600;">{prev_txt}</div>
             </div>
+          </div>
+          <div style="font-family:var(--sans); font-size:10.5px; color:var(--dim); margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid var(--border);">
+            <strong style="color:var(--text); font-weight:600;">{STR['flow_context'][lang]}:</strong> {flow_context}
+            <div style="margin-top:4px; font-size:10px;">IBIT {_num(w_ibit, '+.1f', suffix='M', lang=lang)} · FBTC {_num(w_fbtc, '+.1f', suffix='M', lang=lang)}</div>
           </div>
           <div class="sparkline-wrap" style="margin-bottom:12px; padding-top:12px; border-top:1px solid var(--border);">
             <div style="font-size:10px; font-weight:600; text-transform:uppercase; color:var(--dim); margin-bottom:10px;">{STR['card_etf_weekly_history_title'][lang]}</div>
@@ -459,74 +598,42 @@ def render_weekly(data, lang='tr', theme=None):
             {cum_chart}
           </div>'''
           
-        if etf_note:
-            etf_weekly_html += f'''
-            <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6; background:var(--bg3); padding:10px 14px; border-left:3px solid var(--accent); border-radius:0 4px 4px 0;">
-              <strong style="color:var(--text);">{STR['analyst_note'][lang]}:</strong> {etf_note}
-            </div>'''
-            
-        etf_weekly_html += '</div>'
+        _etf_note_html = render_analyst_note(etf_note, lang, 'var(--accent)')
+        if _etf_note_html:
+            etf_weekly_html += _etf_note_html + '</div>'
+        elif REQUIRE_SO_WHAT:
+            etf_weekly_html = ''
+        else:
+            etf_weekly_html += '</div>'
 
-    # 12. Winners & Losers
+    # 12. Winners & Losers — folded into ROTATION below (phase 4).
+    # The same story was being told in four places: the winners chart, the
+    # losers chart, the sector table and the ETH/BTC card all answer "what is
+    # money moving into". One section, one answer.
     winners_losers_html = ""
-    winners = data.get('winners', [])
-    losers = data.get('losers', [])
-    if winners or losers:
-        wl_chart = generate_winners_losers_chart(winners, losers)
-        winners_losers_html = f'''
-        {render_section_divider(STR['section_winners_losers'][lang])}
-        <div class="sparkline-wrap" style="padding:20px 24px; margin-bottom:24px; page-break-inside:avoid; break-inside:avoid;">
-          {wl_chart}
-        </div>
-        '''
 
     # 13. Watchlist Weekly (top 10 by market cap)
     watchlist_html = ""
-    watchlist_rows = data.get('crypto_prices_display') or data.get('crypto_prices', [])
+    watchlist_rows = _weekly_watchlist(
+        data.get('crypto_prices_display') or data.get('crypto_prices', []))
     if watchlist_rows:
         watchlist_html = f'''
         {render_section_divider(STR['section_watchlist'][lang])}
         {render_asset_table(watchlist_rows, "crypto", lang=lang)}
         '''
 
-    # 13b. Hype Radar — CoinGecko trending searches
+    # 13b. Hype Radar — removed from the PDF (phase 4).
+    #
+    # "TUT +93.43%" is a fact with nowhere to go: it does not feed the regime,
+    # it is not referenced by any note, and a reader cannot act on it. The
+    # trending list still ships in data['trending_coins'] for the web
+    # dashboard; it just stops taking a page here.
     hype_html = ""
-    trending = data.get('trending_coins') or []
-    if trending:
-        rows = []
-        for i, t in enumerate(trending):
-            chg = t.get('chg_24h')
-            chg_txt, chg_cls = _fmt_change(chg)
-            rank = t.get('rank')
-            rank_str = f"#{rank}" if rank else "—"
-            rows.append(f'''
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
-              <td class="mono" style="padding:8px 12px; color:var(--gold); font-weight:700; width:30px;">{i + 1}</td>
-              <td style="padding:8px 12px;"><strong style="color:var(--text);">{t.get('symbol', '')}</strong>&nbsp;<span style="color:var(--dim); font-size:10px;">{t.get('name', '')}</span></td>
-              <td class="mono" style="padding:8px 12px; color:var(--dim); text-align:right;">{rank_str}</td>
-              <td class="mono {chg_cls}" style="padding:8px 12px; text-align:right;">{chg_txt}</td>
-            </tr>''')
-        hype_html = f'''
-        {render_section_divider(STR['section_hype_radar'][lang])}
-        <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; overflow:hidden; padding:12px; margin-bottom:12px; page-break-inside:avoid; break-inside:avoid;">
-          <table width="100%" style="border-collapse:collapse; font-size:12px;">
-            <thead>
-              <tr style="border-bottom:1px solid var(--border);">
-                <th style="text-align:left; padding:8px 12px; color:var(--dim);">#</th>
-                <th style="text-align:left; padding:8px 12px; color:var(--dim);">{STR['col_asset'][lang]}</th>
-                <th style="text-align:right; padding:8px 12px; color:var(--dim);">{STR['col_mcap_rank'][lang]}</th>
-                <th style="text-align:right; padding:8px 12px; color:var(--dim);">{STR['col_24h'][lang]}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {''.join(rows)}
-            </tbody>
-          </table>
-        </div>
-        <div style="font-size:9.5px; color:var(--dim); margin-bottom:24px;">{STR['hype_radar_hint'][lang]}</div>'''
 
     # 14. Crypto Sector Rotation
     rotation_html = ""
+    winners = data.get('winners', [])
+    losers = data.get('losers', [])
     rotation_data = data.get('crypto_sector_rotation_data', {})
     rotation_note = lang_data.get('notes', {}).get('rotation_note') or data.get('rotation_note', '')
 
@@ -535,7 +642,7 @@ def render_weekly(data, lang='tr', theme=None):
     eth_btc_card = ""
     if eth_btc.get('ratio'):
         eb_chg = eth_btc.get('chg_7d')
-        eb_txt, eb_cls = _fmt_change(eb_chg)
+        eb_txt, eb_cls = _fmt_change(eb_chg, lang)
         eb_spark = generate_sparkline(eth_btc.get('history', []), width=90, height=22)
         eth_btc_card = f'''
         <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:14px 16px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; page-break-inside:avoid; break-inside:avoid;">
@@ -550,15 +657,23 @@ def render_weekly(data, lang='tr', theme=None):
     if rotation_data:
         rows = []
         for sector, score in rotation_data.items():
-            score_txt, score_cls = _fmt_change(score)
+            score_txt, score_cls = _fmt_change(score, lang)   # None -> N/A
             rows.append(f'''
             <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
               <td style="padding:8px 12px; font-weight:600; color:var(--text);">{sector}</td>
               <td class="mono {score_cls}" style="padding:8px 12px; text-align:right;">{score_txt}</td>
             </tr>''')
+        wl_chart = ""
+        if winners or losers:
+            wl_chart = f'''
+        <div class="sparkline-wrap" style="padding:16px 20px; margin-bottom:12px; page-break-inside:avoid; break-inside:avoid;">
+          {generate_winners_losers_chart(winners, losers)}
+        </div>'''
+
         rotation_html = f'''
-        {render_section_divider(STR['section_rotation'][lang])}
+        {render_section_divider(STR['section_rotation_merged'][lang])}
         {eth_btc_card}
+        {wl_chart}
         <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; overflow:hidden; padding:12px; margin-bottom:24px; page-break-inside:avoid; break-inside:avoid;">
           <table width="100%" style="border-collapse:collapse; font-size:12px;">
             <thead>
@@ -569,48 +684,51 @@ def render_weekly(data, lang='tr', theme=None):
             </tbody>
           </table>'''
           
-        if rotation_note:
-            rotation_html += f'''
-            <div style="font-family:var(--sans); font-size:11px; color:var(--dim); line-height:1.5; margin-top:12px;">
-              <strong style="color:var(--gold2);">{STR['analyst_note'][lang]}:</strong> {rotation_note}
-            </div>'''
-            
+        # The wrapper div has to close before the section can be dropped, or a
+        # bare </div> escapes into the page — and an unbalanced tag makes
+        # _group think the section still has content, so the heading prints
+        # over nothing. Same shape as the ETF card's close.
         rotation_html += '</div>'
+        rotation_html = _section_with_note(rotation_html, rotation_note, lang,
+                                           'var(--gold2)')
 
     # 15. Cycle Panel
     cycle_html = ""
     cycle = data.get('btc_cycle_metrics', {})
     cycle_note = lang_data.get('notes', {}).get('cycle_note') or data.get('cycle_note', '')
     if cycle:
-        spot = cycle.get('spot', 0)
-        wma = cycle.get('wma200', 0)
-        mm = cycle.get('mayer_multiple', 1.0)
-        drawdown = cycle.get('drawdown', 0.0)
-        dist_wma = cycle.get('distance_to_200wma', 0.0)
+        # No `or 0` defaults here: a Mayer multiple of 1.0 and a drawdown of
+        # 0.0 are both readings a reader would act on, so neither may stand in
+        # for a value the pipeline does not have.
+        spot = cycle.get('spot')
+        wma = cycle.get('wma200')
+        mm = cycle.get('mayer_multiple')
+        drawdown = cycle.get('drawdown')
+        dist_wma = cycle.get('distance_to_200wma')
+        ath = cycle.get('ath')
         
         heatmap_svg = generate_cycle_heatmap_svg(cycle.get('monthly_heatmap'))
         
         cycle_html = f'''
-        {render_section_divider(STR['section_cycle'][lang])}
         <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:4px; overflow:hidden; margin-bottom:20px;">
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_mayer_multiple'][lang]}</div>
-            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{mm:.3f}</div>
+            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{_num(mm, '.3f', lang=lang)}</div>
             <div style="font-size:9.5px; color:var(--dim); margin-top:2px;">Spot / 200d SMA</div>
           </div>
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_200wma_distance'][lang]}</div>
-            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{dist_wma:+.1f}%</div>
-            <div style="font-size:9.5px; color:var(--dim); margin-top:2px;">WMA: ${wma:,.0f}</div>
+            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{_num(dist_wma, '+.1f', suffix='%', lang=lang)}</div>
+            <div style="font-size:9.5px; color:var(--dim); margin-top:2px;">WMA: {_num(wma, ',.0f', prefix='$', lang=lang)}</div>
           </div>
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_drawdown'][lang]}</div>
-            <div class="down" style="font-family:var(--mono); font-size:15px; font-weight:600;">{drawdown:.1f}%</div>
-            <div style="font-size:9.5px; color:var(--dim); margin-top:2px;">ATH: ${cycle.get("ath", 0):,.0f}</div>
+            <div class="{'down' if drawdown is not None else ''}" style="font-family:var(--mono); font-size:15px; font-weight:600;">{_num(drawdown, '.1f', suffix='%', lang=lang)}</div>
+            <div style="font-size:9.5px; color:var(--dim); margin-top:2px;">ATH: {_num(ath, ',.0f', prefix='$', lang=lang)}</div>
           </div>
           <div style="background:var(--bg2); padding:12px; text-align:center;">
             <div style="font-size:8px; color:var(--dim); text-transform:uppercase; margin-bottom:4px; font-weight:600;">{STR['card_spot_price'][lang]}</div>
-            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">${spot:,.0f}</div>
+            <div style="font-family:var(--mono); font-size:15px; color:var(--text); font-weight:600;">{_num(spot, ',.0f', prefix='$', lang=lang)}</div>
             <div style="font-size:9.5px; color:var(--dim); margin-top:2px;">{STR['label_realtime'][lang]}</div>
           </div>
         </div>
@@ -621,11 +739,7 @@ def render_weekly(data, lang='tr', theme=None):
           <div style="font-size:9px; color:var(--dim); margin-top:6px; text-align:right;">{STR['heatmap_footnote'][lang]}</div>
         </div>'''
         
-        if cycle_note:
-            cycle_html += f'''
-            <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6; margin-bottom:24px; background:var(--bg2); padding:10px 14px; border-left:3px solid var(--gold2); border-radius:0 4px 4px 0;">
-              <strong style="color:var(--text);">{STR['analyst_note'][lang]}:</strong> {cycle_note}
-            </div>'''
+        cycle_html = _section_with_note(cycle_html, cycle_note, lang, 'var(--gold2)')
 
     # 16. Correlation Matrix
     correlation_html = ""
@@ -640,11 +754,7 @@ def render_weekly(data, lang='tr', theme=None):
           {corr_chart}
         </div>'''
         
-        if corr_note:
-            correlation_html += f'''
-            <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6; margin-bottom:24px; background:var(--bg2); padding:10px 14px; border-left:3px solid var(--accent); border-radius:0 4px 4px 0;">
-              <strong style="color:var(--text);">{STR['analyst_note'][lang]}:</strong> {corr_note}
-            </div>'''
+        correlation_html = _section_with_note(correlation_html, corr_note, lang, 'var(--accent)')
 
     # 17. Futures Positioning Desk
     positioning_html = ""
@@ -662,14 +772,14 @@ def render_weekly(data, lang='tr', theme=None):
     cp = data.get('coinbase_premium', {}) or {}
     cp_card_html = render_coinbase_premium_card(cp, "180D", lang=lang)
     
-    btc_fr_str, btc_fr_cls = _fmt_funding(fr.get('BTC'))
-    eth_fr_str, eth_fr_cls = _fmt_funding(fr.get('ETH'))
+    btc_fr_str, btc_fr_cls = _fmt_funding(fr.get('BTC'), lang)
+    eth_fr_str, eth_fr_cls = _fmt_funding(fr.get('ETH'), lang)
     
     btc_oi = oi.get('BTC', {})
     eth_oi = oi.get('ETH', {})
     
     def fmt_oi_val(val):
-        if not val: return '—'
+        if _na(val) or not val: return na(lang)
         return f"{val/1000:.1f}K" if val < 1e6 else f"{val/1e6:.2f}M"
 
     btc_oi_str = fmt_oi_val(btc_oi.get('oi'))
@@ -677,21 +787,21 @@ def render_weekly(data, lang='tr', theme=None):
     
     # Hide OI changes if they are None (Sıfır basmak yok)
     if btc_oi.get('oi_chg_7d') is not None:
-        btc_oi_chg_val, btc_oi_cls = _fmt_change(btc_oi['oi_chg_7d'])
+        btc_oi_chg_val, btc_oi_cls = _fmt_change(btc_oi['oi_chg_7d'], lang)
         btc_oi_chg = f'&nbsp;<span class="{btc_oi_cls}">{btc_oi_chg_val}</span>'
     else:
         btc_oi_chg = ""
         
     if eth_oi.get('oi_chg_7d') is not None:
-        eth_oi_chg_val, eth_oi_cls = _fmt_change(eth_oi['oi_chg_7d'])
+        eth_oi_chg_val, eth_oi_cls = _fmt_change(eth_oi['oi_chg_7d'], lang)
         eth_oi_chg = f'&nbsp;<span class="{eth_oi_cls}">{eth_oi_chg_val}</span>'
     else:
         eth_oi_chg = ""
     
     fb_btc = fb.get('btc_basis')
     fb_eth = fb.get('eth_basis')
-    fb_btc_txt = f"{fb_btc:.2f}%" if fb_btc is not None else '—'
-    fb_eth_txt = f"{fb_eth:.2f}%" if fb_eth is not None else '—'
+    fb_btc_txt = f"{fb_btc:.2f}%" if fb_btc is not None else na(lang)
+    fb_eth_txt = f"{fb_eth:.2f}%" if fb_eth is not None else na(lang)
 
     basis_column_html = f'''
     <div style="background:var(--bg2); border:1px solid var(--border); border-radius:4px; padding:16px;">
@@ -747,8 +857,8 @@ def render_weekly(data, lang='tr', theme=None):
     if large_exp:
         rows = []
         for item in large_exp:
-            notional_str = fmt_notional(item['notional'])
-            max_pain_str = f"${item['max_pain']:,.0f}" if item['max_pain'] is not None else "—"
+            notional_str = fmt_notional(item.get('notional'), lang)
+            max_pain_str = f"${item['max_pain']:,.0f}" if item.get('max_pain') is not None else na(lang)
             rows.append(f'''
             <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
               <td style="padding:8px 0; font-weight:600; color:var(--text);">{item['expiry']} <span style="font-size:10px; color:var(--dim); font-weight:normal;">({item['date_str']})</span></td>
@@ -775,8 +885,6 @@ def render_weekly(data, lang='tr', theme=None):
         '''
 
     positioning_html = f'''
-    {render_section_divider(STR['section_positioning'][lang])}
-    
     {cp_card_html}
     
     <div class="pair-grid" style="page-break-inside:avoid; break-inside:avoid;">
@@ -792,56 +900,122 @@ def render_weekly(data, lang='tr', theme=None):
     {large_exp_html}
     '''
     
-    if futures_note:
-        positioning_html += f'''
-        <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6; margin-bottom:24px; background:var(--bg2); padding:10px 14px; border-left:3px solid var(--gold); border-radius:0 4px 4px 0; page-break-inside:avoid; break-inside:avoid;">
-          <strong style="color:var(--text);">{STR['analyst_note'][lang]}:</strong> {futures_note}
-        </div>'''
+    positioning_html = _section_with_note(positioning_html, futures_note, lang, 'var(--gold)')
 
-    # 18. Stories (Weekly News)
+    # 17b. Conflicting Signals
+    #
+    # Detected in signals.py before anything was written, so this section can
+    # only appear when two readings genuinely disagree. The reconciliation is
+    # either structural (from signals.MECHANISM) or the model's; when there is
+    # neither, the section says so instead of reaching for an explanation.
+    conflicts_html = ""
+    conflicts = data.get('signal_conflicts') or []
+    if conflicts:
+        model_reconciliations = {
+            c.get('pair'): (c.get('reconciliation') or '').strip()
+            for c in (lang_data.get('conflicting_signals') or [])
+            if isinstance(c, dict)
+        }
+
+        cards = []
+        for c in conflicts:
+            a, b = c['signal_a'], c['signal_b']
+            a_cls = 'up' if a['direction'] > 0 else 'down'
+            b_cls = 'up' if b['direction'] > 0 else 'down'
+
+            mechanism = (c.get('mechanism') or {}).get(lang)
+            reconciliation = mechanism or model_reconciliations.get(c['pair'], '')
+            if not reconciliation or reconciliation.upper() == 'UNRESOLVED':
+                reconciliation = STR['conflict_unresolved'][lang]
+
+            cards.append(f"""
+            <div style="background:var(--bg2); border:1px solid var(--border); border-left:3px solid var(--gold2); border-radius:0 4px 4px 0; padding:14px 16px; margin-bottom:12px; page-break-inside:avoid; break-inside:avoid;">
+              <div style="display:flex; flex-wrap:wrap; gap:18px; margin-bottom:10px;">
+                <div>
+                  <div style="font-size:9px; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:3px;">{a['labels'][lang]}</div>
+                  <span class="{a_cls}" style="font-family:var(--mono); font-size:14px; font-weight:700;">{a['value'] or na(lang)}</span>
+                </div>
+                <div style="align-self:center; color:var(--dim); font-size:13px;">&#8646;</div>
+                <div>
+                  <div style="font-size:9px; text-transform:uppercase; color:var(--dim); letter-spacing:0.5px; margin-bottom:3px;">{b['labels'][lang]}</div>
+                  <span class="{b_cls}" style="font-family:var(--mono); font-size:14px; font-weight:700;">{b['value'] or na(lang)}</span>
+                </div>
+              </div>
+              <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6;">
+                <strong style="color:var(--text); font-weight:600;">{STR['conflict_reads'][lang]}:</strong> {reconciliation}
+              </div>
+            </div>""")
+
+        conflicts_html = f"""
+        {render_section_divider(STR['section_conflicts'][lang])}
+        {''.join(cards)}
+        """
+
+    # 18. Stories — as transmission, not as summary (phase 5).
+    #
+    # The reader has seen the headline. What they have not seen is the path
+    # from the event to their portfolio, so each story prints the chain and
+    # where the tape currently sits on it. A story with no chain is dropped:
+    # the agent is told to skip anything with no transmission path, and an
+    # untransmitted headline is news, not analysis.
     stories_html = ""
-    macro_news = data.get('macro_news', {})
-    news_note = lang_data.get('notes', {}).get('news_note') or data.get('news_note', '')
-    if macro_news and macro_news.get('news'):
-        news_rendered = render_news_section(macro_news, lang_data.get('insights'), lang=lang)
-        if news_rendered:  # Only show section if renderer produced valid content
-            stories_html = f'''
-            {render_section_divider(STR['section_stories'][lang])}
-            {news_rendered}'''
-            
-            if news_note and str(news_note).strip() and str(news_note).strip() != 'None':
-                stories_html += f'''
-                <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6; margin-bottom:24px; background:var(--bg2); padding:10px 14px; border-left:3px solid var(--gold2); border-radius:0 4px 4px 0; page-break-inside:avoid; break-inside:avoid;">
-                  <strong style="color:var(--text);">{STR['analyst_note'][lang]}:</strong> {news_note}
-                </div>'''
+    transmissions = [t for t in (lang_data.get('news_transmission') or [])
+                     if isinstance(t, dict) and (t.get('chain') or '').strip()]
+    news_note = lang_data.get('notes', {}).get('news_note')
+    if transmissions:
+        items = []
+        for i, t in enumerate(transmissions, 1):
+            this_week = (t.get('this_week') or '').strip()
+            week_html = ''
+            if this_week:
+                week_html = (f'<div style="margin-top:5px;"><strong style="color:var(--text); '
+                             f'font-weight:600;">{STR["news_this_week"][lang]}:</strong> '
+                             f'{this_week}</div>')
+            items.append(f'''
+        <div style="margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--border); page-break-inside:avoid; break-inside:avoid;">
+          <div style="font-family:var(--sans); font-size:12.5px; font-weight:700; color:var(--text); margin-bottom:5px;">
+            <span style="color:var(--gold);">{i}.</span> {t.get('title', '')}
+          </div>
+          <div style="font-family:var(--mono); font-size:11px; color:var(--gold2); margin-bottom:4px;">
+            {STR['news_chain'][lang]}: {t.get('chain', '')}
+          </div>
+          <div style="font-family:var(--sans); font-size:11.5px; color:var(--dim); line-height:1.6;">
+            {week_html}
+          </div>
+        </div>''')
+
+        stories_html = f'''
+        {render_section_divider(STR['section_themes_risks'][lang])}
+        {''.join(items)}
+        '''
+        stories_html = _section_with_note(stories_html, news_note, lang, 'var(--gold2)')
 
     # Footer
     footer_html = render_footer(lang=lang, is_weekly=True)
 
-    # Combine everything
+    # ── Page order (phase 5) ────────────────────────────────────────
+    #
+    # The old order was the order the data happened to be fetched in, so the
+    # report opened with whatever loaded first and a reader had to assemble the
+    # week themselves. This is the order a reader needs it in: the verdict,
+    # then what set it, then what could change it, then the evidence.
+    #
+    # Sections hide themselves when their data is absent, so the two phase-3
+    # slots below (the scenario matrix and last week's scorecard) simply do not
+    # render until they exist.
+    scenario_html = data.get('_scenario_html', '')
+    scorecard_html = data.get('_scorecard_html', '')
+
     content_html = f'''
     {header_html}
-    {regime_html}
-    {overview_html}
-    {themes_html}
-    {calendar_weekly_html}
-    {liq_html}
-    {macro_scoreboard_html}
-    {equities_html}
-    {sectors_html}
-    <div style="margin-top:16px;"></div>
-    {ytd_html}
-    {turkey_html}
-    {crypto_divider}
-    {stablecoin_html}
-    {etf_weekly_html}
-    {winners_losers_html}
-    {watchlist_html}
-    {hype_html}
-    {rotation_html}
-    {cycle_html}
-    {correlation_html}
-    {positioning_html}
+    {_group(STR['section_week_in_one_minute'][lang], regime_html, overview_html, themes_html)}
+    {_group(STR['section_macro_regime'][lang], macro_scoreboard_html, liq_html)}
+    {_group(STR['section_what_matters_next'][lang], calendar_weekly_html, scenario_html, scorecard_html)}
+    {_group(STR['section_cross_asset'][lang], equities_html, sectors_html, ytd_html, correlation_html, turkey_html)}
+    {_group(STR['section_crypto_flows'][lang], etf_weekly_html, stablecoin_html, conflicts_html)}
+    {_group(STR['section_crypto_market'][lang], watchlist_html, rotation_html)}
+    {_group(STR['section_btc_regime'][lang], cycle_html)}
+    {_group(STR['section_positioning'][lang], positioning_html)}
     {stories_html}
     {footer_html}
     '''

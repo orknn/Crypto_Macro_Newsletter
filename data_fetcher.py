@@ -16,6 +16,45 @@ from config.prompt_budget import MAX_NEWS_ITEMS
 
 _YF_CACHE = {}
 
+# ═══════════════════════════════════════════
+# OBSERVATION TIMES
+# ═══════════════════════════════════════════
+#
+# When a number was *fetched* is not when it was *observed*, and only the
+# second one says whether it still describes today. A FRED series pulled thirty
+# seconds ago can carry a reading from three weeks back; a yfinance daily close
+# fetched on Sunday is Friday's. Stamping fetch time would have made every
+# staleness budget in config/metrics.py pass unconditionally — an enforced-
+# looking rule that enforces nothing.
+#
+# Almost every published series in this pipeline goes through one of two
+# functions, so both are instrumented here and the rest of the file needs no
+# changes. Continuously traded feeds (CoinGecko, Deribit, Kraken, Binance,
+# alternative.me) genuinely are observed at fetch time, and those are stamped
+# with the run's as_of by main.py.
+_FRED_LAST_OBS = {}
+_YF_LAST_BAR = {}
+
+
+def observation_times():
+    """(fred, yfinance) maps of series/ticker -> last observation datetime."""
+    return dict(_FRED_LAST_OBS), dict(_YF_LAST_BAR)
+
+
+def _record_yf_bar(ticker, df):
+    """Remember the timestamp of the newest bar we actually have for a ticker."""
+    try:
+        if df is None or df.empty or 'Close' in df and df['Close'].dropna().empty:
+            return
+        last = df['Close'].dropna().index[-1] if 'Close' in df else df.index[-1]
+        stamp = last.to_pydatetime() if hasattr(last, 'to_pydatetime') else last
+        if stamp.tzinfo is not None:
+            stamp = stamp.replace(tzinfo=None)
+        _YF_LAST_BAR[ticker] = stamp
+    except Exception:
+        pass
+
+
 def _normalize_yfinance_df(df, ticker=None):
     if df is None or df.empty:
         return pd.DataFrame()
@@ -47,10 +86,12 @@ def preload_yfinance_data(tickers, period='35d'):
         if len(needed) == 1:
             ticker = needed[0]
             _YF_CACHE[(ticker, period)] = _normalize_yfinance_df(data, ticker)
+            _record_yf_bar(ticker, _YF_CACHE[(ticker, period)])
         else:
             for t in needed:
                 if t in data:
                     _YF_CACHE[(t, period)] = _normalize_yfinance_df(data[t], t)
+                    _record_yf_bar(t, _YF_CACHE[(t, period)])
     except Exception as e:
         print(f"      ⚠️  Error preloading yfinance data: {e}")
 
@@ -63,6 +104,7 @@ def get_yfinance_data(ticker, period='5d'):
         data = yf.download(ticker, period=period, progress=False, group_by='ticker')
         norm_data = _normalize_yfinance_df(data, ticker)
         _YF_CACHE[key] = norm_data
+        _record_yf_bar(ticker, norm_data)
         return norm_data
     except Exception as e:
         print(f"      ⚠️  Error downloading {ticker} from yfinance: {e}")
@@ -90,6 +132,13 @@ def get_fred_data(series_id, start_date=None, days_back=None, retries=3):
             df['date'] = pd.to_datetime(df['date'])
             df['value'] = pd.to_numeric(df['value'], errors='coerce')
             df = df.dropna()
+            if not df.empty:
+                # The newest observation date in the series, which is what its
+                # age must be measured from — not the moment of this request.
+                last = df['date'].iloc[-1]
+                _FRED_LAST_OBS[series_id] = (last.to_pydatetime()
+                                             if hasattr(last, 'to_pydatetime')
+                                             else last)
             return df
         except Exception as e:
             print(f"      ⚠️  Attempt {attempt+1} failed for FRED {series_id}: {e}")
@@ -302,10 +351,22 @@ def get_fear_and_greed_index():
             val = int(latest['value'])
             classification = latest['value_classification']
             return {'value': val, 'classification': classification}
-        return {'value': 50, 'classification': 'Neutral'}
+        return _fear_greed_unavailable('empty payload')
     except Exception as e:
-        print(f"Error fetching fear and greed: {e}")
-        return {'value': 50, 'classification': 'Neutral'}
+        return _fear_greed_unavailable(e)
+
+
+def _fear_greed_unavailable(reason):
+    """No reading. Emphatically not 50.
+
+    A fabricated 50 was the worst failure mode in this file, because it was the
+    only one that looked like an answer. It printed on the gauge as a measured
+    neutral, it cast a real vote in regime.py, and it satisfied the content
+    quality gate's truthiness check — so a dead alternative.me could not fail
+    the run. None does all three of those things correctly.
+    """
+    print(f"      ⚠️  Fear & Greed alınamadı ({reason}) — N/A.")
+    return {'value': None, 'classification': None}
 
 def normalize_funding(raw, source, price=None, symbol=None):
     """
@@ -380,14 +441,15 @@ def get_crypto_futures_basis():
     Fetch crypto futures basis (annualized premium of futures over spot)
     calculating from real Binance CURRENT_QUARTER delivery contracts.
     """
-    btc_basis = 0.0
-    eth_basis = 0.0
+    btc_basis = None
+    eth_basis = None
     sentiment = "Neutral"
 
     def calc_annualized_premium(spot, future, delivery_ms):
         now_ms = int(datetime.now().timestamp() * 1000)
         days_left = (delivery_ms - now_ms) / (1000 * 60 * 60 * 24)
-        if days_left <= 0: return 0.0
+        # An expired contract has no basis to annualise. 0.0 said "flat".
+        if days_left <= 0: return None
         return ((future - spot) / spot) * (365 / days_left) * 100
 
     try:
@@ -417,18 +479,21 @@ def get_crypto_futures_basis():
             fut_eth = delivery_prices.get(eth_contract['symbol'], spot_eth)
             eth_basis = calc_annualized_premium(spot_eth, fut_eth, eth_contract['deliveryDate'])
 
-        # Sentiment Thresholds
-        if btc_basis > 12.0: sentiment = "Strong Bullish"
+        # Sentiment Thresholds. With no basis there is no sentiment to read —
+        # and no description either. The description was prose the model could
+        # quote back as if it were a finding.
+        if btc_basis is None:
+            sentiment = None
+        elif btc_basis > 12.0: sentiment = "Strong Bullish"
         elif btc_basis > 6.0: sentiment = "Bullish"
         elif btc_basis < -2.0: sentiment = "Strong Bearish"
         elif btc_basis < 0: sentiment = "Bearish"
         else: sentiment = "Neutral"
 
         return {
-            'btc_basis': round(btc_basis, 2),
-            'eth_basis': round(eth_basis, 2),
+            'btc_basis': round(btc_basis, 2) if btc_basis is not None else None,
+            'eth_basis': round(eth_basis, 2) if eth_basis is not None else None,
             'sentiment': sentiment,
-            'description': f"Current annualized futures premiums are {btc_basis:.1f}% for BTC, indicating {sentiment.lower()} market sentiment."
         }
     except Exception as e:
         print(f"Error fetching real crypto futures basis: {e}")
@@ -541,9 +606,28 @@ def get_etf_flows():
 # MACRO / TRADITIONAL FINANCE DATA
 # ═══════════════════════════════════════════
 
+# Yields are quoted in percent, so the *change* in a yield has two possible
+# readings and the pipeline used to publish the wrong one. A move from 4.10 to
+# 4.17 is +7 basis points; as a percentage of the previous level it is +1.67%,
+# and that 1.67 went into prose as "the 2-year rose 1.67%" — read by anyone in
+# the market as either a level or a 167 bp move. Yield changes are bps here and
+# are labelled bps everywhere they are printed.
+YIELD_KEYS = {'US 10-Year Treasury Yield', 'US 2-Year Treasury Yield'}
+
+
+def _yield_change_bp(current, previous):
+    """Change between two yields, in basis points. None if either leg is."""
+    if current is None or previous is None:
+        return None
+    return (current - previous) * 100
+
+
 def get_macro_indicators():
     """
     Fetch VIX, DXY, US 10Y Yield, NASDAQ 100 Futures using yfinance, and 2Y Yield from FRED.
+
+    Index levels (VIX, DXY, NQ, SMH) carry a percentage change; yields carry a
+    basis-point change. See _yield_change_bp.
     """
     tickers = {
         'US 10-Year Treasury Yield': '^TNX',
@@ -560,19 +644,25 @@ def get_macro_indicators():
             if not data.empty and 'Close' in data and len(data['Close']) >= 2:
                 last_close = float(data['Close'].iloc[-1].item())
                 prev_close = float(data['Close'].iloc[-2].item())
-                pct_change = ((last_close - prev_close) / prev_close) * 100 if prev_close else 0.0
+                if name in YIELD_KEYS:
+                    pct_change = _yield_change_bp(last_close, prev_close)
+                else:
+                    pct_change = (((last_close - prev_close) / prev_close) * 100
+                                  if prev_close else None)
             elif not data.empty and 'Close' in data:
+                # One close is a level without a move. The level is real; the
+                # change is unknown, and 0.0 would claim it was flat.
                 last_close = float(data['Close'].iloc[-1].item())
-                pct_change = 0.0
+                pct_change = None
             else:
-                last_close = 0.0
-                pct_change = 0.0
+                last_close = None
+                pct_change = None
             results[name] = last_close
             results[f"{name}_chg"] = pct_change
         except Exception as e:
             print(f"Error fetching {name}: {e}")
-            results[name] = 0.0
-            results[f"{name}_chg"] = 0.0
+            results[name] = None
+            results[f"{name}_chg"] = None
             
     # Fetch 2Y Yield from FRED (DGS2)
     try:
@@ -580,37 +670,48 @@ def get_macro_indicators():
         if df_dgs2 is not None and len(df_dgs2) >= 2:
             last_close = float(df_dgs2['value'].iloc[-1])
             prev_close = float(df_dgs2['value'].iloc[-2])
-            pct_change = ((last_close - prev_close) / prev_close) * 100 if prev_close else 0.0
             results['US 2-Year Treasury Yield'] = last_close
-            results['US 2-Year Treasury Yield_chg'] = pct_change
+            results['US 2-Year Treasury Yield_chg'] = _yield_change_bp(
+                last_close, prev_close)
         else:
-            results['US 2-Year Treasury Yield'] = 0.0
-            results['US 2-Year Treasury Yield_chg'] = 0.0
+            results['US 2-Year Treasury Yield'] = None
+            results['US 2-Year Treasury Yield_chg'] = None
     except Exception as e:
         print(f"Error fetching US 2-Year Treasury Yield from FRED: {e}")
-        results['US 2-Year Treasury Yield'] = 0.0
-        results['US 2-Year Treasury Yield_chg'] = 0.0
-        
-    # Calculate 2s10s spread
-    ten_year = results.get('US 10-Year Treasury Yield', 0.0)
-    two_year = results.get('US 2-Year Treasury Yield', 0.0)
-    results['2s10s_spread'] = ten_year - two_year
-    
+        results['US 2-Year Treasury Yield'] = None
+        results['US 2-Year Treasury Yield_chg'] = None
+
+    # 2s10s spread. Both legs are required: subtracting two missing yields used
+    # to produce a confident 0.00% spread, which is not merely wrong but sits
+    # exactly on the inversion boundary the number exists to show.
+    ten_year = results.get('US 10-Year Treasury Yield')
+    two_year = results.get('US 2-Year Treasury Yield')
+    if ten_year is None or two_year is None:
+        results['2s10s_spread'] = None
+    else:
+        results['2s10s_spread'] = ten_year - two_year
+
     return results
 
 def get_macro_scoreboard():
     """
     Fetch data for the Macro Scoreboard: DXY, M2 Money Supply, HY OAS, and MOVE.
     """
+    # Seeded with None, not 0.0. The 0.0 seed is what published "MOVE 0.0" as
+    # though the index had been measured at zero: every fetch below is allowed
+    # to fail, and whatever the seed is becomes the published value when one
+    # does. None is the only seed that cannot be mistaken for a reading.
     results = {
-        'DXY': 0.0,
-        'DXY_chg': 0.0,
-        'M2': 0.0,
-        'M2_chg': 0.0,
-        'HY_OAS': 0.0,
-        'HY_OAS_chg_bp': 0.0,
-        'MOVE': 0.0,
-        'MOVE_chg': 0.0
+        'DXY': None,
+        'DXY_chg': None,
+        'M2': None,
+        'M2_chg': None,
+        'HY_OAS': None,
+        'HY_OAS_chg_bp': None,
+        'MOVE': None,
+        'MOVE_chg': None,
+        'COPPER_GOLD': None,
+        'COPPER_GOLD_chg': None,
     }
     
     # DXY from yfinance
@@ -795,13 +896,14 @@ def get_commodities():
     """
     Fetch commodity prices from yfinance: Gold, Copper, Cocoa, Coffee, Brent Oil.
     """
+    # Cocoa, coffee and natural gas were priced every week and never once
+    # transmitted into anything else the bulletin says. The four left are the
+    # ones the macro sections actually reference: two monetary metals, the
+    # growth metal, and the energy input to inflation.
     tickers = {
         'Gold': 'GC=F',
         'Silver': 'SI=F',
         'Copper': 'HG=F',
-        'Natural Gas': 'NG=F',
-        'Cocoa': 'CC=F',
-        'Coffee': 'KC=F',
         'Brent Oil': 'BZ=F',
     }
     
@@ -1508,10 +1610,10 @@ def get_bist_data():
       bist100, bist100_chg, usd_try, try_chg
     """
     results = {
-        'bist100': 0.0,
-        'bist100_chg': 0.0,
-        'usd_try': 0.0,
-        'try_chg': 0.0,
+        'bist100': None,
+        'bist100_chg': None,
+        'usd_try': None,
+        'try_chg': None,
     }
     try:
         # BIST 100
@@ -2002,6 +2104,19 @@ def get_stablecoin_history():
         print(f"      ⚠️  Error calculating Stablecoin History: {e}")
         return None
 
+# BLS publishes the headline CPI year-on-year from the NOT seasonally adjusted
+# index, and that is the number the economic calendar quotes. Computing YoY off
+# the seasonally adjusted series (CPIAUCSL) gives a different figure by
+# construction — 3.73% against a published 3.5% on the 8 Aug bulletin, printed
+# two pages apart as though they were the same series. Same source, same
+# vintage, one number.
+CPI_SERIES = {
+    'cpi': 'CPIAUCNS',        # was CPIAUCSL (seasonally adjusted)
+    'core_cpi': 'CPILFENS',   # was CPILFESL (seasonally adjusted)
+    'core_pce': 'PCEPILFE',   # BEA headlines core PCE from this series
+}
+
+
 def get_inflation_path():
     """
     Fetch CPIAUCSL, CPILFESL, and PCEPILFE from FRED for the last 5 years.
@@ -2010,9 +2125,9 @@ def get_inflation_path():
     """
     try:
         start_date = (datetime.now() - timedelta(days=365 * 6 + 60)).strftime('%Y-%m-%d')
-        cpi = get_fred_data('CPIAUCSL', start_date=start_date)
-        core_cpi = get_fred_data('CPILFESL', start_date=start_date)
-        core_pce = get_fred_data('PCEPILFE', start_date=start_date)
+        cpi = get_fred_data(CPI_SERIES['cpi'], start_date=start_date)
+        core_cpi = get_fred_data(CPI_SERIES['core_cpi'], start_date=start_date)
+        core_pce = get_fred_data(CPI_SERIES['core_pce'], start_date=start_date)
         
         if cpi is None or core_cpi is None or core_pce is None:
             return None
@@ -2100,6 +2215,9 @@ def get_btc_cycle_metrics():
         return {
             'spot': spot,
             'wma200': wma200,
+            # Returned so the Mayer multiple can be recomputed when the spot is
+            # unified against the watchlist feed (validators.unify_spot_prices).
+            'sma200d': mayer_200d_sma,
             'mayer_multiple': round(mayer_multiple, 3),
             'distance_to_200wma': round(distance_to_200wma, 2),
             'ath': ath,
@@ -2110,9 +2228,18 @@ def get_btc_cycle_metrics():
         print(f"      ⚠️  Error fetching BTC cycle metrics: {e}")
         return None
 
+CORRELATION_PEERS = ('NDX', 'GOLD', 'DXY', 'US10Y')
+
+
 def get_correlation_matrix():
-    """
-    Calculate 30-day rolling correlation of daily returns for BTC, Nasdaq, Gold, DXY, and 10Y Yield.
+    """BTC's correlation with four assets, over 30 and 90 days.
+
+    This used to be a full 5x5. Half of a symmetric matrix is its own mirror
+    and the diagonal is five ones, so twenty of the twenty-five cells were
+    either duplicated or known in advance — a quarter page spent on four
+    numbers. Only the BTC row is read in practice, so only the BTC row is
+    computed, and the space buys a second window instead: 30 days says what is
+    happening now, 90 says whether it is a change.
     """
     try:
         tickers = {
@@ -2120,37 +2247,47 @@ def get_correlation_matrix():
             'NDX': '^NDX',
             'GOLD': 'GC=F',
             'DXY': 'DX-Y.NYB',
-            'US10Y': '^TNX'
+            'US10Y': '^TNX',
         }
-        
+
         dfs = {}
         for name, ticker in tickers.items():
-            df = get_yfinance_data(ticker, period='35d')
+            df = get_yfinance_data(ticker, period='6mo')
             if not df.empty and 'Close' in df:
                 close_col = df['Close']
                 if isinstance(close_col, pd.DataFrame):
                     close_col = close_col.iloc[:, 0]
                 dfs[name] = close_col
-                
-        if len(dfs) < 5:
-            print("      ⚠️  Not all tickers available for correlation matrix.")
+
+        if 'BTC' not in dfs or len(dfs) < 2:
+            print("      ⚠️  Not enough tickers for the correlation row.")
             return None
-            
-        combined = pd.DataFrame(dfs)
-        combined = combined.ffill().dropna()
-        
-        returns = combined.pct_change(fill_method=None).dropna().tail(30)
-        corr = returns.corr()
-        
-        corr_dict = {}
-        for col in corr.columns:
-            corr_dict[col] = {}
-            for idx in corr.index:
-                corr_dict[col][idx] = round(float(corr.loc[idx, col]), 3)
-                
-        return corr_dict
+
+        combined = pd.DataFrame(dfs).ffill().dropna()
+        returns = combined.pct_change(fill_method=None).dropna()
+
+        row = {}
+        for peer in CORRELATION_PEERS:
+            if peer not in returns.columns:
+                # A peer we could not fetch is absent, not zero-correlated.
+                row[peer] = {'30d': None, '90d': None}
+                continue
+            entry = {}
+            for label, window in (('30d', 30), ('90d', 90)):
+                sample = returns.tail(window)
+                # Below about two thirds of the window the number is a small
+                # sample dressed as a statistic.
+                if len(sample) < window * 0.66:
+                    entry[label] = None
+                    continue
+                value = sample['BTC'].corr(sample[peer])
+                entry[label] = (None if value != value else round(float(value), 2))
+            row[peer] = entry
+
+        print(f"      ✅ BTC korelasyon satırı: {len(row)} varlık × 2 pencere")
+        return {'base': 'BTC', 'peers': row}
     except Exception as e:
-        print(f"      ⚠️  Error generating correlation matrix: {e}")
+        print(f"      ⚠️  Error generating correlation row: {e}")
         return None
 
 def get_etf_flows_history(limit=10, all_data=False, asset='btc'):
