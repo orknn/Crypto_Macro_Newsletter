@@ -1505,5 +1505,197 @@ class OverviewRetryTests(unittest.TestCase):
         call.assert_not_called()
 
 
+class CalendarActualTests(unittest.TestCase):
+    """The "Açıklanan" column that printed N/A on every row, forever.
+
+    Not a parsing bug and never was: ff_calendar_thisweek.json has no `actual`
+    key, so every event arrived as None and the renderer had nothing to show.
+    The value is now derived from FRED, which publishes these free and keyed by
+    the period they measure.
+
+    No test here touches the network — FRED is stubbed with the observations
+    the 12-14 Aug 2026 releases actually carried.
+    """
+
+    # Monthly index levels, oldest first, as FRED returns them. July 2025 is
+    # set so the July 2026 reading is 3.5% above it — the print the 12 Aug
+    # release actually carried.
+    CPI_NSA = ([('2025-07-01', 322.626)]
+               + [(f'2025-{m:02d}-01', 325.0) for m in range(8, 13)]
+               + [(f'2026-{m:02d}-01', 330.0) for m in range(1, 7)]
+               + [('2026-07-01', 333.918)])
+    CLAIMS = [('2026-07-25', 201000.0), ('2026-08-01', 199000.0),
+              ('2026-08-08', 209000.0)]
+
+    @staticmethod
+    def _release_ts(iso):
+        return datetime.fromisoformat(iso).timestamp()
+
+    def _with_fred(self, observations):
+        import data_fetcher
+        return patch.object(data_fetcher, '_fred_observations',
+                            return_value=observations)
+
+    def test_monthly_release_reads_the_month_it_measures(self):
+        """The CPI read out on 12 Aug is FRED's 1 July observation."""
+        import data_fetcher
+        spec = {'series': 'CPIAUCSL', 'transform': 'mom_pct', 'ref_offset': 1}
+        obs = [('2026-06-01', 100.0), ('2026-07-01', 100.2)]
+
+        with self._with_fred(obs):
+            value = data_fetcher._calendar_actual_from_fred(
+                spec, self._release_ts('2026-08-12T15:30:00'))
+
+        self.assertEqual(value, '0.2%')
+
+    def test_yoy_reaches_twelve_months_back(self):
+        import data_fetcher
+        spec = {'series': 'CPIAUCNS', 'transform': 'yoy_pct', 'ref_offset': 1}
+
+        with self._with_fred(self.CPI_NSA):
+            value = data_fetcher._calendar_actual_from_fred(
+                spec, self._release_ts('2026-08-12T15:30:00'))
+
+        self.assertTrue(value.endswith('%'))
+        self.assertAlmostEqual(float(value.rstrip('%')), 3.5, places=1)
+
+    def test_a_flat_month_is_not_a_decline(self):
+        """The July PPI print rendered as '-0.0%', which reads as a fall."""
+        import data_fetcher
+        spec = {'series': 'PPIFIS', 'transform': 'mom_pct', 'ref_offset': 1}
+        obs = [('2026-06-01', 156.5638), ('2026-07-01', 156.5632)]
+
+        with self._with_fred(obs):
+            value = data_fetcher._calendar_actual_from_fred(
+                spec, self._release_ts('2026-08-13T15:30:00'))
+
+        self.assertEqual(value, '0.0%')
+        self.assertNotIn('-', value)
+
+    def test_missing_observation_yields_nothing_not_a_guess(self):
+        """FRED lags the release; a plausible wrong month is worse than N/A."""
+        import data_fetcher
+        spec = {'series': 'PCEPILFE', 'transform': 'mom_pct', 'ref_offset': 1}
+        obs = [('2026-05-01', 130.0), ('2026-06-01', 130.266)]
+
+        with self._with_fred(obs):
+            value = data_fetcher._calendar_actual_from_fred(
+                spec, self._release_ts('2026-08-28T15:30:00'))
+
+        self.assertIsNone(value)
+
+    def test_weekly_claims_take_the_week_the_release_covers(self):
+        import data_fetcher
+        spec = {'series': 'ICSA', 'transform': 'weekly_level_k'}
+
+        with self._with_fred(self.CLAIMS):
+            value = data_fetcher._calendar_actual_from_fred(
+                spec, self._release_ts('2026-08-13T15:30:00'))
+
+        self.assertEqual(value, '209K')
+
+    def test_stale_weekly_series_is_not_passed_off_as_this_week(self):
+        import data_fetcher
+        spec = {'series': 'ICSA', 'transform': 'weekly_level_k'}
+        stale = [('2026-06-01', 205000.0)]
+
+        with self._with_fred(stale):
+            value = data_fetcher._calendar_actual_from_fred(
+                spec, self._release_ts('2026-08-13T15:30:00'))
+
+        self.assertIsNone(value)
+
+    # ── the fill pass ────────────────────────────────────────────────
+
+    def _events(self):
+        return [
+            {'event': 'CPI m/m', 'forecast': '0.1%', 'actual': None,
+             'timestamp': self._release_ts('2026-08-12T15:30:00')},
+            {'event': 'Prelim UoM Consumer Sentiment', 'forecast': '54.7',
+             'actual': None, 'timestamp': self._release_ts('2026-08-14T17:00:00')},
+        ]
+
+    def test_unmapped_events_are_left_alone(self):
+        """UoM is deliberately unmapped — FRED runs two months behind it."""
+        import data_fetcher
+        events = self._events()
+
+        with self._with_fred([('2026-06-01', 100.0), ('2026-07-01', 100.1)]):
+            data_fetcher._fill_calendar_actuals(events, {}, lambda *a: True)
+
+        self.assertEqual(events[0]['actual'], '0.1%')
+        self.assertIsNone(events[1]['actual'])
+
+    def test_future_releases_are_not_looked_up(self):
+        import data_fetcher
+        future = [{'event': 'CPI m/m', 'forecast': '0.1%', 'actual': None,
+                   'timestamp': datetime.now().timestamp() + 86400}]
+
+        with patch.object(data_fetcher, '_fred_observations') as fetch:
+            data_fetcher._fill_calendar_actuals(future, {}, lambda *a: True)
+
+        fetch.assert_not_called()
+        self.assertIsNone(future[0]['actual'])
+
+    def test_surprise_guard_suppresses_a_bad_mapping(self):
+        """The guard's first real job: it could never fire before."""
+        import data_fetcher
+        events = [{'event': 'CPI m/m', 'forecast': '0.1%', 'actual': None,
+                   'timestamp': self._release_ts('2026-08-12T15:30:00')}]
+
+        with self._with_fred([('2026-06-01', 100.0), ('2026-07-01', 140.0)]):
+            data_fetcher._fill_calendar_actuals(
+                events, {'cpi m/m': 0.5}, lambda key, a, f: False)
+
+        self.assertIsNone(events[0]['actual'])
+
+    def test_claims_suffix_is_parseable_by_the_guard(self):
+        """'202K' stripped only of '%' was unparseable, so the guard waved it."""
+        from data_fetcher import _parse_calendar_numeric as parse
+
+        self.assertEqual(parse('202K'), 202.0)
+        self.assertEqual(parse('209K'), 209.0)
+        self.assertEqual(parse('3.4%'), 3.4)
+        self.assertEqual(parse('-0.6%'), -0.6)
+        self.assertEqual(parse('54.8'), 54.8)
+        self.assertIsNone(parse('—'))
+        self.assertIsNone(parse(''))
+        self.assertIsNone(parse(None))
+
+    # ── the render side ──────────────────────────────────────────────
+
+    def test_pending_release_is_blank_and_past_one_says_na(self):
+        """Both printed N/A before, including releases still hours away."""
+        from render.components import render_economic_calendar
+
+        now = datetime.now().timestamp()
+        html = render_economic_calendar([
+            {'date': '20 Aug', 'time': '15:30', 'country': 'USD',
+             'event': 'Gelecek Veri', 'importance': 3, 'previous': '1.0%',
+             'forecast': '1.1%', 'actual': None, 'timestamp': now + 86400},
+        ], lang='tr')
+        self.assertNotIn('N/A', html)
+
+        html_past = render_economic_calendar([
+            {'date': '10 Aug', 'time': '15:30', 'country': 'USD',
+             'event': 'Gecmis Veri', 'importance': 3, 'previous': '1.0%',
+             'forecast': '1.1%', 'actual': None, 'timestamp': now - 86400},
+        ], lang='tr')
+        self.assertIn('N/A', html_past)
+
+    def test_a_filled_actual_reaches_the_page(self):
+        from render.components import render_economic_calendar
+
+        html = render_economic_calendar([
+            {'date': '12 Aug', 'time': '15:30', 'country': 'USD',
+             'event': 'CPI YoY', 'importance': 3, 'previous': '3.5%',
+             'forecast': '3.4%', 'actual': '3.5%',
+             'timestamp': datetime.now().timestamp() - 86400},
+        ], lang='tr')
+
+        self.assertIn('3.5%', html)
+        self.assertNotIn('N/A', html)
+
+
 if __name__ == '__main__':
     unittest.main()

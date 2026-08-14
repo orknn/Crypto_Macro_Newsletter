@@ -1030,6 +1030,197 @@ def _clean_calendar_val(v):
         return str(v)
     return str(v).strip()
 
+
+# ═══════════════════════════════════════════
+# CALENDAR ACTUALS — released values, from FRED
+# ═══════════════════════════════════════════
+#
+# The calendar's "Açıklanan" column printed N/A on every row, on every run,
+# including releases days old. The cause is not in this file's parsing and
+# never was: ff_calendar_thisweek.json has no `actual` key at all. Its keys
+# are country, date, forecast, impact, previous, title — it is a schedule
+# feed, publishing what is coming and what is expected, never what landed.
+# `event.get('actual')` was therefore None for every event since the day it
+# was written, and no amount of work downstream could have changed that.
+# The sibling feeds that would carry it (lastweek, nextweek) are 404.
+#
+# So the released value is sourced where it actually exists. FRED publishes
+# all of these free and without a key, keyed by reference period: the CPI
+# print released on 12 Aug is FRED's 2026-07-01 observation, because July is
+# the month it measures.
+#
+# Each entry names the series, what to compute from it, and how many months
+# back the release reaches. The offset is per-event rather than global because
+# the conventions differ, and getting it wrong publishes a real number against
+# the wrong event — worse than the N/A this replaces.
+#
+# Deliberately not mapped:
+#   Prelim UoM Sentiment / Inflation Expectations — FRED's UMCSENT and MICH
+#   run two months behind, so any offset that resolved would hand August's
+#   preliminary reading June's final one.
+#   Speeches, testimony, auctions — no released value exists by nature.
+CALENDAR_ACTUAL_SOURCES = {
+    # Headline CPI m/m is quoted seasonally adjusted, y/y unadjusted. Using one
+    # series for both would put a visibly wrong number on one of the two rows.
+    'cpi m/m':      {'series': 'CPIAUCSL', 'transform': 'mom_pct', 'ref_offset': 1},
+    'cpi y/y':      {'series': 'CPIAUCNS', 'transform': 'yoy_pct', 'ref_offset': 1},
+    'core cpi m/m': {'series': 'CPILFESL', 'transform': 'mom_pct', 'ref_offset': 1},
+    'core cpi y/y': {'series': 'CPILFENS', 'transform': 'yoy_pct', 'ref_offset': 1},
+    'ppi m/m':      {'series': 'PPIFIS',   'transform': 'mom_pct', 'ref_offset': 1},
+    'core ppi m/m': {'series': 'PPIFES',   'transform': 'mom_pct', 'ref_offset': 1},
+    'core pce price index m/m': {'series': 'PCEPILFE', 'transform': 'mom_pct',
+                                 'ref_offset': 1},
+    'retail sales m/m':      {'series': 'RSAFS',    'transform': 'mom_pct', 'ref_offset': 1},
+    'core retail sales m/m': {'series': 'RSFSXMV',  'transform': 'mom_pct', 'ref_offset': 1},
+    # Weekly, and quoted as a level in thousands rather than a change.
+    'unemployment claims':   {'series': 'ICSA', 'transform': 'weekly_level_k'},
+}
+
+
+def _parse_calendar_numeric(val_str):
+    """Parse a calendar figure like '3.4%', '202K' or '54.8' into a float.
+
+    The suffixes matter now that the surprise guard is reachable at all:
+    unemployment claims are quoted as 202K, and stripping only '%' left that
+    unparseable, which the guard read as "cannot compare" and waved through.
+    Module level rather than nested so it can be tested directly.
+    """
+    if val_str is None or val_str == '' or val_str == '—':
+        return None
+    text = str(val_str).replace('%', '').strip()
+    multiplier = 1.0
+    if text[-1:].upper() in ('K', 'M', 'B'):
+        multiplier = {'K': 1.0, 'M': 1000.0, 'B': 1000000.0}[text[-1].upper()]
+        text = text[:-1]
+    try:
+        return float(text.strip()) * multiplier
+    except (ValueError, TypeError):
+        return None
+
+
+def _fred_observations(series_id):
+    """(date, value) pairs for a series, oldest first, NaNs dropped."""
+    df = get_fred_data(series_id, days_back=800)
+    if df is None or len(df) == 0:
+        return []
+    df = df.dropna()
+    out = []
+    for _, row in df.iterrows():
+        try:
+            out.append((str(row['date'])[:10], float(row['value'])))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _calendar_actual_from_fred(spec, release_ts):
+    """The released value for one calendar row, or None.
+
+    Returns None rather than a guess whenever the observation the release
+    would have carried is not in FRED yet. A release lands in the feed the
+    moment it is scheduled, but the number itself appears only once the agency
+    publishes it, and the gap between those two is exactly when a plausible
+    wrong figure would be printed.
+    """
+    from datetime import datetime as _dt
+
+    obs = _fred_observations(spec['series'])
+    if not obs:
+        return None
+
+    if spec['transform'] == 'weekly_level_k':
+        # Claims measure the week ending a few days before the Thursday they
+        # are read out. Anything older than that window means this week's print
+        # has not reached FRED.
+        release_day = _dt.fromtimestamp(release_ts).date()
+        candidates = [(d, v) for d, v in obs
+                      if (release_day - _dt.strptime(d, '%Y-%m-%d').date()).days in range(0, 11)]
+        if not candidates:
+            return None
+        return f"{round(candidates[-1][1] / 1000):.0f}K"
+
+    # Monthly series. The release reaches back ref_offset months, and the
+    # observation is dated the first of the month it measures.
+    release_day = _dt.fromtimestamp(release_ts).date()
+    month = release_day.month - spec.get('ref_offset', 1)
+    year = release_day.year
+    while month < 1:
+        month += 12
+        year -= 1
+    target = f"{year:04d}-{month:02d}-01"
+
+    index = {d: i for i, (d, _) in enumerate(obs)}
+    if target not in index:
+        return None
+    i = index[target]
+
+    if spec['transform'] == 'mom_pct':
+        if i < 1:
+            return None
+        change = (obs[i][1] / obs[i - 1][1] - 1) * 100
+    elif spec['transform'] == 'yoy_pct':
+        if i < 12:
+            return None
+        change = (obs[i][1] / obs[i - 12][1] - 1) * 100
+    else:
+        return None
+    # A change that rounds to nothing is flat, not negative. Without this the
+    # July PPI print rendered as "-0.0%", which reads as a decline the number
+    # does not support.
+    if abs(round(change, 1)) < 0.05:
+        change = 0.0
+    return f"{change:.1f}%"
+
+
+def _fill_calendar_actuals(events, thresholds, surprise_check):
+    """Fill the released value on events whose print has already happened.
+
+    Only past events are looked up, so a normal run costs one FRED call per
+    release that has actually landed this week rather than one per row.
+
+    Every filled value is then put through the same surprise guard the feed's
+    own actuals were meant to face. That guard has never once fired — it could
+    not, with `actual` permanently None — and it is the right check here: a
+    derived figure that disagrees with the consensus by more than the release
+    could plausibly move is a mapping fault, not a surprise, and it is
+    suppressed rather than published.
+    """
+    import time as _time
+
+    now = _time.time()
+    filled = 0
+    for ev in events:
+        if ev.get('actual'):
+            continue
+        ts = ev.get('timestamp')
+        if not ts or ts > now:
+            continue  # not released yet — genuinely blank, not missing
+        spec = CALENDAR_ACTUAL_SOURCES.get(ev.get('event', '').lower().strip())
+        if not spec:
+            continue
+
+        try:
+            value = _calendar_actual_from_fred(spec, ts)
+        except Exception as e:
+            print(f"      ⚠️  {ev['event']} actual FRED'den alınamadı: {e}")
+            continue
+        if value is None:
+            continue
+
+        key = ev['event'].lower().strip()
+        if key in thresholds and not surprise_check(key, value, ev.get('forecast')):
+            continue
+
+        ev['actual'] = value
+        ev['actual_source'] = f"FRED:{spec['series']}"
+        filled += 1
+        print(f"      ✅ {ev['event']}: açıklanan {value} (FRED {spec['series']})")
+
+    if filled:
+        print(f"      📅 {filled} takvim olayına açıklanan değer eklendi.")
+    return events
+
+
 def _get_calendar_from_newest_snapshot():
     """Scan snapshots/ for the newest JSON file containing non-empty calendar data."""
     import os
@@ -1143,16 +1334,16 @@ def get_economic_calendar():
             'gdp q/q': 2.0,
             'advance gdp': 2.0,
             'preliminary gdp': 2.0,
+            # Added with the FRED-sourced actuals below, so every mapped event
+            # has a band to be judged against. Wide on purpose: this is a
+            # mapping check, not a forecasting one — it should catch a value
+            # pulled from the wrong month, not an economy that surprised.
+            'retail sales m/m': 2.0,
+            'core retail sales m/m': 2.0,
+            'unemployment claims': 75.0,      # thousands
         }
-        
-        def _parse_numeric(val_str):
-            """Parse a string like '3.4%' or '54.8' into a float."""
-            if not val_str or val_str == '—':
-                return None
-            try:
-                return float(val_str.replace('%', '').strip())
-            except (ValueError, TypeError):
-                return None
+
+        _parse_numeric = _parse_calendar_numeric
         
         def _surprise_check(event_key, actual_str, consensus_str):
             """Return True if the actual passes the surprise guard (is reasonable)."""
@@ -1237,7 +1428,11 @@ def get_economic_calendar():
             
         # Limit to top 15 events
         events = events[:15]
-        
+
+        # The feed carries no released values, so they are sourced from FRED
+        # for the events that have already printed. See CALENDAR_ACTUAL_SOURCES.
+        events = _fill_calendar_actuals(events, surprise_thresholds, _surprise_check)
+
     except Exception as e:
         print(f"      ⚠️  Error fetching ForexFactory calendar live: {e}")
         print("      🔄 Attempting fallback to most recent snapshot calendar...")

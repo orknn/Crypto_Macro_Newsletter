@@ -1,4 +1,5 @@
 # render/components.py
+import time
 from datetime import datetime, timedelta
 from render.tokens import STYLE_TOKENS, CSS_VARIABLES
 from render.svg import (
@@ -718,10 +719,25 @@ def render_economic_calendar(events, lang='tr'):
         forecast = ev.get('forecast')
         previous = ev.get('previous')
         
-        # An event that has not printed yet has a genuinely empty actual — that
-        # is "not released", not "not fetched", so it stays blank. A forecast or
+        # An event that has not printed yet has no actual — that is "not
+        # released", not "not fetched", so it stays blank. A forecast or
         # previous that is missing is data we failed to get, and says N/A.
-        disp_actual = "" if actual == "" else (na(lang) if (actual is None or actual == 'None') else actual)
+        #
+        # The distinction is read off the clock rather than off the value.
+        # Written against a feed that was expected to send "" for a pending
+        # release, it never worked: ff_calendar_thisweek.json carries no
+        # `actual` field at all, so every row arrived as None and every row —
+        # including releases still hours away — printed N/A. The timestamp is
+        # the only thing that actually knows whether the number exists yet.
+        _ts = ev.get('timestamp')
+        _pending = bool(_ts) and _ts > time.time()
+
+        if actual is not None and actual != "" and actual != 'None':
+            disp_actual = actual
+        elif _pending:
+            disp_actual = ""
+        else:
+            disp_actual = na(lang)
         disp_forecast = na(lang) if (forecast is None or forecast == "" or forecast == 'None') else forecast
         disp_previous = na(lang) if (previous is None or previous == "" or previous == 'None') else previous
         
