@@ -1,0 +1,2108 @@
+{
+  "date": "2026-08-18",
+  "as_of": "2026-08-18T06:00:23",
+  "crypto_prices": [
+    {
+      "Symbol": "BTC",
+      "Current Price USD": 64164,
+      "1h %": 0.0,
+      "24h %": 1.1,
+      "7d %": 0.3,
+      "30d %": -0.8,
+      "Market Cap": 1287806658895
+    },
+    {
+      "Symbol": "ETH",
+      "Current Price USD": 1894.0,
+      "1h %": 0.0,
+      "24h %": -0.4,
+      "7d %": 1.0,
+      "30d %": 1.5,
+      "Market Cap": 228575568626
+    },
+    {
+      "Symbol": "XRP",
+      "Current Price USD": 0.994672,
+      "1h %": 0.0,
+      "24h %": -0.7,
+      "7d %": -1.7,
+      "30d %": -9.2,
+      "Market Cap": 62342606388
+    },
+    {
+      "Symbol": "SOL",
+      "Current Price USD": 75.69,
+      "1h %": -0.1,
+      "24h %": 0.3,
+      "7d %": -0.4,
+      "30d %": -0.3,
+      "Market Cap": 44118004636
+    },
+    {
+      "Symbol": "TRX",
+      "Current Price USD": 0.331455,
+      "1h %": 0.0,
+      "24h %": -0.2,
+      "7d %": 0.0,
+      "30d %": 1.8,
+      "Market Cap": 31457342453
+    },
+    {
+      "Symbol": "DOGE",
+      "Current Price USD": 0.069746,
+      "1h %": -0.2,
+      "24h %": -0.6,
+      "7d %": -0.3,
+      "30d %": -3.6,
+      "Market Cap": 10848091100
+    },
+    {
+      "Symbol": "HYPE",
+      "Current Price USD": 59.13,
+      "1h %": -0.3,
+      "24h %": 0.5,
+      "7d %": 6.7,
+      "30d %": -2.8,
+      "Market Cap": 13153084915
+    },
+    {
+      "Symbol": "LINK",
+      "Current Price USD": 9.43,
+      "1h %": 0.1,
+      "24h %": -0.3,
+      "7d %": 12.7,
+      "30d %": 13.0,
+      "Market Cap": 7055466741
+    },
+    {
+      "Symbol": "AVAX",
+      "Current Price USD": 6.34,
+      "1h %": 0.7,
+      "24h %": -0.7,
+      "7d %": -2.5,
+      "30d %": -3.5,
+      "Market Cap": 2736259118
+    },
+    {
+      "Symbol": "SUI",
+      "Current Price USD": 0.644101,
+      "1h %": -0.4,
+      "24h %": -4.9,
+      "7d %": -6.3,
+      "30d %": -13.2,
+      "Market Cap": 2624793576
+    },
+    {
+      "Symbol": "TON",
+      "Current Price USD": 1.31,
+      "1h %": -0.2,
+      "24h %": -1.9,
+      "7d %": -1.2,
+      "30d %": -10.1,
+      "Market Cap": 3618075277
+    },
+    {
+      "Symbol": "UNI",
+      "Current Price USD": 3.25,
+      "1h %": -0.2,
+      "24h %": -0.9,
+      "7d %": -18.6,
+      "30d %": -8.4,
+      "Market Cap": 2028854314
+    },
+    {
+      "Symbol": "AAVE",
+      "Current Price USD": 88.35,
+      "1h %": 0.1,
+      "24h %": 1.8,
+      "7d %": -0.6,
+      "30d %": -2.0,
+      "Market Cap": 1362610629
+    },
+    {
+      "Symbol": "PEPE",
+      "Current Price USD": 2.55e-06,
+      "1h %": -0.4,
+      "24h %": -2.2,
+      "7d %": -10.7,
+      "30d %": -7.6,
+      "Market Cap": 1074146886
+    },
+    {
+      "Symbol": "RENDER",
+      "Current Price USD": 1.26,
+      "1h %": 0.4,
+      "24h %": -0.9,
+      "7d %": -0.2,
+      "30d %": -14.7,
+      "Market Cap": 654049930
+    },
+    {
+      "Symbol": "JUP",
+      "Current Price USD": 0.165933,
+      "1h %": -0.5,
+      "24h %": -2.2,
+      "7d %": -8.9,
+      "30d %": -14.6,
+      "Market Cap": 550976078
+    }
+  ],
+  "crypto_prices_display": [
+    {
+      "Symbol": "BTC",
+      "Current Price USD": 64164,
+      "1h %": 0.0,
+      "24h %": 1.1,
+      "7d %": 0.3,
+      "30d %": -0.8,
+      "Market Cap": 1287806658895
+    },
+    {
+      "Symbol": "ETH",
+      "Current Price USD": 1894.0,
+      "1h %": 0.0,
+      "24h %": -0.4,
+      "7d %": 1.0,
+      "30d %": 1.5,
+      "Market Cap": 228575568626
+    },
+    {
+      "Symbol": "XRP",
+      "Current Price USD": 0.994672,
+      "1h %": 0.0,
+      "24h %": -0.7,
+      "7d %": -1.7,
+      "30d %": -9.2,
+      "Market Cap": 62342606388
+    },
+    {
+      "Symbol": "SOL",
+      "Current Price USD": 75.69,
+      "1h %": -0.1,
+      "24h %": 0.3,
+      "7d %": -0.4,
+      "30d %": -0.3,
+      "Market Cap": 44118004636
+    },
+    {
+      "Symbol": "TRX",
+      "Current Price USD": 0.331455,
+      "1h %": 0.0,
+      "24h %": -0.2,
+      "7d %": 0.0,
+      "30d %": 1.8,
+      "Market Cap": 31457342453
+    },
+    {
+      "Symbol": "HYPE",
+      "Current Price USD": 59.13,
+      "1h %": -0.3,
+      "24h %": 0.5,
+      "7d %": 6.7,
+      "30d %": -2.8,
+      "Market Cap": 13153084915
+    },
+    {
+      "Symbol": "DOGE",
+      "Current Price USD": 0.069746,
+      "1h %": -0.2,
+      "24h %": -0.6,
+      "7d %": -0.3,
+      "30d %": -3.6,
+      "Market Cap": 10848091100
+    },
+    {
+      "Symbol": "LINK",
+      "Current Price USD": 9.43,
+      "1h %": 0.1,
+      "24h %": -0.3,
+      "7d %": 12.7,
+      "30d %": 13.0,
+      "Market Cap": 7055466741
+    },
+    {
+      "Symbol": "TON",
+      "Current Price USD": 1.31,
+      "1h %": -0.2,
+      "24h %": -1.9,
+      "7d %": -1.2,
+      "30d %": -10.1,
+      "Market Cap": 3618075277
+    },
+    {
+      "Symbol": "AVAX",
+      "Current Price USD": 6.34,
+      "1h %": 0.7,
+      "24h %": -0.7,
+      "7d %": -2.5,
+      "30d %": -3.5,
+      "Market Cap": 2736259118
+    }
+  ],
+  "crypto_market_overview": {
+    "total_market_cap": 2276941558467.274,
+    "total3": 760472803159.9463,
+    "btc_dominance": 56.56063645283507,
+    "eth_dominance": 10.040491260260058,
+    "stablecoin_dominance": 11.189665737195384,
+    "total_volume": 54172339047.21167,
+    "market_cap_change_24h": 0.5318537502596352
+  },
+  "macro_indicators": {
+    "US 10-Year Treasury Yield": null,
+    "US 10-Year Treasury Yield_chg": null,
+    "VIX": null,
+    "VIX_chg": null,
+    "DXY": 99.63400268554688,
+    "DXY_chg": -0.03611466244578782,
+    "NASDAQ 100 Futures": 29880.5,
+    "NASDAQ 100 Futures_chg": -0.7160419989367357,
+    "SMH (Semiconductor ETF)": null,
+    "SMH (Semiconductor ETF)_chg": NaN,
+    "US 2-Year Treasury Yield": null,
+    "US 2-Year Treasury Yield_chg": null,
+    "2s10s_spread": null
+  },
+  "magnificent_7": [
+    {
+      "Symbol": "AAPL",
+      "Name": "Apple",
+      "Price": 305.92999267578125,
+      "Change %": 0.21947942367906456,
+      "7d %": -2.2775202639800747,
+      "30d %": -8.121637408034237
+    },
+    {
+      "Symbol": "MSFT",
+      "Name": "Microsoft",
+      "Price": 495.3999938964844,
+      "Change %": -0.29786084603609286,
+      "7d %": -0.9180176458610743,
+      "30d %": 23.510343145851728
+    },
+    {
+      "Symbol": "GOOGL",
+      "Name": "Alphabet (Google)",
+      "Price": 345.8999938964844,
+      "Change %": -0.1328073318317138,
+      "7d %": -2.370870501241117,
+      "30d %": -2.414940406519359
+    },
+    {
+      "Symbol": "AMZN",
+      "Name": "Amazon",
+      "Price": 262.6499938964844,
+      "Change %": -0.9353943124710801,
+      "7d %": -4.309973993127318,
+      "30d %": 5.1062445628084285
+    },
+    {
+      "Symbol": "NVDA",
+      "Name": "NVIDIA",
+      "Price": 225.16000366210938,
+      "Change %": -0.06213909798140378,
+      "7d %": 0.5358085873677043,
+      "30d %": 8.563167930703612
+    },
+    {
+      "Symbol": "META",
+      "Name": "Meta",
+      "Price": 589.8499755859375,
+      "Change %": -0.8605468123268104,
+      "7d %": -0.3800033934764847,
+      "30d %": -11.239354276791605
+    },
+    {
+      "Symbol": "TSLA",
+      "Name": "Tesla",
+      "Price": 342.2699890136719,
+      "Change %": 0.679491003840371,
+      "7d %": 4.166413963376119,
+      "30d %": -12.47634860367213
+    }
+  ],
+  "commodities": [
+    {
+      "Name": "Gold",
+      "Ticker": "GC=F",
+      "Price": 4451.2998046875,
+      "Change %": 0.7582960179511727,
+      "7d %": 1.5582889502053388,
+      "30d %": 10.996677318153345
+    },
+    {
+      "Name": "Silver",
+      "Ticker": "SI=F",
+      "Price": 65.23999786376953,
+      "Change %": -1.33241225060035,
+      "7d %": 0.7272008087259857,
+      "30d %": 14.85511073884796
+    },
+    {
+      "Name": "Copper",
+      "Ticker": "HG=F",
+      "Price": 6.578999996185303,
+      "Change %": -0.3785598882624123,
+      "7d %": -0.49909244446040635,
+      "30d %": 4.44515350538533
+    },
+    {
+      "Name": "Brent Oil",
+      "Ticker": "BZ=F",
+      "Price": 91.25,
+      "Change %": 0.41817678214196147,
+      "7d %": 2.6318707024054,
+      "30d %": 2.2752732027824973
+    }
+  ],
+  "fear_and_greed": {
+    "value": 41,
+    "classification": "Fear"
+  },
+  "funding_rates": {
+    "BTC": -0.0014498211209277676,
+    "ETH": -0.0031687682628909553,
+    "SOL": -0.49973429999999996
+  },
+  "open_interest": {
+    "BTC": {
+      "oi": 156318656.4486,
+      "oi_chg_24h": 6.553885051209217
+    },
+    "ETH": {
+      "oi": 50612243.572799996,
+      "oi_chg_24h": -0.345615437562299
+    },
+    "SOL": {
+      "oi": 20794044.8508,
+      "oi_chg_24h": -2.4839965799781254
+    }
+  },
+  "economic_calendar": [
+    {
+      "date": "19 Aug Wed",
+      "timestamp": 1787162400.0,
+      "time": "21:00",
+      "country": "USD",
+      "event": "FOMC Meeting Minutes",
+      "importance": 3,
+      "previous": "",
+      "forecast": "",
+      "actual": null
+    },
+    {
+      "date": "20 Aug Thu",
+      "timestamp": 1787229000.0,
+      "time": "15:30",
+      "country": "USD",
+      "event": "Philly Fed Manufacturing Index",
+      "importance": 2,
+      "previous": "41.4",
+      "forecast": "24.1",
+      "actual": null
+    },
+    {
+      "date": "20 Aug Thu",
+      "timestamp": 1787229000.0,
+      "time": "15:30",
+      "country": "USD",
+      "event": "Unemployment Claims",
+      "importance": 2,
+      "previous": "209K",
+      "forecast": "210K",
+      "actual": null
+    },
+    {
+      "date": "21 Aug Fri",
+      "timestamp": 1787296500.0,
+      "time": "10:15",
+      "country": "EUR",
+      "event": "French Flash Manufacturing PMI",
+      "importance": 2,
+      "previous": "50.0",
+      "forecast": "50.1",
+      "actual": null
+    },
+    {
+      "date": "21 Aug Fri",
+      "timestamp": 1787296500.0,
+      "time": "10:15",
+      "country": "EUR",
+      "event": "French Flash Services PMI",
+      "importance": 2,
+      "previous": "49.8",
+      "forecast": "49.4",
+      "actual": null
+    },
+    {
+      "date": "21 Aug Fri",
+      "timestamp": 1787297400.0,
+      "time": "10:30",
+      "country": "EUR",
+      "event": "German Flash Manufacturing PMI",
+      "importance": 2,
+      "previous": "52.2",
+      "forecast": "52.1",
+      "actual": null
+    },
+    {
+      "date": "21 Aug Fri",
+      "timestamp": 1787297400.0,
+      "time": "10:30",
+      "country": "EUR",
+      "event": "German Flash Services PMI",
+      "importance": 2,
+      "previous": "49.6",
+      "forecast": "50.1",
+      "actual": null
+    }
+  ],
+  "coinbase_premium": {
+    "current_value": -0.1258663233024244,
+    "trend_data": [
+      {
+        "time": "2026-08-11 07:00:00",
+        "value": -0.10431431715953265
+      },
+      {
+        "time": "2026-08-11 08:00:00",
+        "value": -0.09752650639473415
+      },
+      {
+        "time": "2026-08-11 09:00:00",
+        "value": -0.08676516329704645
+      },
+      {
+        "time": "2026-08-11 10:00:00",
+        "value": -0.09661665776422101
+      },
+      {
+        "time": "2026-08-11 11:00:00",
+        "value": -0.09691010516144377
+      },
+      {
+        "time": "2026-08-11 12:00:00",
+        "value": -0.09870976236440814
+      },
+      {
+        "time": "2026-08-11 13:00:00",
+        "value": -0.09390924774783051
+      },
+      {
+        "time": "2026-08-11 14:00:00",
+        "value": -0.08792531538718064
+      },
+      {
+        "time": "2026-08-11 15:00:00",
+        "value": -0.09825519215807231
+      },
+      {
+        "time": "2026-08-11 16:00:00",
+        "value": -0.11337909538879577
+      },
+      {
+        "time": "2026-08-11 17:00:00",
+        "value": -0.11124407856384266
+      },
+      {
+        "time": "2026-08-11 18:00:00",
+        "value": -0.10616496881088267
+      },
+      {
+        "time": "2026-08-11 19:00:00",
+        "value": -0.10584550491060185
+      },
+      {
+        "time": "2026-08-11 20:00:00",
+        "value": -0.0907436460621219
+      },
+      {
+        "time": "2026-08-11 21:00:00",
+        "value": -0.08977155526393087
+      },
+      {
+        "time": "2026-08-11 22:00:00",
+        "value": -0.10023796700691301
+      },
+      {
+        "time": "2026-08-11 23:00:00",
+        "value": -0.10731132075471699
+      },
+      {
+        "time": "2026-08-12 00:00:00",
+        "value": -0.08946995288982432
+      },
+      {
+        "time": "2026-08-12 01:00:00",
+        "value": -0.08289742970956353
+      },
+      {
+        "time": "2026-08-12 02:00:00",
+        "value": -0.09695722776055149
+      },
+      {
+        "time": "2026-08-12 03:00:00",
+        "value": -0.11524918936286124
+      },
+      {
+        "time": "2026-08-12 04:00:00",
+        "value": -0.08775343980625108
+      },
+      {
+        "time": "2026-08-12 05:00:00",
+        "value": -0.10936580363270779
+      },
+      {
+        "time": "2026-08-12 06:00:00",
+        "value": -0.0961828679916801
+      },
+      {
+        "time": "2026-08-12 07:00:00",
+        "value": -0.1102948260119033
+      },
+      {
+        "time": "2026-08-12 08:00:00",
+        "value": -0.10027441047832503
+      },
+      {
+        "time": "2026-08-12 09:00:00",
+        "value": -0.08808461738722208
+      },
+      {
+        "time": "2026-08-12 10:00:00",
+        "value": -0.09879432571041277
+      },
+      {
+        "time": "2026-08-12 11:00:00",
+        "value": -0.09397565754940784
+      },
+      {
+        "time": "2026-08-12 12:00:00",
+        "value": -0.08307897836717727
+      },
+      {
+        "time": "2026-08-12 13:00:00",
+        "value": -0.10208333333333058
+      },
+      {
+        "time": "2026-08-12 14:00:00",
+        "value": -0.10523426855791695
+      },
+      {
+        "time": "2026-08-12 15:00:00",
+        "value": -0.1167217594422117
+      },
+      {
+        "time": "2026-08-12 16:00:00",
+        "value": -0.10639115531187636
+      },
+      {
+        "time": "2026-08-12 17:00:00",
+        "value": -0.11370547179026366
+      },
+      {
+        "time": "2026-08-12 18:00:00",
+        "value": -0.12144524575307795
+      },
+      {
+        "time": "2026-08-12 19:00:00",
+        "value": -0.12147374904034458
+      },
+      {
+        "time": "2026-08-12 20:00:00",
+        "value": -0.10143083355829893
+      },
+      {
+        "time": "2026-08-12 21:00:00",
+        "value": -0.10497901128773254
+      },
+      {
+        "time": "2026-08-12 22:00:00",
+        "value": -0.11147321206174383
+      },
+      {
+        "time": "2026-08-12 23:00:00",
+        "value": -0.10754570062156091
+      },
+      {
+        "time": "2026-08-13 00:00:00",
+        "value": -0.10554318868818965
+      },
+      {
+        "time": "2026-08-13 01:00:00",
+        "value": -0.11124224286676852
+      },
+      {
+        "time": "2026-08-13 02:00:00",
+        "value": -0.11166009257905565
+      },
+      {
+        "time": "2026-08-13 03:00:00",
+        "value": -0.1048282094722801
+      },
+      {
+        "time": "2026-08-13 04:00:00",
+        "value": -0.10878620096731778
+      },
+      {
+        "time": "2026-08-13 05:00:00",
+        "value": -0.11332540154669749
+      },
+      {
+        "time": "2026-08-13 06:00:00",
+        "value": -0.10414068297458023
+      },
+      {
+        "time": "2026-08-13 07:00:00",
+        "value": -0.09820586404248953
+      },
+      {
+        "time": "2026-08-13 08:00:00",
+        "value": -0.0921796295250916
+      },
+      {
+        "time": "2026-08-13 09:00:00",
+        "value": -0.1011403729917765
+      },
+      {
+        "time": "2026-08-13 10:00:00",
+        "value": -0.10805768124680595
+      },
+      {
+        "time": "2026-08-13 11:00:00",
+        "value": -0.1093183669033154
+      },
+      {
+        "time": "2026-08-13 12:00:00",
+        "value": -0.11950184747470337
+      },
+      {
+        "time": "2026-08-13 13:00:00",
+        "value": -0.11137091205825303
+      },
+      {
+        "time": "2026-08-13 14:00:00",
+        "value": -0.09758931528536452
+      },
+      {
+        "time": "2026-08-13 15:00:00",
+        "value": -0.11278774632801042
+      },
+      {
+        "time": "2026-08-13 16:00:00",
+        "value": -0.103641331960525
+      },
+      {
+        "time": "2026-08-13 17:00:00",
+        "value": -0.1177777024653585
+      },
+      {
+        "time": "2026-08-13 18:00:00",
+        "value": -0.11715368820091336
+      },
+      {
+        "time": "2026-08-13 19:00:00",
+        "value": -0.1077466735659019
+      },
+      {
+        "time": "2026-08-13 20:00:00",
+        "value": -0.10464310409670906
+      },
+      {
+        "time": "2026-08-13 21:00:00",
+        "value": -0.10212055329741265
+      },
+      {
+        "time": "2026-08-13 22:00:00",
+        "value": -0.1049267897171801
+      },
+      {
+        "time": "2026-08-13 23:00:00",
+        "value": -0.1031802057808038
+      },
+      {
+        "time": "2026-08-14 00:00:00",
+        "value": -0.09648819786139233
+      },
+      {
+        "time": "2026-08-14 01:00:00",
+        "value": -0.10187829154022307
+      },
+      {
+        "time": "2026-08-14 02:00:00",
+        "value": -0.09756498778310234
+      },
+      {
+        "time": "2026-08-14 03:00:00",
+        "value": -0.09999999999999631
+      },
+      {
+        "time": "2026-08-14 04:00:00",
+        "value": -0.10321501924491644
+      },
+      {
+        "time": "2026-08-14 05:00:00",
+        "value": -0.10301384525644969
+      },
+      {
+        "time": "2026-08-14 06:00:00",
+        "value": -0.11091854529493939
+      },
+      {
+        "time": "2026-08-14 07:00:00",
+        "value": -0.11458853498001542
+      },
+      {
+        "time": "2026-08-14 08:00:00",
+        "value": -0.11047027161260195
+      },
+      {
+        "time": "2026-08-14 09:00:00",
+        "value": -0.11006047672701162
+      },
+      {
+        "time": "2026-08-14 10:00:00",
+        "value": -0.10827179994823145
+      },
+      {
+        "time": "2026-08-14 11:00:00",
+        "value": -0.10852754854830797
+      },
+      {
+        "time": "2026-08-14 12:00:00",
+        "value": -0.12726785013283165
+      },
+      {
+        "time": "2026-08-14 13:00:00",
+        "value": -0.12114635858811236
+      },
+      {
+        "time": "2026-08-14 14:00:00",
+        "value": -0.13363140631884327
+      },
+      {
+        "time": "2026-08-14 15:00:00",
+        "value": -0.12368443403377187
+      },
+      {
+        "time": "2026-08-14 16:00:00",
+        "value": -0.09882236810010582
+      },
+      {
+        "time": "2026-08-14 17:00:00",
+        "value": -0.09839131782315874
+      },
+      {
+        "time": "2026-08-14 18:00:00",
+        "value": -0.11773397143906981
+      },
+      {
+        "time": "2026-08-14 19:00:00",
+        "value": -0.12072789295524329
+      },
+      {
+        "time": "2026-08-14 20:00:00",
+        "value": -0.11515303638240643
+      },
+      {
+        "time": "2026-08-14 21:00:00",
+        "value": -0.10740763047070812
+      },
+      {
+        "time": "2026-08-14 22:00:00",
+        "value": -0.11503194306983669
+      },
+      {
+        "time": "2026-08-14 23:00:00",
+        "value": -0.10844882490772309
+      },
+      {
+        "time": "2026-08-15 00:00:00",
+        "value": -0.10975901572646324
+      },
+      {
+        "time": "2026-08-15 01:00:00",
+        "value": -0.11555214494759318
+      },
+      {
+        "time": "2026-08-15 02:00:00",
+        "value": -0.0998187834494756
+      },
+      {
+        "time": "2026-08-15 03:00:00",
+        "value": -0.09969667532364636
+      },
+      {
+        "time": "2026-08-15 04:00:00",
+        "value": -0.11088051709387846
+      },
+      {
+        "time": "2026-08-15 05:00:00",
+        "value": -0.11555104693369916
+      },
+      {
+        "time": "2026-08-15 06:00:00",
+        "value": -0.10954662211707232
+      },
+      {
+        "time": "2026-08-15 07:00:00",
+        "value": -0.11061359391445576
+      },
+      {
+        "time": "2026-08-15 08:00:00",
+        "value": -0.10590170415147623
+      },
+      {
+        "time": "2026-08-15 09:00:00",
+        "value": -0.11540466676545177
+      },
+      {
+        "time": "2026-08-15 10:00:00",
+        "value": -0.11114089531311169
+      },
+      {
+        "time": "2026-08-15 11:00:00",
+        "value": -0.11549933110670521
+      },
+      {
+        "time": "2026-08-15 12:00:00",
+        "value": -0.10182373930077082
+      },
+      {
+        "time": "2026-08-15 13:00:00",
+        "value": -0.11795050297056295
+      },
+      {
+        "time": "2026-08-15 14:00:00",
+        "value": -0.11671954314721089
+      },
+      {
+        "time": "2026-08-15 15:00:00",
+        "value": -0.12297832586246207
+      },
+      {
+        "time": "2026-08-15 16:00:00",
+        "value": -0.11502991522684251
+      },
+      {
+        "time": "2026-08-15 17:00:00",
+        "value": -0.11124059584116741
+      },
+      {
+        "time": "2026-08-15 18:00:00",
+        "value": -0.1079330986060755
+      },
+      {
+        "time": "2026-08-15 19:00:00",
+        "value": -0.11831876777395703
+      },
+      {
+        "time": "2026-08-15 20:00:00",
+        "value": -0.10584234197614875
+      },
+      {
+        "time": "2026-08-15 21:00:00",
+        "value": -0.11577123401496069
+      },
+      {
+        "time": "2026-08-15 22:00:00",
+        "value": -0.1169547665086096
+      },
+      {
+        "time": "2026-08-15 23:00:00",
+        "value": -0.10661634806195865
+      },
+      {
+        "time": "2026-08-16 00:00:00",
+        "value": -0.11554102015318088
+      },
+      {
+        "time": "2026-08-16 01:00:00",
+        "value": -0.1123567364426053
+      },
+      {
+        "time": "2026-08-16 02:00:00",
+        "value": -0.10687255819731437
+      },
+      {
+        "time": "2026-08-16 03:00:00",
+        "value": -0.11178520513226628
+      },
+      {
+        "time": "2026-08-16 04:00:00",
+        "value": -0.1158503541210467
+      },
+      {
+        "time": "2026-08-16 05:00:00",
+        "value": -0.11354153668425508
+      },
+      {
+        "time": "2026-08-16 06:00:00",
+        "value": -0.11985227046244284
+      },
+      {
+        "time": "2026-08-16 07:00:00",
+        "value": -0.11067058541075547
+      },
+      {
+        "time": "2026-08-16 08:00:00",
+        "value": -0.11179212720868292
+      },
+      {
+        "time": "2026-08-16 09:00:00",
+        "value": -0.11934718139517504
+      },
+      {
+        "time": "2026-08-16 10:00:00",
+        "value": -0.1085249197053629
+      },
+      {
+        "time": "2026-08-16 11:00:00",
+        "value": -0.10843680560691403
+      },
+      {
+        "time": "2026-08-16 12:00:00",
+        "value": -0.11738761619359339
+      },
+      {
+        "time": "2026-08-16 13:00:00",
+        "value": -0.10526481045595244
+      },
+      {
+        "time": "2026-08-16 14:00:00",
+        "value": -0.10316491251979672
+      },
+      {
+        "time": "2026-08-16 15:00:00",
+        "value": -0.11702965125955965
+      },
+      {
+        "time": "2026-08-16 16:00:00",
+        "value": -0.1155390269460972
+      },
+      {
+        "time": "2026-08-16 17:00:00",
+        "value": -0.11382330076489039
+      },
+      {
+        "time": "2026-08-16 18:00:00",
+        "value": -0.10416524786323739
+      },
+      {
+        "time": "2026-08-16 19:00:00",
+        "value": -0.1087645290728813
+      },
+      {
+        "time": "2026-08-16 20:00:00",
+        "value": -0.10631417400229644
+      },
+      {
+        "time": "2026-08-16 21:00:00",
+        "value": -0.10816847585739003
+      },
+      {
+        "time": "2026-08-16 22:00:00",
+        "value": -0.10124980727567619
+      },
+      {
+        "time": "2026-08-16 23:00:00",
+        "value": -0.10069952305245868
+      },
+      {
+        "time": "2026-08-17 00:00:00",
+        "value": -0.12236651337607599
+      },
+      {
+        "time": "2026-08-17 01:00:00",
+        "value": -0.1173709664028805
+      },
+      {
+        "time": "2026-08-17 02:00:00",
+        "value": -0.10384310984247283
+      },
+      {
+        "time": "2026-08-17 03:00:00",
+        "value": -0.09680082725293514
+      },
+      {
+        "time": "2026-08-17 04:00:00",
+        "value": -0.08255625000394187
+      },
+      {
+        "time": "2026-08-17 05:00:00",
+        "value": -0.10009417479610691
+      },
+      {
+        "time": "2026-08-17 06:00:00",
+        "value": -0.1015423920246288
+      },
+      {
+        "time": "2026-08-17 07:00:00",
+        "value": -0.08342983368351291
+      },
+      {
+        "time": "2026-08-17 08:00:00",
+        "value": -0.11514520792087314
+      },
+      {
+        "time": "2026-08-17 09:00:00",
+        "value": -0.12279712134238294
+      },
+      {
+        "time": "2026-08-17 10:00:00",
+        "value": -0.12163182907297637
+      },
+      {
+        "time": "2026-08-17 11:00:00",
+        "value": -0.11637391149924428
+      },
+      {
+        "time": "2026-08-17 12:00:00",
+        "value": -0.12029009975503674
+      },
+      {
+        "time": "2026-08-17 13:00:00",
+        "value": -0.108744202350907
+      },
+      {
+        "time": "2026-08-17 14:00:00",
+        "value": -0.11530041877775657
+      },
+      {
+        "time": "2026-08-17 15:00:00",
+        "value": -0.09118380062305433
+      },
+      {
+        "time": "2026-08-17 16:00:00",
+        "value": -0.08642180955197831
+      },
+      {
+        "time": "2026-08-17 17:00:00",
+        "value": -0.07645432273953388
+      },
+      {
+        "time": "2026-08-17 18:00:00",
+        "value": -0.07495087217888638
+      },
+      {
+        "time": "2026-08-17 19:00:00",
+        "value": -0.07457631757195796
+      },
+      {
+        "time": "2026-08-17 20:00:00",
+        "value": -0.07913936868340013
+      },
+      {
+        "time": "2026-08-17 21:00:00",
+        "value": -0.07298621571674509
+      },
+      {
+        "time": "2026-08-17 22:00:00",
+        "value": -0.07937316508856
+      },
+      {
+        "time": "2026-08-17 23:00:00",
+        "value": -0.07425761752677854
+      },
+      {
+        "time": "2026-08-18 00:00:00",
+        "value": -0.08738235184024351
+      },
+      {
+        "time": "2026-08-18 01:00:00",
+        "value": -0.08038933296947166
+      },
+      {
+        "time": "2026-08-18 02:00:00",
+        "value": -0.09331824516771499
+      },
+      {
+        "time": "2026-08-18 03:00:00",
+        "value": -0.10564772055033558
+      },
+      {
+        "time": "2026-08-18 04:00:00",
+        "value": -0.09442407388718414
+      },
+      {
+        "time": "2026-08-18 05:00:00",
+        "value": -0.1258663233024244
+      }
+    ],
+    "btc_support_level": 63379.649999999994,
+    "btc_resistance_level": 64417.035,
+    "4h_status": {
+      "trend": "Bearish",
+      "support_1": 63379.649999999994,
+      "support_2": 62535.24,
+      "resistance_1": 64417.035,
+      "resistance_2": 64610.01
+    }
+  },
+  "macro_news": {
+    "news": [
+      {
+        "title": "Vessel struck by unknown projectile in Strait of Hormuz, crew casualty reported, UKMTO says - Reuters",
+        "summary": "Vessel struck by unknown projectile in Strait of Hormuz, crew casualty reported, UKMTO says  Reuters",
+        "url": "https://news.google.com/rss/articles/CBMizAFBVV95cUxOdC1DbUtnYVo3NzVqcVBVR3FXcm1WQXBOWHI2b1d0SG5NOG1wS25jdjJJeUx3NFc0Ym13OTlZTzl5Q1hnR3dVWFpuTkF6cVlic0NNdXJDWHBIcGZlRVRLWUtJclYybUxvNTJ5RWFDZjJOaGR2aGFrS21Ibzg3b1FudnZjVkZTQV9ra2ZmMnNZNGZWWGdDZXpxUmpoMXEybC1oMjd2T3RYVjJwZ3NacE9XcERRWEZhcHZtbVE1VmhsaDNiWkhlV2hyei1QZ3c?oc=5",
+        "source": "Reuters",
+        "image_url": "https://static2.finnhub.io/file/finnhub/logo/reuters_logo.jpeg",
+        "datetime": 1787023740
+      },
+      {
+        "title": "Indian shares open lower as oil tops $91, US-Iran ceasefire expires - Reuters",
+        "summary": "Indian shares open lower as oil tops $91, US-Iran ceasefire expires  Reuters",
+        "url": "https://news.google.com/rss/articles/CBMitAFBVV95cUxPcmdBR0dqOUx3OEJLUy1ZbDhBWFo2S2M1STJjYXk5cUlNZW1MTFlLdkhDc3FNOEhBYjVabjF3SE5QUE5ERnBPQWw1dTVLb0V2WDc5bDM4MURRc1FSVWJfMnFIT0doSDFMZHV1bTQxbU9tX3BrenFsdUhHSDBSQ2NnVll5OFBVTUN5M0dhS2psTlQ3MXIzSWptYm5OM0RrWWlpU0h2b2VKUUxkaEdqT2Fyc2VwVFA?oc=5",
+        "source": "Reuters",
+        "image_url": "https://static2.finnhub.io/file/finnhub/logo/reuters_logo.jpeg",
+        "datetime": 1787019660
+      },
+      {
+        "title": "Dollar feeble as rate hike bets dwindle, Iran war worries grow - Reuters",
+        "summary": "Dollar feeble as rate hike bets dwindle, Iran war worries grow  Reuters",
+        "url": "https://news.google.com/rss/articles/CBMiqwFBVV95cUxQclBwalB5bkFIQVRLaXc3bHdrSFEteXF1NllCaTVjU08zRnlNckhhSzlvT3lOQ1FpNTZhQzh1VFVBVjJzaVc3Wkd4WXhVcURZV1BtUGttNEdRUS1RNkxQYU1jNHptUGgtMEhaVGNQdkRLTVl4bnNTeDJHMG9pYkV0dld0OXVDT0ZERHV1eGM0WGw1VVlEeFVIWElYNFlCRUtBd1ItU2tCcXNheWs?oc=5",
+        "source": "Reuters",
+        "image_url": "https://static2.finnhub.io/file/finnhub/logo/reuters_logo.jpeg",
+        "datetime": 1787017860
+      },
+      {
+        "title": "Bond yields jump, oil extends gains as US-Iran ceasefire expires - Reuters",
+        "summary": "Bond yields jump, oil extends gains as US-Iran ceasefire expires  Reuters",
+        "url": "https://news.google.com/rss/articles/CBMie0FVX3lxTE1IRXVLRUlydV9LUjVfX3hOQ0hKc2d0aE5MS0hqLXBrbTg2QXNhcEc2MnlhOU15dkxXSDV4V2hTM2lCR19Gc3BUWUpJYk0za3VXTTFTYTlDdXk3cjhoa19SdFJxcWk3N01rSGkwSmF3MUlMcm9BU09ZMW5QNA?oc=5",
+        "source": "Reuters",
+        "image_url": "https://static2.finnhub.io/file/finnhub/logo/reuters_logo.jpeg",
+        "datetime": 1787015760
+      },
+      {
+        "title": "China surprises oil markets again with a return to stockpiling in July - Reuters",
+        "summary": "China surprises oil markets again with a return to stockpiling in July  Reuters",
+        "url": "https://news.google.com/rss/articles/CBMiywFBVV95cUxOOWM3eVRJMFNmUjRab1RyZFVmQU12ZUVkbDVIUnpRQ2o3WnhSWlJ2RHhFWXE5bDM0WDFydXd1X3haSFQ5WUFVa1lrcFZGVTlUUjREY0NGNHZ3YWxEWDlxQjdIN3F5QTdPVEk5OURMbW9QQ2d2cDJxSVBYZVpoMU9yUU84Y0JkNFZ6anZ1d0FGaHpmek40WUJKTWxpeVZId2tnc0FxNXlLRmZWQmdLZG43SXdHUlBHc2F3MmlSZEpDVnRaRjRUb1hjWnhvOA?oc=5",
+        "source": "Reuters",
+        "image_url": "https://static2.finnhub.io/file/finnhub/logo/reuters_logo.jpeg",
+        "datetime": 1787015664
+      }
+    ],
+    "events": []
+  },
+  "global_liquidity": {
+    "value": 6.759955,
+    "value_formatted": "$6.76T",
+    "weekly_change": 0.17,
+    "monthly_change": 0.25,
+    "source": "FRED (WALCL)",
+    "label": "Fed Balance Sheet"
+  },
+  "m2_money_supply": {
+    "value": null,
+    "value_formatted": "$23.16T",
+    "monthly_change": null,
+    "source": "FRED (M2SL)",
+    "trend": [
+      {
+        "date": "2021-06",
+        "value": 20.472
+      },
+      {
+        "date": "2021-07",
+        "value": 20.629
+      },
+      {
+        "date": "2021-08",
+        "value": 20.843
+      },
+      {
+        "date": "2021-09",
+        "value": 20.985
+      },
+      {
+        "date": "2021-10",
+        "value": 21.163
+      },
+      {
+        "date": "2021-11",
+        "value": 21.34
+      },
+      {
+        "date": "2021-12",
+        "value": 21.502
+      },
+      {
+        "date": "2022-01",
+        "value": 21.646
+      },
+      {
+        "date": "2022-02",
+        "value": 21.725
+      },
+      {
+        "date": "2022-03",
+        "value": 21.787
+      },
+      {
+        "date": "2022-04",
+        "value": 21.768
+      },
+      {
+        "date": "2022-05",
+        "value": 21.717
+      },
+      {
+        "date": "2022-06",
+        "value": 21.647
+      },
+      {
+        "date": "2022-07",
+        "value": 21.649
+      },
+      {
+        "date": "2022-08",
+        "value": 21.642
+      },
+      {
+        "date": "2022-09",
+        "value": 21.541
+      },
+      {
+        "date": "2022-10",
+        "value": 21.464
+      },
+      {
+        "date": "2022-11",
+        "value": 21.409
+      },
+      {
+        "date": "2022-12",
+        "value": 21.293
+      },
+      {
+        "date": "2023-01",
+        "value": 21.274
+      },
+      {
+        "date": "2023-02",
+        "value": 21.24
+      },
+      {
+        "date": "2023-03",
+        "value": 20.942
+      },
+      {
+        "date": "2023-04",
+        "value": 20.758
+      },
+      {
+        "date": "2023-05",
+        "value": 20.83
+      },
+      {
+        "date": "2023-06",
+        "value": 20.799
+      },
+      {
+        "date": "2023-07",
+        "value": 20.792
+      },
+      {
+        "date": "2023-08",
+        "value": 20.782
+      },
+      {
+        "date": "2023-09",
+        "value": 20.754
+      },
+      {
+        "date": "2023-10",
+        "value": 20.738
+      },
+      {
+        "date": "2023-11",
+        "value": 20.75
+      },
+      {
+        "date": "2023-12",
+        "value": 20.78
+      },
+      {
+        "date": "2024-01",
+        "value": 20.835
+      },
+      {
+        "date": "2024-02",
+        "value": 20.922
+      },
+      {
+        "date": "2024-03",
+        "value": 20.966
+      },
+      {
+        "date": "2024-04",
+        "value": 20.956
+      },
+      {
+        "date": "2024-05",
+        "value": 21.022
+      },
+      {
+        "date": "2024-06",
+        "value": 21.071
+      },
+      {
+        "date": "2024-07",
+        "value": 21.099
+      },
+      {
+        "date": "2024-08",
+        "value": 21.192
+      },
+      {
+        "date": "2024-09",
+        "value": 21.276
+      },
+      {
+        "date": "2024-10",
+        "value": 21.337
+      },
+      {
+        "date": "2024-11",
+        "value": 21.455
+      },
+      {
+        "date": "2024-12",
+        "value": 21.488
+      },
+      {
+        "date": "2025-01",
+        "value": 21.539
+      },
+      {
+        "date": "2025-02",
+        "value": 21.607
+      },
+      {
+        "date": "2025-03",
+        "value": 21.684
+      },
+      {
+        "date": "2025-04",
+        "value": 21.771
+      },
+      {
+        "date": "2025-05",
+        "value": 21.836
+      },
+      {
+        "date": "2025-06",
+        "value": 21.943
+      },
+      {
+        "date": "2025-07",
+        "value": 22.026
+      },
+      {
+        "date": "2025-08",
+        "value": 22.093
+      },
+      {
+        "date": "2025-09",
+        "value": 22.176
+      },
+      {
+        "date": "2025-10",
+        "value": 22.25
+      },
+      {
+        "date": "2025-11",
+        "value": 22.28
+      },
+      {
+        "date": "2025-12",
+        "value": 22.355
+      },
+      {
+        "date": "2026-01",
+        "value": 22.42
+      },
+      {
+        "date": "2026-02",
+        "value": 22.62
+      },
+      {
+        "date": "2026-03",
+        "value": 22.676
+      },
+      {
+        "date": "2026-04",
+        "value": 22.8
+      },
+      {
+        "date": "2026-05",
+        "value": 23.056
+      },
+      {
+        "date": "2026-06",
+        "value": 23.155
+      }
+    ]
+  },
+  "macro_scoreboard": {
+    "DXY": 99.63400268554688,
+    "DXY_chg": -0.03611466244578782,
+    "M2": null,
+    "M2_chg": null,
+    "HY_OAS": null,
+    "HY_OAS_chg_bp": null,
+    "MOVE": null,
+    "MOVE_chg": null,
+    "COPPER_GOLD": 1.4779952564096446,
+    "COPPER_GOLD_chg": -2.025813368788137
+  },
+  "sp500_sectors": [
+    {
+      "Symbol": "XLK",
+      "Name": "Technology",
+      "Price": NaN,
+      "Change %": NaN
+    },
+    {
+      "Symbol": "XLF",
+      "Name": "Financials",
+      "Price": NaN,
+      "Change %": NaN
+    },
+    {
+      "Symbol": "XLV",
+      "Name": "Health Care",
+      "Price": NaN,
+      "Change %": NaN
+    },
+    {
+      "Symbol": "XLY",
+      "Name": "Consumer Discret.",
+      "Price": NaN,
+      "Change %": NaN
+    },
+    {
+      "Symbol": "XLC",
+      "Name": "Communication",
+      "Price": NaN,
+      "Change %": NaN
+    },
+    {
+      "Symbol": "XLI",
+      "Name": "Industrials",
+      "Price": NaN,
+      "Change %": NaN
+    },
+    {
+      "Symbol": "XLP",
+      "Name": "Consumer Staples",
+      "Price": NaN,
+      "Change %": NaN
+    },
+    {
+      "Symbol": "XLE",
+      "Name": "Energy",
+      "Price": NaN,
+      "Change %": NaN
+    },
+    {
+      "Symbol": "XLU",
+      "Name": "Utilities",
+      "Price": NaN,
+      "Change %": NaN
+    },
+    {
+      "Symbol": "XLRE",
+      "Name": "Real Estate",
+      "Price": NaN,
+      "Change %": NaN
+    },
+    {
+      "Symbol": "XLB",
+      "Name": "Materials",
+      "Price": NaN,
+      "Change %": NaN
+    }
+  ],
+  "crypto_futures_basis": null,
+  "etf_flows": {
+    "IBIT_flow_m": -55.5,
+    "FBTC_flow_m": -6.8,
+    "Total_flow_m": -56.2,
+    "date": "14 Aug 2026",
+    "sentiment": "Outflow"
+  },
+  "bist_try": {
+    "bist100": null,
+    "bist100_chg": null,
+    "usd_try": 47.91460037231445,
+    "try_chg": 0.11952464343873874
+  },
+  "stablecoin_data": {
+    "usdt_mcap": 182981136735,
+    "usdc_mcap": 71805140555,
+    "combined_mcap": 254786277290,
+    "change_24h_pct": -0.012233327414960297,
+    "success": true
+  },
+  "options_data": {
+    "dvol_index": 34.59,
+    "dvol_change_24h": 0.23000000000000398,
+    "put_call_ratio": 0.5624171361044508,
+    "open_interest_btc": 340454.5999999999,
+    "max_pain_price": 70000.0,
+    "risk_reversal_25d": -2.129999999999999,
+    "risk_reversal_expiry": "28AUG26",
+    "large_expirations": [
+      {
+        "expiry": "18AUG26",
+        "date_str": "18 Aug 2026",
+        "notional": 155813222.81399998,
+        "max_pain": 64000.0
+      },
+      {
+        "expiry": "19AUG26",
+        "date_str": "19 Aug 2026",
+        "notional": 80984811.06,
+        "max_pain": 63500.0
+      }
+    ]
+  },
+  "eth_etf_flows": {
+    "date": "17 Aug 2026",
+    "Total_flow_m": 5.0,
+    "ETHA_flow_m": 0.0,
+    "FETH_flow_m": 4.3,
+    "sentiment": "Moderate Inflow"
+  },
+  "fed_pricing": {
+    "next_fomc": "2026-09-16",
+    "days_to_fomc": 29,
+    "dots_median": 3.8,
+    "dots_year": 2026
+  },
+  "eth_btc": null,
+  "ticker_history": {
+    "NASDAQ 100": [
+      29737.0,
+      29626.0,
+      29853.25,
+      30188.5,
+      30141.75,
+      30096.0,
+      29879.0
+    ],
+    "DXY": [
+      99.5999984741211,
+      99.80999755859375,
+      99.81999969482422,
+      100.01000213623047,
+      99.95999908447266,
+      99.66999816894531,
+      99.63400268554688
+    ],
+    "GOLD": [
+      4361.7998046875,
+      4383.0,
+      4408.89990234375,
+      4363.60009765625,
+      4380.39990234375,
+      4417.7998046875,
+      4451.2998046875
+    ],
+    "10Y UST": [
+      4.670000076293945,
+      4.659999847412109,
+      4.698999881744385,
+      4.684000015258789,
+      4.682000160217285,
+      4.640999794006348,
+      4.696000099182129
+    ],
+    "VIX": [
+      15.149999618530273,
+      14.899999618530273,
+      15.460000038146973,
+      15.279999732971191,
+      14.550000190734863,
+      14.630000114440918,
+      14.25
+    ],
+    "BTC": [
+      63551.875,
+      63402.43359375,
+      63402.171875,
+      62975.59375,
+      63024.3203125,
+      62818.65234375,
+      64158.609375
+    ]
+  },
+  "asset_sparklines": {
+    "AAPL": [
+      312.14080810546875,
+      313.05999755859375,
+      308.260009765625,
+      304.9100036621094,
+      302.25,
+      305.260009765625,
+      305.92999267578125
+    ],
+    "MSFT": [
+      499.8599853515625,
+      499.989990234375,
+      506.05999755859375,
+      503.80999755859375,
+      492.42999267578125,
+      496.8800048828125,
+      495.3999938964844
+    ],
+    "GOOGL": [
+      357.75,
+      354.29998779296875,
+      357.5199890136719,
+      343.79998779296875,
+      343.5400085449219,
+      346.3599853515625,
+      345.8999938964844
+    ],
+    "AMZN": [
+      272.260009765625,
+      274.4800109863281,
+      278.0899963378906,
+      272.2699890136719,
+      267.2799987792969,
+      265.1300048828125,
+      262.6499938964844
+    ],
+    "META": [
+      589.9000244140625,
+      592.0999755859375,
+      594.9199829101562,
+      599.1199951171875,
+      578.8499755859375,
+      594.969970703125,
+      589.8499755859375
+    ],
+    "TSLA": [
+      319.5299987792969,
+      328.5799865722656,
+      330.8800048828125,
+      332.80999755859375,
+      327.510009765625,
+      339.9599914550781,
+      342.2699890136719
+    ],
+    "NVDA": [
+      218.99000549316406,
+      223.9600067138672,
+      217.5500030517578,
+      217.5,
+      224.08999633789062,
+      225.3000030517578,
+      225.16000366210938
+    ],
+    "GC=F": [
+      4361.7998046875,
+      4383.0,
+      4408.89990234375,
+      4363.60009765625,
+      4380.39990234375,
+      4417.7998046875,
+      4451.2998046875
+    ],
+    "SI=F": [
+      65.10600280761719,
+      64.76899719238281,
+      65.55500030517578,
+      64.87300109863281,
+      64.98799896240234,
+      66.12100219726562,
+      65.23999786376953
+    ],
+    "HG=F": [
+      6.5945000648498535,
+      6.611999988555908,
+      6.5970001220703125,
+      6.59250020980835,
+      6.5995001792907715,
+      6.604000091552734,
+      6.578999996185303
+    ],
+    "NG=F": [
+      2.7939999103546143,
+      2.7669999599456787,
+      2.803999900817871,
+      2.7269999980926514,
+      2.7330000400543213,
+      2.690000057220459,
+      2.697999954223633
+    ],
+    "CC=F": [
+      5782.0,
+      5821.0,
+      5543.0,
+      5619.0,
+      5648.0,
+      5734.0,
+      6044.0
+    ],
+    "KC=F": [
+      335.54998779296875,
+      332.29998779296875,
+      335.75,
+      340.1000061035156,
+      333.1000061035156,
+      338.1000061035156,
+      345.1000061035156
+    ],
+    "BZ=F": [
+      87.72000122070312,
+      88.91000366210938,
+      88.9800033569336,
+      87.06999969482422,
+      88.5199966430664,
+      90.87000274658203,
+      91.25
+    ]
+  },
+  "research_brief": {
+    "featured_topics": [
+      {
+        "tr": {
+          "beat": "EMTİA",
+          "title": "Hürmüz gerilimi petrol arz riskini kalıcı bir risk primine dönüştürüyor mu?",
+          "topic": "Hürmüz Boğazı’nda bir geminin bilinmeyen bir mühimmatla vurulması ve ateşkesin sona ermesi, petrol fiyatındaki yükselişin yalnızca haber şokundan mı yoksa fiziksel arz riski ve sigorta/taşımacılık maliyetlerinden mi kaynaklandığını araştırmayı gerektiriyor. İzlenecek somut sinyaller, EIA stok ve ürün arz verileri, petrolün 91 dolar üzerindeki kalıcılığı ve Çin’in Temmuz’da yeniden stoklama yapmasının fiyat baskısını güçlendirip güçlendirmediğidir.",
+          "primary_sources": [
+            {
+              "name": "EIA — Weekly Petroleum Status Report",
+              "url": "https://www.eia.gov/petroleum/supply/weekly/",
+              "description": "Ham petrol ve ürün stokları, rafineri kullanımı, ithalat-ihracat ve haftalık arz değişimlerinde fiziksel sıkılaşma sinyali arayın."
+            },
+            {
+              "name": "Reuters — Vessel struck by unknown projectile in Strait of Hormuz, crew casualty reported, UKMTO says - Reuters",
+              "url": "https://news.google.com/rss/articles/CBMizAFBVV95cUxOdC1DbUtnYVo3NzVqcVBVR3FXcm1WQXBOWHI2b1d0SG5NOG1wS25jdjJJeUx3NFc0Ym13OTlZTzl5Q1hnR3dVWFpuTkF6cVlic0NNdXJDWHBIcGZlRVRLWUtJclYybUxvNTJ5RWFDZjJOaGR2aGFrS21Ibzg3b1FudnZjVkZTQV9ra2ZmMnNZNGZWWGdDZXpxUmpoMXEybC1oMjd2T3RYVjJwZ3NacE9XcERRWEZhcHZtbVE1VmhsaDNiWkhlV2hyei1QZ3c?oc=5",
+              "description": "UKMTO açıklamasındaki saldırının gemi, mürettebat ve seyir güvenliği ayrıntılarını; olayın tekil mi yoksa daha geniş bir geçiş riskinin parçası mı olduğunu inceleyin."
+            },
+            {
+              "name": "Reuters — China surprises oil markets again with a return to stockpiling in July - Reuters",
+              "url": "https://news.google.com/rss/articles/CBMiywFBVV95cUxOOWM3eVRJMFNmUjRab1RyZFVmQU12ZUVkbDVIUnpRQ2o3WnhSWlJ2RHhFWXE5bDM0WDFydXd1X3haSFQ5WUFVa1lrcFZGVTlUUjREY0NGNHZ3YWxEWDlxQjdIN3F5QTdPVEk5OURMbW9QQ2d2cDJxSVBYZVpoMU9yUU84Y0JkNFZ6anZ1d0FGaHpmek40WUJKTWxpeVZId2tnc0FxNXlLRmZWQmdLZG43SXdHUlBHc2F3MmlSZEpDVnRaRjRUb1hjWnhvOA?oc=5",
+              "description": "Çin’in Temmuz stoklama dönüşünün geçici stratejik alım mı, yoksa daha güçlü iç talep ve arz güvenliği sinyali mi olduğunu araştırın."
+            }
+          ]
+        },
+        "en": {
+          "beat": "COMMODITIES",
+          "title": "Is the Strait of Hormuz tension turning oil’s geopolitical premium into a lasting supply risk?",
+          "topic": "A vessel strike in the Strait of Hormuz and the expiry of the ceasefire require testing whether oil’s rise reflects a transient headline shock or a durable risk premium tied to physical supply, insurance, and shipping constraints. The concrete signals to track are EIA inventory and product-supply data, whether oil holds above $91, and whether China’s renewed July stockpiling reinforces the price pressure.",
+          "primary_sources": [
+            {
+              "name": "EIA — Weekly Petroleum Status Report",
+              "url": "https://www.eia.gov/petroleum/supply/weekly/",
+              "description": "Check crude and product inventories, refinery utilization, imports/exports, and weekly supply changes for evidence of physical tightening."
+            },
+            {
+              "name": "Reuters — Vessel struck by unknown projectile in Strait of Hormuz, crew casualty reported, UKMTO says - Reuters",
+              "url": "https://news.google.com/rss/articles/CBMizAFBVV95cUxOdC1DbUtnYVo3NzVqcVBVR3FXcm1WQXBOWHI2b1d0SG5NOG1wS25jdjJJeUx3NFc0Ym13OTlZTzl5Q1hnR3dVWFpuTkF6cVlic0NNdXJDWHBIcGZlRVRLWUtJclYybUxvNTJ5RWFDZjJOaGR2aGFrS21Ibzg3b1FudnZjVkZTQV9ra2ZmMnNZNGZWWGdDZXpxUmpoMXEybC1oMjd2T3RYVjJwZ3NacE9XcERRWEZhcHZtbVE1VmhsaDNiWkhlV2hyei1QZ3c?oc=5",
+              "description": "Examine UKMTO’s details on the strike, vessel, crew, and navigational safety to determine whether this is an isolated incident or part of a broader transit-risk pattern."
+            },
+            {
+              "name": "Reuters — China surprises oil markets again with a return to stockpiling in July - Reuters",
+              "url": "https://news.google.com/rss/articles/CBMiywFBVV95cUxOOWM3eVRJMFNmUjRab1RyZFVmQU12ZUVkbDVIUnpRQ2o3WnhSWlJ2RHhFWXE5bDM0WDFydXd1X3haSFQ5WUFVa1lrcFZGVTlUUjREY0NGNHZ3YWxEWDlxQjdIN3F5QTdPVEk5OURMbW9QQ2d2cDJxSVBYZVpoMU9yUU84Y0JkNFZ6anZ1d0FGaHpmek40WUJKTWxpeVZId2tnc0FxNXlLRmZWQmdLZG43SXdHUlBHc2F3MmlSZEpDVnRaRjRUb1hjWnhvOA?oc=5",
+              "description": "Investigate whether China’s July return to stockpiling reflects temporary strategic buying or stronger domestic demand and supply-security concerns."
+            }
+          ]
+        }
+      },
+      {
+        "tr": {
+          "beat": "MAKRO",
+          "title": "Petrol şoku Fed’in enflasyon ve büyüme dengesini yeniden bozuyor mu?",
+          "topic": "Petrolün 91 doların üzerine çıkması, ABD tahvil getirilerindeki yükseliş ve Fed faiz artırımı beklentilerinin zayıflaması, piyasanın klasik enflasyon şokundan ziyade büyüme riski fiyatlayıp fiyatlamadığını sorgulatıyor. Araştırmanın eşiği, 19 Ağustos FOMC tutanaklarında enerji kaynaklı enflasyon riskinin nasıl değerlendirildiği ve 20 Ağustos işsizlik başvurularının 210 binlik beklentiden anlamlı biçimde sapıp sapmadığıdır.",
+          "primary_sources": [
+            {
+              "name": "Federal Reserve — FOMC Calendar & Statements",
+              "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+              "description": "19 Ağustos FOMC tutanaklarında petrol/enerji fiyatlarının enflasyon görünümü, istihdam ve politika patikası üzerindeki etkisine bakın."
+            },
+            {
+              "name": "CME FedWatch Tool",
+              "url": "https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html",
+              "description": "Faiz artırımı beklentilerindeki gerilemeyi ve tutanaklar ile işsizlik başvuruları sonrasında toplantı olasılıklarının nasıl değiştiğini izleyin."
+            },
+            {
+              "name": "US Treasury — Daily Yield Curve Rates",
+              "url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve",
+              "description": "Kısa ve uzun vadeli getirilerdeki hareketi, petrol şokunun enflasyon beklentisi mi yoksa büyüme ve riskten kaçış kanalı mı üzerinden fiyatlandığını ayırmak için karşılaştırın."
+            }
+          ]
+        },
+        "en": {
+          "beat": "MACRO",
+          "title": "Is the oil shock disrupting the Fed’s inflation-growth trade-off again?",
+          "topic": "Oil above $91, rising Treasury yields, and fading rate-hike bets raise the question of whether markets are pricing a classic inflation shock or instead a growth-risk shock. The key thresholds are how the August 19 FOMC minutes assess energy-driven inflation risk and whether August 20 jobless claims materially deviate from the 210K forecast.",
+          "primary_sources": [
+            {
+              "name": "Federal Reserve — FOMC Calendar & Statements",
+              "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+              "description": "Read the August 19 FOMC minutes for the Committee’s assessment of energy prices’ effects on inflation, employment, and the policy path."
+            },
+            {
+              "name": "CME FedWatch Tool",
+              "url": "https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html",
+              "description": "Track the decline in rate-hike expectations and how meeting probabilities change after the minutes and jobless-claims release."
+            },
+            {
+              "name": "US Treasury — Daily Yield Curve Rates",
+              "url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve",
+              "description": "Compare movements across maturities to distinguish whether the oil shock is being priced through inflation expectations or through growth and risk aversion."
+            }
+          ]
+        }
+      },
+      {
+        "tr": {
+          "beat": "KRİPTO",
+          "title": "Bitcoin’de negatif Coinbase primi ve artan açık pozisyon gerçek talep zayıflığını mı gösteriyor?",
+          "topic": "Bitcoin’in 4 saatlik görünümünün ayı yönlü olması, Coinbase priminin -0,1259’a gerilemesi ve açık pozisyonun 24 saatte %6,55 artması, kaldıraçlı pozisyonların spot talebi bastırıp bastırmadığını araştırmayı gerektiriyor. İzlenecek somut eşikler 63.379,65 dolar desteği, 64.417,04 dolar direnci, fonlama oranının negatif kalıp kalmaması ve ETF akışlarının 56,2 milyon dolarlık toplam çıkıştan toparlanıp toparlanmamasıdır.",
+          "primary_sources": [
+            {
+              "name": "Coinglass — Derivatives Data",
+              "url": "https://www.coinglass.com/",
+              "description": "Bitcoin fonlama oranı, açık pozisyon değişimi, likidasyonlar ve vadeli işlem pozisyonlanmasını birlikte inceleyerek artan açık pozisyonun yönünü belirleyin."
+            },
+            {
+              "name": "Farside — Bitcoin ETF Flows (All Data)",
+              "url": "https://farside.co.uk/bitcoin-etf-flow-all-data/",
+              "description": "14 Ağustos’taki 56,2 milyon dolarlık toplam çıkış sonrasında günlük ETF akışlarının yeniden girişe dönüp dönmediğini kontrol edin."
+            },
+            {
+              "name": "Coinbase Premium / piyasa verisi",
+              "url": null,
+              "description": "Coinbase primi -0,1259 seviyesinden sıfıra yaklaşarak ABD spot talebinin güçlenip güçlenmediğini ve 63.379,65 dolar desteğinin korunup korunmadığını izleyin."
+            }
+          ]
+        },
+        "en": {
+          "beat": "CRYPTO",
+          "title": "Do the negative Coinbase premium and rising open interest signal genuinely weak Bitcoin demand?",
+          "topic": "Bitcoin’s bearish four-hour structure, a Coinbase premium of -0.1259, and a 6.55% 24-hour increase in open interest require testing whether leveraged positioning is overwhelming spot demand. The concrete levels to monitor are support at $63,379.65, resistance at $64,417.04, whether funding remains negative, and whether ETF flows recover from the $56.2 million total outflow.",
+          "primary_sources": [
+            {
+              "name": "Coinglass — Derivatives Data",
+              "url": "https://www.coinglass.com/",
+              "description": "Review Bitcoin funding, open-interest changes, liquidations, and futures positioning together to determine the direction behind the rise in open interest."
+            },
+            {
+              "name": "Farside — Bitcoin ETF Flows (All Data)",
+              "url": "https://farside.co.uk/bitcoin-etf-flow-all-data/",
+              "description": "Check whether daily ETF flows turn positive after the $56.2 million total outflow recorded on August 14."
+            },
+            {
+              "name": "Coinbase Premium / market data",
+              "url": null,
+              "description": "Track whether the Coinbase premium moves from -0.1259 toward zero as evidence of stronger US spot demand, and whether $63,379.65 support holds."
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "etf_history_data": [
+    {
+      "date": "04 Aug 2026",
+      "IBIT_flow_m": 170.3,
+      "FBTC_flow_m": 19.6,
+      "Total_flow_m": 211.5
+    },
+    {
+      "date": "05 Aug 2026",
+      "IBIT_flow_m": 196.8,
+      "FBTC_flow_m": 11.3,
+      "Total_flow_m": 244.4
+    },
+    {
+      "date": "06 Aug 2026",
+      "IBIT_flow_m": 128.3,
+      "FBTC_flow_m": 11.2,
+      "Total_flow_m": 137.6
+    },
+    {
+      "date": "07 Aug 2026",
+      "IBIT_flow_m": 86.7,
+      "FBTC_flow_m": 41.0,
+      "Total_flow_m": 101.7
+    },
+    {
+      "date": "10 Aug 2026",
+      "IBIT_flow_m": -53.6,
+      "FBTC_flow_m": -40.3,
+      "Total_flow_m": -144.6
+    },
+    {
+      "date": "11 Aug 2026",
+      "IBIT_flow_m": 50.2,
+      "FBTC_flow_m": -4.1,
+      "Total_flow_m": 7.8
+    },
+    {
+      "date": "12 Aug 2026",
+      "IBIT_flow_m": -14.3,
+      "FBTC_flow_m": -46.8,
+      "Total_flow_m": -61.1
+    },
+    {
+      "date": "13 Aug 2026",
+      "IBIT_flow_m": -5.7,
+      "FBTC_flow_m": -55.1,
+      "Total_flow_m": -131.1
+    },
+    {
+      "date": "14 Aug 2026",
+      "IBIT_flow_m": -55.5,
+      "FBTC_flow_m": -6.8,
+      "Total_flow_m": -56.2
+    },
+    {
+      "date": "17 Aug 2026",
+      "IBIT_flow_m": 0.0,
+      "FBTC_flow_m": 111.9,
+      "Total_flow_m": 137.3
+    }
+  ],
+  "_observed_at": {
+    "macro_scoreboard.DXY": "2026-08-18T00:00:00",
+    "macro_scoreboard.DXY_chg": "2026-08-18T00:00:00",
+    "macro_scoreboard.MOVE": "2026-08-17T00:00:00",
+    "macro_scoreboard.MOVE_chg": "2026-08-17T00:00:00",
+    "macro_scoreboard.HY_OAS": "2026-08-14T00:00:00",
+    "macro_scoreboard.HY_OAS_chg_bp": "2026-08-14T00:00:00",
+    "macro_scoreboard.M2": "2026-06-01T00:00:00",
+    "macro_scoreboard.M2_chg": "2026-06-01T00:00:00",
+    "macro_scoreboard.COPPER_GOLD": "2026-08-18T00:00:00",
+    "macro_scoreboard.COPPER_GOLD_chg": "2026-08-18T00:00:00",
+    "macro_indicators.US 10-Year Treasury Yield": "2026-08-14T00:00:00",
+    "macro_indicators.US 10-Year Treasury Yield_chg": "2026-08-14T00:00:00",
+    "macro_indicators.US 2-Year Treasury Yield": "2026-08-14T00:00:00",
+    "macro_indicators.US 2-Year Treasury Yield_chg": "2026-08-14T00:00:00",
+    "macro_indicators.2s10s_spread": "2026-08-14T00:00:00",
+    "macro_indicators.VIX": "2026-08-14T00:00:00",
+    "macro_indicators.VIX_chg": "2026-08-14T00:00:00",
+    "macro_indicators.NASDAQ 100 Futures": "2026-08-18T00:00:00",
+    "macro_indicators.SMH (Semiconductor ETF)": "2026-08-14T00:00:00",
+    "m2_money_supply.value": "2026-06-01T00:00:00",
+    "m2_money_supply.monthly_change": "2026-06-01T00:00:00",
+    "fear_and_greed.value": "2026-08-18T06:00:23",
+    "crypto_market_overview.total_market_cap": "2026-08-18T06:00:23",
+    "crypto_market_overview.total3": "2026-08-18T06:00:23",
+    "crypto_market_overview.btc_dominance": "2026-08-18T06:00:23",
+    "crypto_market_overview.eth_dominance": "2026-08-18T06:00:23",
+    "crypto_market_overview.stablecoin_dominance": "2026-08-18T06:00:23",
+    "crypto_market_overview.total_volume": "2026-08-18T06:00:23",
+    "crypto_market_overview.market_cap_change_24h": "2026-08-18T06:00:23",
+    "funding_rates.BTC": "2026-08-18T06:00:23",
+    "funding_rates.ETH": "2026-08-18T06:00:23",
+    "funding_rates.SOL": "2026-08-18T06:00:23",
+    "crypto_futures_basis.btc_basis": "2026-08-18T06:00:23",
+    "crypto_futures_basis.eth_basis": "2026-08-18T06:00:23",
+    "coinbase_premium.current_value": "2026-08-18T06:00:23",
+    "options_data.dvol_index": "2026-08-18T06:00:23",
+    "options_data.dvol_change_24h": "2026-08-18T06:00:23",
+    "options_data.put_call_ratio": "2026-08-18T06:00:23",
+    "options_data.max_pain_price": "2026-08-18T06:00:23",
+    "options_data.risk_reversal_25d": "2026-08-18T06:00:23",
+    "options_data.open_interest_btc": "2026-08-18T06:00:23",
+    "btc_cycle_metrics.spot": "2026-08-18T00:00:00",
+    "btc_cycle_metrics.wma200": "2026-08-18T00:00:00",
+    "btc_cycle_metrics.mayer_multiple": "2026-08-18T00:00:00",
+    "btc_cycle_metrics.distance_to_200wma": "2026-08-18T00:00:00",
+    "btc_cycle_metrics.ath": "2026-08-18T00:00:00",
+    "btc_cycle_metrics.drawdown": "2026-08-18T00:00:00",
+    "eth_btc.ratio": "2026-08-18T06:00:23",
+    "eth_btc.chg_7d": "2026-08-18T06:00:23",
+    "stablecoin_data.combined_mcap": "2026-08-18T06:00:23",
+    "stablecoin_data.change_24h_pct": "2026-08-18T06:00:23",
+    "bist_try.bist100": "2026-08-14T00:00:00",
+    "bist_try.bist100_chg": "2026-08-14T00:00:00",
+    "bist_try.usd_try": "2026-08-18T00:00:00",
+    "bist_try.try_chg": "2026-08-18T00:00:00",
+    "fed_pricing.dots_median": "2028-01-01T00:00:00",
+    "fed_pricing.cut_odds": "2026-08-18T06:00:23"
+  },
+  "series_conflicts": [],
+  "signal_conflicts": [],
+  "regime": "RISK_OFF",
+  "regime_detail": {
+    "score": -2,
+    "votes": {
+      "DXY": 0,
+      "COPPER_GOLD": -1,
+      "FEAR_GREED": -1
+    },
+    "available": 3
+  },
+  "tr": {
+    "regime_line": "Jeopolitik risk, zayıf risk göstergeleri ve kripto piyasasındaki temkinli pozisyonlanma riskten kaçış rejimini güçlendiriyor.",
+    "overview": "Piyasalar, ABD-İran ateşkesinin sona ermesi ve Hürmüz Boğazı çevresindeki güvenlik haberleriyle belirgin bir riskten kaçış görünümü sergiliyor. Brent petrolü <span class='highlight'>91,25 dolar</span> seviyesine yükselirken, Nasdaq 100 vadeli işlemleri <span class='highlight'>%0,72</span> geriledi; altın da <span class='highlight'>%0,76</span> değer kazanarak güvenli liman talebine işaret etti. DXY <span class='highlight'>99,63</span> seviyesinde hafif gerilese de bakır/altın oranındaki <span class='highlight'>%2,03</span> düşüş büyüme ve risk iştahı açısından olumsuz bir sinyal veriyor. Kripto piyasasının toplam değeri <span class='highlight'>2,28 trilyon dolar</span> ve 24 saatlik değişim <span class='highlight'>%0,53</span> artıda olsa da Fear & Greed endeksinin <span class='highlight'>41</span> ile Fear bölgesinde kalması, BTC dominansının <span class='highlight'>%56,56</span> olması ve Coinbase priminin <span class='highlight'>-%0,126</span> seviyesinde bulunması talebin savunmacı olduğunu gösteriyor. Bu hafta 19 Ağustos'ta açıklanacak FOMC toplantı tutanakları, faiz patikası ve enerji kaynaklı enflasyon riskleri açısından ana katalizör olacak; takvimde yeni CPI, PPI, PCE veya FOMC faiz kararı bulunmuyor.",
+    "notes": {
+      "futures_note": "BTC ve ETH funding oranları sırasıyla -%0,00145 ve -%0,00317 ile negatif; SOL'daki -%0,500 değer ise short pozisyonlanmasının çok daha yoğun olduğunu gösteriyor. Vadeli işlem basis verisi sunulmadığından prim/iskonto hakkında kesin sonuç çıkarılamaz; negatif funding, riskten kaçışla birlikte short talebine işaret ederken ters yönlü sıkışma riskini de artırır.",
+      "etf_note": "14 Ağustos'ta IBIT'ten 55,5 milyon dolar, FBTC'den 6,8 milyon dolar çıkış gerçekleşti ve toplam spot Bitcoin ETF akışı -56,2 milyon dolar oldu; bu, spot tarafta satış baskısı olarak okunur. 17 Ağustos'ta FBTC'nin 111,9 milyon dolarlık girişi ve toplam 137,3 milyon dolarlık pozitif akış görülse de IBIT'in sıfır akışı, talebin henüz geniş tabanlı ve istikrarlı olmadığını gösteriyor.",
+      "indicators_note": "2Y-10Y spread, SMH ve diğer ilgili tahvil göstergeleri için geçerli veri bulunmadığından bu göstergelerdeki değişim hakkında hüküm verilemez. Bununla birlikte stablecoin toplam piyasa değeri 24 saatte %0,012 gerileyerek likidite iştahında sınırlı bir zayıflamaya, Coinbase priminin negatif kalması da ABD spot talebinin temkinli olduğuna işaret ediyor."
+    },
+    "insights": [
+      "Hürmüz Boğazı'nda bir geminin bilinmeyen bir mermiyle vurulması ve mürettebat kaybı, enerji arzı risk primini yükselterek Brent petrolünün 91,25 dolara çıkışını destekliyor. Bu şok, Nasdaq vadeli işlemlerindeki %0,72 düşüş ve negatif Coinbase primiyle birlikte riskten kaçış eğilimini güçlendiriyor.",
+      "Hindistan hisselerinin petrolün 91 doların üzerine çıkması ve ABD-İran ateşkesinin sona ermesiyle gerilemesi, enerji maliyetlerinin ithalatçı ekonomiler üzerindeki baskısını gösteriyor. Kripto tarafında Fear & Greed'in 41 olması ve BTC funding oranının negatif kalması, yatırımcıların bu makro şoka agresif risk alımıyla yanıt vermediğini ortaya koyuyor.",
+      "Faiz artışı beklentilerinin zayıflaması doları baskılasa da İran savaşı endişeleri güvenli liman talebini ve piyasa oynaklığını canlı tutuyor. DXY'nin 99,63'e sınırlı gerilemesine rağmen negatif Coinbase primi ve 14 Ağustos'taki 56,2 milyon dolarlık ETF çıkışı, dolar zayıflığının kripto için doğrudan bir risk-on sinyaline dönüşmediğini gösteriyor.",
+      "Ateşkesin sona ermesiyle tahvil getirilerindeki yükseliş ve petrol kazançlarının sürmesi, jeopolitik arz şokunun enflasyon ve faiz patikası üzerindeki baskısını artırıyor. 19 Ağustos'taki FOMC tutanakları bu nedenle kritik önem taşırken, negatif BTC ve ETH funding oranları piyasanın daha savunmacı konumlandığını teyit ediyor.",
+      "Çin'in Temmuz ayında yeniden petrol stoklamaya başlaması, fiziksel talep görünümünü destekleyerek petrol fiyatlarına ek taban sağlayabilir. Ancak bakır/altın oranındaki %2,03 düşüş ve stablecoin piyasa değerindeki %0,012 günlük gerileme, bu talep sinyalinin küresel risk iştahında henüz geniş kapsamlı bir iyileşme yaratmadığını gösteriyor."
+    ]
+  },
+  "en": {
+    "regime_line": "Geopolitical risk, weak risk indicators and cautious crypto positioning are reinforcing a risk-off market regime.",
+    "overview": "Markets are displaying a clear risk-off tone as the US-Iran ceasefire expires and security concerns intensify around the Strait of Hormuz. Brent crude rose to <span class='highlight'>$91.25</span>, Nasdaq 100 futures fell <span class='highlight'>0.72%</span>, and gold gained <span class='highlight'>0.76%</span>, highlighting demand for defensive assets. The DXY edged lower to <span class='highlight'>99.63</span>, but a <span class='highlight'>2.03%</span> decline in the copper-to-gold ratio signals weaker growth expectations and risk appetite. Total crypto market capitalization reached <span class='highlight'>$2.28 trillion</span>, up <span class='highlight'>0.53%</span> over 24 hours, yet the Fear & Greed Index remained in Fear at <span class='highlight'>41</span>; BTC dominance stood at <span class='highlight'>56.56%</span> and the Coinbase premium was negative at <span class='highlight'>-0.126%</span>, indicating defensive demand. FOMC meeting minutes due on August 19 will be the key catalyst for the rate path and energy-driven inflation risks; no new CPI, PPI, PCE or FOMC rate decision appears on this week’s calendar.",
+    "notes": {
+      "futures_note": "BTC and ETH funding rates were negative at -0.00145% and -0.00317%, respectively, while SOL funding at -0.500% indicates much heavier short positioning. Futures basis data was unavailable, so no definitive premium or discount conclusion can be drawn; negative funding reflects defensive positioning but also raises the risk of a short squeeze.",
+      "etf_note": "On August 14, IBIT recorded a $55.5 million outflow and FBTC a $6.8 million outflow, producing a total spot Bitcoin ETF outflow of $56.2 million; this represents selling pressure in the spot channel. On August 17, FBTC posted a $111.9 million inflow and total flows reached $137.3 million, but IBIT recorded no flow, suggesting demand is not yet broad-based or consistent.",
+      "indicators_note": "Valid data for the 2Y-10Y spread, SMH and the relevant Treasury indicators was unavailable, so no conclusion can be drawn from their changes. However, the 0.012% 24-hour decline in total stablecoin market capitalization points to a marginal softening in liquidity appetite, while the negative Coinbase premium signals cautious US spot demand."
+    },
+    "insights": [
+      "The reported strike on a vessel in the Strait of Hormuz, alongside a crew casualty, increases the energy supply risk premium and supports Brent’s rise to $91.25. Together with the 0.72% decline in Nasdaq futures and the negative Coinbase premium, the development reinforces the risk-off backdrop.",
+      "The decline in Indian equities as oil moved above $91 and the US-Iran ceasefire expired illustrates the pressure higher energy costs place on oil-importing economies. A Fear & Greed reading of 41 and negative BTC funding indicate that crypto investors are not responding to the shock with aggressive risk-taking.",
+      "A decline in rate-hike expectations is weighing on the dollar, but concerns over the Iran conflict continue to sustain safe-haven demand and market volatility. Despite the DXY easing to 99.63, the negative Coinbase premium and the $56.2 million ETF outflow on August 14 show that softer dollar conditions have not translated into a clear crypto risk-on signal.",
+      "The rise in bond yields and continued gains in oil after the ceasefire expired increase pressure on the inflation and interest-rate outlook through a geopolitical supply shock. The FOMC minutes due on August 19 are therefore especially important, while negative BTC and ETH funding confirm a more defensive market posture.",
+      "China’s renewed oil stockpiling in July could support the physical-demand outlook and provide an additional floor for crude prices. However, the 2.03% decline in the copper-to-gold ratio and the 0.012% daily contraction in stablecoin market capitalization indicate that this demand signal has not yet produced a broad improvement in global risk appetite."
+    ]
+  },
+  "ai_validation": {
+    "blocklisted": [],
+    "rejected": [],
+    "overview_rejected": []
+  },
+  "ai_summary": "Piyasalar, ABD-İran ateşkesinin sona ermesi ve Hürmüz Boğazı çevresindeki güvenlik haberleriyle belirgin bir riskten kaçış görünümü sergiliyor. Brent petrolü <span class='highlight'>91,25 dolar</span> seviyesine yükselirken, Nasdaq 100 vadeli işlemleri <span class='highlight'>%0,72</span> geriledi; altın da <span class='highlight'>%0,76</span> değer kazanarak güvenli liman talebine işaret etti. DXY <span class='highlight'>99,63</span> seviyesinde hafif gerilese de bakır/altın oranındaki <span class='highlight'>%2,03</span> düşüş büyüme ve risk iştahı açısından olumsuz bir sinyal veriyor. Kripto piyasasının toplam değeri <span class='highlight'>2,28 trilyon dolar</span> ve 24 saatlik değişim <span class='highlight'>%0,53</span> artıda olsa da Fear & Greed endeksinin <span class='highlight'>41</span> ile Fear bölgesinde kalması, BTC dominansının <span class='highlight'>%56,56</span> olması ve Coinbase priminin <span class='highlight'>-%0,126</span> seviyesinde bulunması talebin savunmacı olduğunu gösteriyor. Bu hafta 19 Ağustos'ta açıklanacak FOMC toplantı tutanakları, faiz patikası ve enerji kaynaklı enflasyon riskleri açısından ana katalizör olacak; takvimde yeni CPI, PPI, PCE veya FOMC faiz kararı bulunmuyor.",
+  "futures_note": "BTC ve ETH funding oranları sırasıyla -%0,00145 ve -%0,00317 ile negatif; SOL'daki -%0,500 değer ise short pozisyonlanmasının çok daha yoğun olduğunu gösteriyor. Vadeli işlem basis verisi sunulmadığından prim/iskonto hakkında kesin sonuç çıkarılamaz; negatif funding, riskten kaçışla birlikte short talebine işaret ederken ters yönlü sıkışma riskini de artırır.",
+  "etf_note": "14 Ağustos'ta IBIT'ten 55,5 milyon dolar, FBTC'den 6,8 milyon dolar çıkış gerçekleşti ve toplam spot Bitcoin ETF akışı -56,2 milyon dolar oldu; bu, spot tarafta satış baskısı olarak okunur. 17 Ağustos'ta FBTC'nin 111,9 milyon dolarlık girişi ve toplam 137,3 milyon dolarlık pozitif akış görülse de IBIT'in sıfır akışı, talebin henüz geniş tabanlı ve istikrarlı olmadığını gösteriyor.",
+  "indicators_note": "2Y-10Y spread, SMH ve diğer ilgili tahvil göstergeleri için geçerli veri bulunmadığından bu göstergelerdeki değişim hakkında hüküm verilemez. Bununla birlikte stablecoin toplam piyasa değeri 24 saatte %0,012 gerileyerek likidite iştahında sınırlı bir zayıflamaya, Coinbase priminin negatif kalması da ABD spot talebinin temkinli olduğuna işaret ediyor.",
+  "weekly_themes": [],
+  "news_commentaries": [
+    {
+      "headline": "Vessel struck by unknown projectile in Strait of Hormuz, crew casualty reported, UKMTO says - Reuters",
+      "commentary": "Hürmüz Boğazı'nda bir geminin bilinmeyen bir mermiyle vurulması ve mürettebat kaybı, enerji arzı risk primini yükselterek Brent petrolünün 91,25 dolara çıkışını destekliyor. Bu şok, Nasdaq vadeli işlemlerindeki %0,72 düşüş ve negatif Coinbase primiyle birlikte riskten kaçış eğilimini güçlendiriyor."
+    },
+    {
+      "headline": "Indian shares open lower as oil tops $91, US-Iran ceasefire expires - Reuters",
+      "commentary": "Hindistan hisselerinin petrolün 91 doların üzerine çıkması ve ABD-İran ateşkesinin sona ermesiyle gerilemesi, enerji maliyetlerinin ithalatçı ekonomiler üzerindeki baskısını gösteriyor. Kripto tarafında Fear & Greed'in 41 olması ve BTC funding oranının negatif kalması, yatırımcıların bu makro şoka agresif risk alımıyla yanıt vermediğini ortaya koyuyor."
+    },
+    {
+      "headline": "Dollar feeble as rate hike bets dwindle, Iran war worries grow - Reuters",
+      "commentary": "Faiz artışı beklentilerinin zayıflaması doları baskılasa da İran savaşı endişeleri güvenli liman talebini ve piyasa oynaklığını canlı tutuyor. DXY'nin 99,63'e sınırlı gerilemesine rağmen negatif Coinbase primi ve 14 Ağustos'taki 56,2 milyon dolarlık ETF çıkışı, dolar zayıflığının kripto için doğrudan bir risk-on sinyaline dönüşmediğini gösteriyor."
+    },
+    {
+      "headline": "Bond yields jump, oil extends gains as US-Iran ceasefire expires - Reuters",
+      "commentary": "Ateşkesin sona ermesiyle tahvil getirilerindeki yükseliş ve petrol kazançlarının sürmesi, jeopolitik arz şokunun enflasyon ve faiz patikası üzerindeki baskısını artırıyor. 19 Ağustos'taki FOMC tutanakları bu nedenle kritik önem taşırken, negatif BTC ve ETH funding oranları piyasanın daha savunmacı konumlandığını teyit ediyor."
+    },
+    {
+      "headline": "China surprises oil markets again with a return to stockpiling in July - Reuters",
+      "commentary": "Çin'in Temmuz ayında yeniden petrol stoklamaya başlaması, fiziksel talep görünümünü destekleyerek petrol fiyatlarına ek taban sağlayabilir. Ancak bakır/altın oranındaki %2,03 düşüş ve stablecoin piyasa değerindeki %0,012 günlük gerileme, bu talep sinyalinin küresel risk iştahında henüz geniş kapsamlı bir iyileşme yaratmadığını gösteriyor."
+    }
+  ]
+}
