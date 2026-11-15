@@ -41,7 +41,7 @@ PAPER2 = "#F1F1EA"
 INK = "#16181C"
 INK2 = "#3C3F45"
 MUTE = "#8A8577"
-CRIMSON = "#B3122B"
+CRIMSON = "#FF4B26"   # nocashflow.net Liquid accent (2026-11)
 BORDER = "#D8D7CE"
 HAIR = "#E5E3DA"
 SERIF = "Georgia,'Times New Roman',serif"
@@ -147,7 +147,7 @@ def build_email(lang, art, topic):
     )
     cta = (
         f'<table width="100%" cellpadding="0" cellspacing="0" style="margin:34px 0 6px;"><tr><td align="center">'
-        f'<a href="{art["url"]}" target="_blank" style="display:inline-block; background:{CRIMSON}; color:{PAPER}; '
+        f'<a href="{art["url"]}" target="_blank" style="display:inline-block; background:{CRIMSON}; color:{INK}; '
         f'font-family:monospace; font-size:12px; letter-spacing:1px; text-transform:uppercase; font-weight:700; '
         f'text-decoration:none; padding:13px 30px;">{CTA[lang]}</a></td></tr></table>'
     )
