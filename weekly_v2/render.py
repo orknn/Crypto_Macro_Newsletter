@@ -1,10 +1,18 @@
-"""Weekly bulletin v2 — renderer (TR + EN).
+"""Weekly bulletin v2 — personal decision edition (TR).
 
-Layout and styling come from the approved demo (Nov 2026): Nasdaq, gold and
-silver first, crypto one line at the end, USD only, sectors as ETF + three
-names from the owner's watchlist. Every sentence that depends on the week is
-built from the numbers by a rule below; nothing is written ahead of time. A
-block whose data is missing is left out instead of showing a guess.
+One reader. The page answers "what am I doing this week", not "what did the
+market do". Layout and styling are the approved Liquid demo; only content
+changed. Rules every sentence follows:
+
+  * it rests on a number printed on the page;
+  * a cause is named only when the driver's change over the same period AND
+    its correlation with the target both point that way (`supports`);
+  * one week of price is never called a flow; a positive week after a 1M
+    loss worse than −15% is labelled "tepki" (rebound);
+  * conditions, not advice: "X closes below Y → the stop triggers";
+  * a threshold is never the current value itself;
+  * a value that cannot be fetched is not printed: the row/box is left out
+    and named in the missing-data note at the bottom.
 """
 import math
 import os
@@ -25,95 +33,28 @@ NAMES = {"NVDA": "Nvidia", "AMD": "AMD", "AVGO": "Broadcom", "NOW": "ServiceNow"
          "SN": "SharkNinja", "TEM": "Tempus AI", "RDDT": "Reddit", "AXON": "Axon",
          "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet", "AMZN": "Amazon", "META": "Meta", "TSLA": "Tesla"}
 
-# ── strings ─────────────────────────────────────────────────────────────────
 S = {
-    "tr": {
-        "title": "Haftalık Bülten", "eyebrow": "Haftalık bülten",
-        "hero_k": "Haftanın tek cümlesi",
-        "s01": ("Üç varlık, ", "tek bakış"), "s01m": "trend = fiyat vs MA50 / MA200",
-        "s02": ("Piyasa ", "panosu"), "s02m": "son kapanış",
-        "s03": ("Fiyatı ne ", "hareket ettiriyor"), "s03m": "FRED · ICE · Cboe",
-        "s04": ("Nasdaq ", "sektörleri"), "s04m": "her sektör: ETF + 3 hisse · haftanın lideri",
-        "s05": ("AI değer ", "zinciri"), "s05m": "para zincirin neresine akıyor · eşit ağırlıklı sepetler",
-        "s06": ("Asya çip ", "ekseni"), "s06m": "bellek döngüsünü Nasdaq'tan önce fiyatlar",
-        "s07": ("Devler ve ", "genişlik"), "s07m": "Muhteşem 7, eşit ağırlık, hacim",
-        "s08": ("Metallerin ", "içi"), "s08m": "oranlar ve madenciler · hepsi USD",
-        "s09": ("Önümüzdeki ", "hafta"), "s09m": "CET · ABD verisi + izleme listenden bilançolar",
-        "s10": ("İzleme ", "seviyeleri"), "s10m": "yatırım tavsiyesi değildir",
-        "s11": ("Geçen haftanın ", "karnesi"), "s11m": "trend bir haftada değişti mi · aynı kural: fiyat vs MA50 / MA200",
-        "s12": ("Kripto ", "köşesi"), "s12m": "kısaca",
-        "trend_up": "Yükseliş trendi", "trend_dn": "Düşüş trendi", "trend_mix": "Kararsız",
-        "last5": "Son 5 seans", "since": "'den",
-        "th": ["", "Son", "1W", "1M", "YTD", "vs MA200", "52W aralık", "1 yıl"],
-        "g_eq": "Hisseler", "g_met": "Metaller", "g_en": "Enerji & dolar", "g_vol": "Oynaklık & kripto",
-        "g_rates": "Faiz", "g_rates_note": "değişimler baz puan",
-        "corr_k": "Korelasyon · son 63 seans, günlük değişim", "corr_scale": "−1 ters · 0 ilişkisiz · +1 birlikte",
-        "per_hour": " / saat", "index": " endeks",
-        "m7_k": "Muhteşem 7 · haftalık", "sorted": "sıralı",
-        "breadth_k": "Genişlik · eşit ağırlık / piyasa değeri", "one_month": "1 ay",
-        "soxndx_k": "SOX / Nasdaq", "qqqvol_k": "QQQ hacmi", "vs60": "60 günlük ortalamaya göre",
-        "week_rel": "1 hafta, göreli", "earn_k": "İzleme listenden bilançolar · 14 gün", "earn_src": "beklenti: analist ortalaması",
-        "rev": "gelir", "prev": "önceki", "est": "beklenti",
-        "no_earn": "Önümüzdeki 14 günde izleme listenden bilanço yok.",
-        "no_cal": "Takvimde bu hafta yüksek etkili ABD verisi yok.",
-        "fg": "Korku & Açgözlülük",
-        "foot": "Bu bülten bilgi amaçlıdır; yatırım tavsiyesi değildir. Veriler: Yahoo Finance, FRED, OKX, Bitget, Polymarket, Forex Factory. Her rakam yayın anındaki son kapanıştır.",
-        "web": "nocashflow.net'te oku",
-        "days": ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"],
-        "months": ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"],
-        "bn": " mr", "mn": " mn",
-    },
-    "en": {
-        "title": "Weekly Bulletin", "eyebrow": "Weekly bulletin",
-        "hero_k": "The week in one line",
-        "s01": ("Three assets, ", "one look"), "s01m": "trend = price vs MA50 / MA200",
-        "s02": ("Market ", "board"), "s02m": "last close",
-        "s03": ("What is ", "moving prices"), "s03m": "FRED · ICE · Cboe",
-        "s04": ("Nasdaq ", "sectors"), "s04m": "each sector: ETF + 3 names · leader this week",
-        "s05": ("AI value ", "chain"), "s05m": "where the money is flowing · equal-weight baskets",
-        "s06": ("Asia chip ", "axis"), "s06m": "prices the memory cycle before Nasdaq does",
-        "s07": ("Giants and ", "breadth"), "s07m": "Magnificent 7, equal weight, volume",
-        "s08": ("Inside ", "metals"), "s08m": "ratios and miners · all USD",
-        "s09": ("The week ", "ahead"), "s09m": "CET · US data + earnings from the watchlist",
-        "s10": ("Levels to ", "watch"), "s10m": "not investment advice",
-        "s11": ("Last week's ", "scorecard"), "s11m": "did the trend change in a week · same rule: price vs MA50 / MA200",
-        "s12": ("Crypto ", "corner"), "s12m": "briefly",
-        "trend_up": "Uptrend", "trend_dn": "Downtrend", "trend_mix": "Mixed",
-        "last5": "Last 5 sessions", "since": "since ",
-        "th": ["", "Last", "1W", "1M", "YTD", "vs MA200", "52W range", "1 year"],
-        "g_eq": "Equities", "g_met": "Metals", "g_en": "Energy & dollar", "g_vol": "Volatility & crypto",
-        "g_rates": "Rates", "g_rates_note": "changes in basis points",
-        "corr_k": "Correlation · last 63 sessions, daily changes", "corr_scale": "−1 opposite · 0 unrelated · +1 together",
-        "per_hour": " / hour", "index": " index",
-        "m7_k": "Magnificent 7 · weekly", "sorted": "sorted",
-        "breadth_k": "Breadth · equal weight / cap weight", "one_month": "1 month",
-        "soxndx_k": "SOX / Nasdaq", "qqqvol_k": "QQQ volume", "vs60": "vs 60-day average",
-        "week_rel": "1 week, relative", "earn_k": "Earnings from the watchlist · 14 days", "earn_src": "estimate: analyst mean",
-        "rev": "revenue", "prev": "prior", "est": "est.",
-        "no_earn": "No watchlist earnings in the next 14 days.",
-        "no_cal": "No high-impact US data on the calendar this week.",
-        "fg": "Fear & Greed",
-        "foot": "This bulletin is for information only; it is not investment advice. Data: Yahoo Finance, FRED, OKX, Bitget, Polymarket, Forex Factory. Every figure is the last close at publication.",
-        "web": "Read on nocashflow.net",
-        "days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-        "months": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
-        "bn": "bn", "mn": "m",
-    },
+    "tr": {"days": ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"],
+           "months": ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"],
+           "bn": " mr", "mn": " mn"},
+    "en": {"days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+           "months": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+           "bn": "bn", "mn": "m"},
 }
 
 NAME = {
-    "ndx": ("Nasdaq 100", "Nasdaq 100"), "spx": ("S&P 500", "S&P 500"), "rut": ("Russell 2000", "Russell 2000"),
-    "sox": ("Yarı iletken (SOX)", "Semiconductors (SOX)"), "gold": ("Altın", "Gold"), "silver": ("Gümüş", "Silver"),
-    "plat": ("Platin", "Platinum"), "copper": ("Bakır", "Copper"), "brent": ("Brent petrol", "Brent crude"),
-    "dxy": ("Dolar endeksi", "Dollar index"), "vix": ("VIX", "VIX"), "vxn": ("VXN", "VXN"), "btc": ("Bitcoin", "Bitcoin"),
-    "us2y": ("ABD 2Y", "US 2Y"), "us10y": ("ABD 10Y", "US 10Y"), "real10": ("10Y reel faiz", "10Y real yield"),
-    "be10": ("10Y başabaş enflasyon", "10Y breakeven inflation"), "s2s10": ("2s10s eğim", "2s10s slope"),
-    "kospi": ("KOSPI", "KOSPI"), "twii": ("TAIEX", "TAIEX"), "n225": ("Nikkei 225", "Nikkei 225"), "usdjpy": ("USD/JPY", "USD/JPY"),
-    "nvda": ("Nvidia", "Nvidia"), "aapl": ("Apple", "Apple"), "msft": ("Microsoft", "Microsoft"), "googl": ("Alphabet", "Alphabet"),
-    "amzn": ("Amazon", "Amazon"), "meta": ("Meta", "Meta"), "tsla": ("Tesla", "Tesla"),
+    "ndx": "Nasdaq 100", "spx": "S&P 500", "sox": "Yarı iletken (SOX)", "gold": "Altın", "silver": "Gümüş",
+    "copper": "Bakır", "dxy": "Dolar endeksi", "vix": "VIX", "vxn": "VXN", "btc": "Bitcoin",
+    "us2y": "ABD 2Y", "us10y": "ABD 10Y", "real10": "10Y reel faiz", "be10": "10Y başabaş enflasyon",
+    "s2s10": "2s10s eğim", "hy": "HY kredi makası",
+    "kospi": "KOSPI", "twii": "TAIEX", "n225": "Nikkei 225", "usdjpy": "USD/JPY",
+    "nvda": "Nvidia", "aapl": "Apple", "msft": "Microsoft", "googl": "Alphabet", "amzn": "Amazon", "meta": "Meta", "tsla": "Tesla",
 }
+MISSING_NAME = {**NAME, "optics": "Optik sepeti", "neocloud": "Neocloud sepeti", "memory": "Bellek sepeti",
+                "power": "Enerji sepeti", "h100": "H100 kirası", "b200": "B200 kirası", "gsr": "Altın/gümüş oranı",
+                "gdx_gold": "GDX/altın", "sil_silver": "SIL/gümüş", "cu_au": "Bakır/altın", "ew_cw": "QQQE/QQQ",
+                "sox_ndx": "SOX/Nasdaq", "qqq": "QQQ", "qqqe": "QQQE", "smh": "SMH", "igv": "IGV", "nasa": "NASA"}
 
-# US calendar events: TR names and why each matters (EN keeps the source name)
 CAL_TR = {
     "Fed Chairman Warsh Speaks": "Fed Başkanı Warsh konuşuyor", "Core Retail Sales m/m": "Çekirdek perakende satışlar (MoM)",
     "Retail Sales m/m": "Perakende satışlar (MoM)", "FOMC Meeting Minutes": "FOMC tutanakları",
@@ -132,21 +73,16 @@ CAL_TR = {
     "Pending Home Sales m/m": "Bekleyen konut satışları (MoM)", "Existing Home Sales": "Mevcut konut satışları",
     "New Home Sales": "Yeni konut satışları", "Building Permits": "İnşaat izinleri", "Housing Starts": "Konut başlangıçları",
 }
-CAL_WHY = {
-    "Retail Sales m/m": ("Güçlü tüketim → faiz indirimi daha uzak", "Strong spending → rate cuts further away"),
-    "Core Retail Sales m/m": ("Güçlü tüketim → faiz indirimi daha uzak", "Strong spending → rate cuts further away"),
-    "FOMC Meeting Minutes": ("Komitede indirim isteyen var mı?", "Is anyone on the committee asking for a cut?"),
-    "Unemployment Claims": ("İşgücü yumuşarsa reel faiz geri çekilir", "A softer labour market pulls real yields down"),
-    "CPI m/m": ("Reel faizin yönünü en çok bu belirler", "The single biggest input for real yields"),
-    "Core CPI m/m": ("Reel faizin yönünü en çok bu belirler", "The single biggest input for real yields"),
-    "Non-Farm Employment Change": ("Zayıf istihdam → indirim beklentisi, metallere destek", "Weak jobs → cut hopes, support for metals"),
-    "Core PCE Price Index m/m": ("Fed'in hedeflediği enflasyon ölçüsü", "The inflation gauge the Fed targets"),
-    "Federal Funds Rate": ("Haftanın ana olayı", "The main event of the week"),
-}
+
+BASKET_NAME = {"neocloud": ("Neocloud", "GPU'yu kiraya veren bulutlar"), "memory": ("Bellek", "HBM ve NAND"),
+               "optics": ("Optik", "veri merkezi bağlantısı"), "power": ("Enerji", "şebeke, yakıt hücresi, nükleer")}
+REBOUND_1M = -15.0          # a positive week after a 1M worse than this is a "tepki"
+CORR_MIN = 0.3              # a correlation weaker than this cannot carry a causal sentence
+
 
 # ── formatting ──────────────────────────────────────────────────────────────
 class F:
-    def __init__(self, lang):
+    def __init__(self, lang="tr"):
         self.l = lang
         self.s = S[lang]
 
@@ -156,20 +92,29 @@ class F:
             s = s.replace(",", "X").replace(".", ",").replace("X", ".")
         return ("−" if v < 0 and round(abs(v), dec) != 0 else "") + s
 
-    def pct(self, v, dec=2, sign=True):
-        sg = ("+" if v > 0 else "−" if v < 0 else "") if sign else ("−" if v < 0 else "")
+    def pct(self, v, dec=1, sign=True):
+        """Signed percent; a value that rounds to zero is printed bare: %0,0."""
         if round(abs(v), dec) == 0:
-            sg = ""
+            return f"%{self.num(0, dec)}" if self.l == "tr" else f"{self.num(0, dec)}%"
+        sg = ("+" if v > 0 else "−") if sign else ("−" if v < 0 else "")
         body = self.num(abs(v), dec)
         return f"{sg}%{body}" if self.l == "tr" else f"{sg}{body}%"
 
     def lvl(self, v, dec=2):
-        """A level that is itself a percentage (yields)."""
+        """A level that is itself a percentage (yields, ratios of a whole)."""
         return f"%{self.num(v, dec)}" if self.l == "tr" else f"{self.num(v, dec)}%"
 
     def bp(self, v):
         r = round(v)
         return ("+" if r > 0 else "−" if r < 0 else "") + f"{abs(r)}bp"
+
+    def pts(self, v, dec=1):
+        if round(abs(v), dec) == 0:
+            return f"{self.num(0, dec)} puan"
+        return ("+" if v > 0 else "−") + f"{self.num(abs(v), dec)} puan"
+
+    def usd(self, v, dec=2):
+        return ("−" if v < 0 else "") + "$" + self.num(abs(v), dec)
 
     def day(self, iso):
         d = date.fromisoformat(iso)
@@ -180,23 +125,24 @@ class F:
         m = self.s["months"][d.month - 1]
         return f"{d.day} {m} {d.year}" if self.l == "tr" else f"{m} {d.day}, {d.year}"
 
-    def money(self, v):
-        return f"${self.num(v / 1e9, 1)}{self.s['bn']}" if v >= 1e9 else f"${self.num(v / 1e6, 0)}{self.s['mn']}"
-
     def ylab(self, a):
         if a.get("since"):
             d = date.fromisoformat(a["since"])
-            return (f"{d.day:02d}.{d.month:02d}'den" if self.l == "tr"
-                    else f"since {self.s['months'][d.month - 1]} {d.day}")
+            return f"{d.day:02d}.{d.month:02d}'den"
         return "YTD"
 
 
-def dc(v):
-    return "up" if v and v > 0 else "dn" if v and v < 0 else ""
+def dc(v, dec=1):
+    """Colour class only for a value that does not round to zero."""
+    return "" if v is None or round(v, dec) == 0 else ("up" if v > 0 else "dn")
 
 
 def esc(s):
-    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def sgn(v):
+    return 0 if not v else (1 if v > 0 else -1)
 
 
 # ── charts ──────────────────────────────────────────────────────────────────
@@ -250,19 +196,8 @@ def bars5(a, f):
     return f'<svg viewBox="0 0 {w} 92" class="d5" aria-hidden="true">{"".join(out)}</svg>'
 
 
-def trend(a, f):
-    p, m50, m200 = a["last"], a["ma50"], a.get("ma200")
-    if m200 is None:
-        return f.s["trend_mix"], ""
-    if p > m50 and p > m200:
-        return f.s["trend_up"], "up"
-    if p < m50 and p < m200:
-        return f.s["trend_dn"], "dn"
-    return f.s["trend_mix"], ""
-
-
 def regime(last, ma50, ma200):
-    if ma200 is None:
+    if ma200 is None or ma50 is None:
         return "mix"
     if last > ma50 and last > ma200:
         return "up"
@@ -271,29 +206,25 @@ def regime(last, ma50, ma200):
     return "mix"
 
 
-def wbp(A, k):
-    a = A[k]
-    if "w_bp" in a:
-        return a["w_bp"]
-    s = a["series"]
-    return (s[-1] - s[-2]) * (1 if k == "s2s10" else 100)
+def is_rate(a):
+    return "w_bp" in a
 
 
-def zmove(a, rate=False):
+def zmove(a):
     """This week's move in units of its own typical weekly move (1y of weekly closes)."""
     s = a["series"]
     if len(s) < 12:
         return 0.0
-    if rate:
+    if is_rate(a):
         ch = [(s[i] - s[i - 1]) * 100 for i in range(1, len(s))]
-        now = a.get("w_bp", ch[-1])
+        now = a.get("w_bp") or 0
     else:
         ch = [(s[i] / s[i - 1] - 1) * 100 for i in range(1, len(s)) if s[i - 1]]
-        now = a["w"]
+        now = a.get("w") or 0
     m = sum(ch) / len(ch)
     sd = math.sqrt(sum((c - m) ** 2 for c in ch) / (len(ch) - 1))
     # floor: a near-flat year would otherwise turn any small move into a headline
-    return now / max(sd, 3.0 if rate else 0.5)
+    return now / max(sd, 3.0 if is_rate(a) else 0.5)
 
 
 def sh(num, title, meta):
@@ -303,147 +234,771 @@ def sh(num, title, meta):
 
 # ── the bulletin ────────────────────────────────────────────────────────────
 class Bulletin:
-    def __init__(self, data, lang):
+    def __init__(self, data, lang="tr"):
         self.d = data
         self.A = data["a"]
-        self.l = lang
-        self.f = F(lang)
-        self.s = S[lang]
-        self.skipped = []
+        self.P = data.get("personal") or {}
+        self.CO = self.P.get("co") or {}
+        self.R = data.get("rules") or {}
+        self.PF = data.get("portfolio") or {}
+        self.l = "tr"
+        self.f = F("tr")
         self.num = 0
+        self.missing = []
+        self.week_rows = []          # §01 "Bu hafta" rows, stored for next week's scorecard
 
+    # helpers
     def has(self, *keys):
         return all(k in self.A for k in keys)
 
     def n(self, key):
-        return NAME[key][0 if self.l == "tr" else 1]
+        return NAME.get(key, key.upper())
 
-    def T(self, tr, en):
-        return tr if self.l == "tr" else en
+    def miss(self, what):
+        if what not in self.missing:
+            self.missing.append(what)
 
-    def section(self, title, meta, body, extra=""):
+    def ch(self, v, dec=1, suffix=""):
+        """A signed percent change as a coloured span; None → nothing."""
+        if v is None:
+            return ""
+        return f'<span class="{dc(v, dec)}">{self.f.pct(v, dec)}{suffix}</span>'
+
+    def chbp(self, v, suffix=""):
+        if v is None:
+            return ""
+        return f'<span class="{dc(round(v), 0)}">{self.f.bp(v)}{suffix}</span>'
+
+    def section(self, title, meta, body):
         self.num += 1
-        return f'<section class="sec">{sh(self.num, title, meta)}{body}{extra}</section>'
+        return f'<section class="sec">{sh(self.num, title, meta)}{body}</section>'
 
-    # headline: the week's most unusual move among the things the bulletin is about
+    def tick(self, t):
+        return self.A.get(t.lower())
+
+    def wl(self):
+        return set(w["ticker"].upper() for w in self.R.get("watchlist") or [])
+
+    def held(self):
+        return set(p["ticker"].upper() for p in self.PF.get("positions") or [])
+
+    # ── causality gate ──────────────────────────────────────────────────────
+    CORR_FOR = {("gold", "real10"): ("gold_real", -1), ("gold", "dxy"): ("gold_dxy", -1),
+                ("ndx", "us10y"): ("ndx_10y", -1)}
+
+    def supports(self, target, driver, period="w"):
+        """True only if the driver moved materially over `period`, the target
+        moved the way the textbook link says, and the 63-session correlation
+        has that sign and at least CORR_MIN strength."""
+        key = self.CORR_FOR.get((target, driver))
+        if not key or target not in self.A or driver not in self.A:
+            return False
+        r = (self.d.get("corr") or {}).get(key[0])
+        expect = key[1]
+        if r is None or abs(r) < CORR_MIN or sgn(r) != expect:
+            return False
+        da = self.A[driver]
+        dv = da.get(period + "_bp") if is_rate(da) else da.get(period)
+        tv = self.A[target].get(period)
+        if dv is None or tv is None:
+            return False
+        if abs(dv) < (3 if is_rate(da) else 0.3) or round(tv, 1) == 0:
+            return False
+        return sgn(tv) == expect * sgn(dv)
+
+    # ── hero ────────────────────────────────────────────────────────────────
     def headline(self):
-        A, f, T = self.A, self.f, self.T
-        cands = []
-        for k in ("ndx", "gold", "silver", "dxy"):
-            if k in A:
-                cands.append((abs(zmove(A[k])), k, False))
-        for k in ("us2y", "real10"):
-            if k in A:
-                cands.append((abs(zmove(A[k], rate=True)), k, True))
+        A, f = self.A, self.f
+        cands = [(abs(zmove(A[k])), k) for k in ("ndx", "gold", "silver", "dxy", "us2y", "real10", "hy") if k in A]
         if not cands:
             return None
-        _, k, rate = max(cands)
+        _, k = max(cands)
         a = A[k]
         name = self.n(k)
-        if rate:
-            mv = wbp(A, k)
-            if k == "real10":
-                h1 = T(f"Reel faiz {f.lvl(a['last'])}", f"Real yields at {f.lvl(a['last'])}")
-                h2 = (T("metaller bunu affetmiyor.", "metals do not forgive that.") if mv > 0
-                      else T("metallere nefes alanı.", "room for metals to breathe."))
+        if is_rate(a):
+            mv, mm = a.get("w_bp") or 0, a.get("m_bp")
+            h1 = f"{name} {f.lvl(a['last'])}"
+            if k == "real10" and self.supports("gold", "real10"):
+                h2 = f"altın aynı hafta {f.pct(A['gold']['w'])}; korelasyon {f.num(self.d['corr']['gold_real'])}."
             else:
-                h1 = T(f"2Y faiz {f.lvl(a['last'])}", f"The 2-year at {f.lvl(a['last'])}")
-                h2 = (T("piyasa indirimi erteliyor.", "the market is pushing cuts out.") if mv > 0
-                      else T("piyasa indirime yaklaşıyor.", "the market is pulling cuts in."))
-            sub = T(f"bir haftada {f.bp(mv)}", f"{f.bp(mv)} in a week")
-            return {"k": k, "h1": h1, "h2": h2, "sub": sub, "series": a["series"],
-                    "lab": f"{name} · {T('1 yıl', '1 year')}", "val": f.lvl(a["last"])}
+                h2 = f"haftada {f.bp(mv)}" + (f", ayda {f.bp(mm)}." if mm is not None else ".")
+            return {"k": k, "h1": h1, "h2": h2, "series": a["series"], "lab": f"{name} · 1 yıl", "val": f.lvl(a["last"])}
         p = pos52(a)
-        h1 = T(f"{name} haftada {f.pct(a['w'], 1)}", f"{name} {f.pct(a['w'], 1)} on the week")
+        h1 = f"{name} haftada {f.pct(a['w'])}"
         if p >= .95:
-            h2 = T("52 haftanın zirvesinde.", "at a 52-week high.")
+            h2 = "52 haftanın zirvesinde."
         elif p <= .05:
-            h2 = T("52 haftanın dibinde.", "at a 52-week low.")
-        elif a.get("ma200") and (a["last"] - a["ma200"]) * a["w"] < 0 and abs(a["last"] / a["ma200"] - 1) < .03:
-            h2 = T("MA200 sınırda.", "testing its MA200.")
-        elif a["w"] > 0:
-            h2 = T("alıcılar geri döndü.", "buyers are back.")
+            h2 = "52 haftanın dibinde."
+        elif a.get("ma200"):
+            d = (a["last"] / a["ma200"] - 1) * 100
+            h2 = f"MA200'ün {f.pct(abs(d), 1, sign=False)} {'üstünde' if d > 0 else 'altında'}."
         else:
-            h2 = T("satıcılar baskın.", "sellers are in charge.")
+            h2 = f"ayda {f.pct(a['m'])}."
         dec = 0 if k in ("ndx", "gold") else 2
         cur = "$" if k in ("gold", "silver") else ""
-        return {"k": k, "h1": h1, "h2": h2, "sub": "", "series": a["series"],
-                "lab": f"{name} · {T('1 yıl', '1 year')}", "val": cur + f.num(a["last"], dec)}
+        return {"k": k, "h1": h1, "h2": h2, "series": a["series"], "lab": f"{name} · 1 yıl", "val": cur + f.num(a["last"], dec)}
 
     def lede(self):
-        A, f, T = self.A, self.f, self.T
+        A, f = self.A, self.f
         out = []
         if self.has("ndx", "gold", "silver"):
-            out.append(T(f"Nasdaq 100 haftayı {f.pct(A['ndx']['w'])}, altın {f.pct(A['gold']['w'])}, gümüş {f.pct(A['silver']['w'])} ile kapattı.",
-                         f"Nasdaq 100 ended the week {f.pct(A['ndx']['w'])}, gold {f.pct(A['gold']['w'])}, silver {f.pct(A['silver']['w'])}."))
-        if self.has("dxy"):
-            p = pos52(A["dxy"])
-            where = (T("52 haftanın zirvesine yakın", "near its 52-week high") if p >= .85 else
-                     T("52 haftanın dibine yakın", "near its 52-week low") if p <= .15 else
-                     T("52 haftalık aralığının ortasında", "mid-way through its 52-week range"))
-            out.append(T(f"Dolar endeksi {f.num(A['dxy']['last'])}, {where}.", f"The dollar index is at {f.num(A['dxy']['last'])}, {where}."))
-        if self.has("sox", "ndx", "nvda"):
-            lead = A["sox"]["w"] > A["ndx"]["w"]
-            out.append(T(f"Yarı iletkenler {f.pct(A['sox']['w'], 1)} ile Nasdaq'ın {'önünde' if lead else 'gerisinde'} kaldı; Nvidia {f.pct(A['nvda']['w'], 1)}.",
-                         f"Semiconductors {'led' if lead else 'lagged'} Nasdaq at {f.pct(A['sox']['w'], 1)}; Nvidia {f.pct(A['nvda']['w'], 1)}."))
+            out.append(f"Nasdaq 100 haftayı {f.pct(A['ndx']['w'])}, altın {f.pct(A['gold']['w'])}, gümüş {f.pct(A['silver']['w'])} ile kapattı.")
+        if self.has("sox", "ndx"):
+            lead = A["sox"]["w"] - A["ndx"]["w"]
+            out.append(f"Yarı iletkenler {f.pct(A['sox']['w'])}; Nasdaq'a göre {f.pts(lead)}.")
         if self.has("real10"):
-            mv = wbp(A, "real10")
-            amt = f"{abs(round(mv))}bp"
-            if round(mv) == 0:
-                out.append(T(f"10 yıllık reel faiz hafta boyunca yatay kaldı; şu an {f.lvl(A['real10']['last'])}.",
-                             f"The 10-year real yield was flat on the week at {f.lvl(A['real10']['last'])}."))
-            else:
-                out.append(T(f"10 yıllık reel faiz bir haftada {amt} {'yükseldi' if mv > 0 else 'geriledi'}; şu an {f.lvl(A['real10']['last'])}.",
-                             f"The 10-year real yield {'rose' if mv > 0 else 'fell'} {amt} on the week to {f.lvl(A['real10']['last'])}."))
+            out.append(f"10 yıllık reel faiz haftada {f.bp(A['real10']['w_bp'])}, şu an {f.lvl(A['real10']['last'])}.")
+        if self.has("hy"):
+            out.append(f"HY kredi makası {f.lvl(A['hy']['last'])}, haftada {f.bp(A['hy']['w_bp'])}.")
         return " ".join(out)
 
     def key5(self):
-        A, f, T = self.A, self.f, self.T
+        A, f = self.A, self.f
         items = []
-        if "silver" in A:
-            items.append((self.n("silver"), f.pct(A["silver"]["w"], 1), "1W", dc(A["silver"]["w"])))
-        if "sox" in A:
-            items.append((T("Yarı iletken", "Semis"), f.pct(A["sox"]["w"], 1), "1W", dc(A["sox"]["w"])))
-        if "nvda" in A:
-            items.append(("Nvidia", f.pct(A["nvda"]["w"], 1), "1W", dc(A["nvda"]["w"])))
-        if "real10" in A:
-            items.append((T("Reel faiz", "Real yield"), f.bp(wbp(A, "real10")), "1W", dc(wbp(A, "real10"))))
-        if "h100" in A:
-            items.append((T("H100 kirası", "H100 rent"), "$" + f.num(A["h100"]["last"]), T("saat başı", "per hour"), ""))
+        for k, lab in (("ndx", "Nasdaq 100"), ("gold", "Altın"), ("silver", "Gümüş")):
+            if k in A:
+                items.append((lab, f.pct(A[k]["w"]), "1W", dc(A[k]["w"])))
+        for k, lab in (("real10", "Reel faiz"), ("hy", "HY makası")):
+            if k in A:
+                items.append((lab, f.bp(A[k]["w_bp"]), "1W", dc(round(A[k]["w_bp"]), 0)))
         return items
 
-    # §01
-    def assets(self):
+    # ── §01 decision page ───────────────────────────────────────────────────
+    def regime_now(self):
+        from weekly_v2.personal import regime_state
+        A = self.A
+        if not self.has("ndx", "vxn") or not A["ndx"].get("ma200"):
+            return None
+        ndx_up = A["ndx"]["last"] > A["ndx"]["ma200"]
+        vxn_up = A["vxn"]["last"] > A["vxn"]["ma50"]
+        st = regime_state(self.R, ndx_up, vxn_up)
+        if not st:
+            return None
+        return {"st": st, "ndx_up": ndx_up, "vxn_up": vxn_up,
+                "flip_ndx": regime_state(self.R, not ndx_up, vxn_up), "flip_vxn": regime_state(self.R, ndx_up, not vxn_up)}
+
+    def book(self):
+        """Positions with a price at the cut; None if any position lacks one."""
+        rows, total = [], 0.0
+        for p in self.PF.get("positions") or []:
+            t = p["ticker"].upper()
+            a = self.tick(t)
+            if not a:
+                self.miss(f"{t}: kesim fiyatı yok — portföy satırı ve hisse oranı hesaplanmadı")
+                return None, None
+            v = a["last"] * float(p["shares"])
+            rows.append({**p, "t": t, "a": a, "value": v})
+            total += v
+        cash = float(self.PF.get("cash") or 0)
+        return rows, total + cash
+
+    def decision(self):
+        A, f = self.A, self.f
+        tw = self.R.get("this_week") or {}
+        stop_within = float(tw.get("stop_within_pct", 10))
+        buy_within = float(tw.get("buy_within_pct", 5))
+        hl = float(tw.get("stop_highlight_pct", 5))
+        rg = self.regime_now()
+        rows, nav = self.book()
+        eq_pct = (sum(r["value"] for r in rows) / nav * 100) if rows and nav else None
+        parts, lines = [], []
+
+        # regime vs current equity share
+        if rg:
+            st = rg["st"]
+            d_ndx = (A["ndx"]["last"] / A["ndx"]["ma200"] - 1) * 100
+            d_vxn = (A["vxn"]["last"] / A["vxn"]["ma50"] - 1) * 100
+            cur = (f'<div class="big">{f.lvl(eq_pct, 1)}</div><span class="mono mute">nakit {f.usd(float(self.PF.get("cash") or 0), 0)} · toplam {f.usd(nav, 0)}</span>'
+                   if eq_pct is not None else '<p>Hisse oranı hesaplanamadı (eksik fiyat).</p>')
+            gap = ""
+            if eq_pct is not None:
+                diff = eq_pct - float(st["max_equity_pct"])
+                gap = f'<p>Fark: <b>{f.pts(diff)}</b> {"sınırın üstünde" if diff > 0 else "sınırın altında" if diff < 0 else ""}.</p>'
+            parts.append(f'''<div class="regime">
+  <div class="panel dark"><span class="k">Rejim · bu hafta</span><div class="big" style="margin-top:12px">{esc(st.get("label", ""))}</div>
+    <p>Nasdaq 100 MA200'ün {f.pct(abs(d_ndx), 1, sign=False)} {"üstünde" if d_ndx > 0 else "altında"}; VXN MA50'sinin {f.pct(abs(d_vxn), 1, sign=False)} {"üstünde" if d_vxn > 0 else "altında"}.</p></div>
+  <div class="panel"><span class="k">İzin verilen azami hisse oranı</span><div class="big">{f.lvl(float(st["max_equity_pct"]), 0)}</div><span class="mono mute">rules.yaml · rejim tablosu</span></div>
+  <div class="panel"><span class="k">Mevcut hisse oranı</span>{cur}{gap}</div>
+</div>''')
+            # regime boundary conditions (thresholds are MAs, never the price itself)
+            for key, ma_key, up, flip, label in (("ndx", "ma200", rg["ndx_up"], rg["flip_ndx"], "MA200"),
+                                                 ("vxn", "ma50", rg["vxn_up"], rg["flip_vxn"], "MA50")):
+                if not flip:
+                    continue
+                lvl = A[key][ma_key]
+                dirw = "altında" if up else "üstünde"
+                txt = (f"<b>{self.n(key)}</b>, {label} (<b>{f.num(lvl)}</b>) {dirw} kapanırsa rejim “{esc(flip.get('label', ''))}” olur; "
+                       f"azami hisse oranı {f.lvl(float(st['max_equity_pct']), 0)} → {f.lvl(float(flip['max_equity_pct']), 0)}.")
+                lines.append(txt)
+                self.week_rows.append({"kind": "level", "key": key, "level": lvl, "dir": "below" if up else "above",
+                                       "text": f"{self.n(key)} {label} ({f.num(lvl)}) {dirw} kapanırsa rejim değişir"})
+            if eq_pct is not None and eq_pct > float(st["max_equity_pct"]):
+                lines.append(f"Hisse oranı {f.lvl(eq_pct, 1)}; rejim sınırı {f.lvl(float(st['max_equity_pct']), 0)}, "
+                             f"aradaki fark {f.pts(eq_pct - float(st['max_equity_pct']))}.")
+        else:
+            self.miss("Rejim: Nasdaq 100 MA200 / VXN MA50 ya da rules.yaml rejim tablosu eksik")
+
+        # portfolio table
+        if rows:
+            trs = []
+            for r in sorted(rows, key=lambda x: -x["value"]):
+                a, t = r["a"], r["t"]
+                w = r["value"] / nav * 100
+                vs_cost = (a["last"] / float(r["cost"]) - 1) * 100
+                stop = r.get("stop")
+                sd = (a["last"] / float(stop) - 1) * 100 if stop else None
+                warn = sd is not None and sd < hl
+                nxt = (self.CO.get(t) or {}).get("next")
+                earn = f.day(nxt["d"]) if nxt else ""
+                if not nxt:
+                    self.miss(f"{t}: sıradaki bilanço tarihi")
+                sd_cell = (f'<td class="n {"dn" if warn else ""}">{f.pct(sd, 1, sign=False) if sd >= 0 else "stop altında " + f.pct(sd, 1)}</td>'
+                           if sd is not None else '<td class="n"></td>')
+                trs.append(f'<tr class="{"warn" if warn else ""}"><th>{NAMES.get(t, t)}<small>{t} · {esc(r.get("basket", ""))}</small></th>'
+                           f'<td class="n">{f.usd(a["last"])}</td><td class="n">{f.lvl(w, 1)}</td>'
+                           f'<td class="n">{self.ch(vs_cost)}</td><td class="n">{f.usd(float(stop)) if stop else ""}</td>{sd_cell}'
+                           f'<td class="n">{self.ch(a["w"])}</td><td class="n">{earn}</td></tr>')
+                if sd is not None and 0 <= sd < stop_within:
+                    lines.insert(0, f"<b>{t}</b>, <b>{f.usd(float(stop))}</b> altında kapanırsa stop çalışır (şu an {f.pct(sd, 1, sign=False)} uzakta).")
+                    self.week_rows.append({"kind": "stop", "key": t.lower(), "level": float(stop), "dir": "below",
+                                           "text": f"{t} {f.usd(float(stop))} altında kapanırsa stop çalışır"})
+                elif sd is not None and sd < 0:
+                    lines.insert(0, f"<b>{t}</b> stop seviyesinin ({f.usd(float(stop))}) {f.pct(abs(sd), 1, sign=False)} altında kapandı.")
+            th = "".join(f"<th>{h}</th>" for h in ("Pozisyon", "Son", "Ağırlık", "Maliyete göre", "Stop", "Stop'a mesafe", "1W", "Bilanço"))
+            parts.append(f'<div class="tblw"><table class="board p"><thead><tr>{th}</tr></thead><tbody>{"".join(trs)}</tbody></table></div>')
+
+        # earnings of held names in the next 7 days
+        today = date.fromisoformat(self.d["today"])
+        for t in sorted(self.held()):
+            nx = (self.CO.get(t) or {}).get("next")
+            if nx and (date.fromisoformat(nx["d"]) - today).days <= 7:
+                sess = {"bmo": " açılış öncesi", "amc": " kapanış sonrası"}.get(nx.get("sess"), "")
+                im = f"; opsiyonlar ±{f.pct(nx['im'], 1, sign=False)} hareket ima ediyor" if nx.get("im") is not None else ""
+                lines.append(f"<b>{t}</b> bilançosu {f.day(nx['d'])}{sess}{im}.")
+
+        # watchlist names near their buy level
+        for w in self.R.get("watchlist") or []:
+            t, b = w["ticker"].upper(), w.get("buy_at")
+            a = self.tick(t)
+            if not b or not a:
+                continue
+            dist = (a["last"] / float(b) - 1) * 100
+            if 0 <= dist <= buy_within:
+                lines.append(f"<b>{t}</b> alım seviyesine (<b>{f.usd(float(b))}</b>) {f.pct(dist, 1, sign=False)} mesafede.")
+                self.week_rows.append({"kind": "buy", "key": t.lower(), "level": float(b), "dir": "below",
+                                       "text": f"{t} alım seviyesi {f.usd(float(b))}"})
+            elif dist < 0:
+                lines.append(f"<b>{t}</b> alım seviyesinin (<b>{f.usd(float(b))}</b>) {f.pct(abs(dist), 1, sign=False)} altında kapandı.")
+
+        if lines:
+            parts.append(f'<div class="panel"><span class="k">Bu hafta · yalnızca kurallardan</span><ul class="tw">{"".join(f"<li>{x}</li>" for x in lines)}</ul></div>')
+        if not parts:
+            return ""
+        return self.section(("Karar ", "sayfası"), "rejim · portföy · bu hafta", "".join(parts))
+
+    # ── §02 setups ──────────────────────────────────────────────────────────
+    def setups(self):
+        f = self.f
+        sw = self.R.get("swing") or {}
+        rows = []
+        for w in self.R.get("watchlist") or []:
+            t = w["ticker"].upper()
+            a, c = self.tick(t), self.CO.get(t) or {}
+            if not a:
+                self.miss(f"{t}: fiyat verisi — kurulum satırı yok")
+                continue
+            cells = []
+            # 1 volume on down days
+            cells.append(None if "dist_days" not in c else not c["dist_days"])
+            # 2 moving averages
+            if a.get("ma200") is None:
+                cells.append(None)
+                self.miss(f"{t}: MA200 için yeterli geçmiş yok")
+            else:
+                ok = a["last"] > a["ma200"]
+                if sw.get("require_above_ma50"):
+                    ok = ok and a["last"] > a["ma50"]
+                cells.append(ok)
+            # 3 net debt / EBITDA
+            if "nd_ebitda" in c:
+                v = c["nd_ebitda"]
+                cells.append(v is not None and v < float(sw.get("max_net_debt_ebitda", 3)))
+            else:
+                cells.append(None)
+            # 4 profit + FCF
+            cells.append((c["profit"] and c["fcf"]) if "profit" in c else None)
+            # 5 analyst actions
+            cells.append(None if "analyst_bad" not in c else not c["analyst_bad"])
+            passed = sum(1 for x in cells if x)
+            known = sum(1 for x in cells if x is not None)
+            rows.append((passed, t, w, a, c, cells, known))
+        if not rows:
+            return ""
+        rows.sort(key=lambda r: (-r[0], r[1]))
+        trs, notes = [], []
+        for passed, t, w, a, c, cells, known in rows:
+            tds = "".join('<td class="c"></td>' if x is None else (f'<td class="c up">✓</td>' if x else f'<td class="c dn">✗</td>') for x in cells)
+            b = w.get("buy_at")
+            dist = f.pct((a["last"] / float(b) - 1) * 100, 1) if b else ""
+            dd = (a["last"] / a["hi52"] - 1) * 100
+            nx = c.get("next")
+            spec = ""
+            if "profit" in c and not (c["profit"] and c["fcf"]) and w.get("basket") != "spekulatif":
+                spec = " · nakit yakıyor → spekülatif"
+            trs.append(f'<tr><th>{NAMES.get(t, t)}<small>{t} · {esc(w.get("basket", ""))}{spec}</small></th>{tds}'
+                       f'<td class="n">{passed}/{known}</td><td class="n">{dist}</td><td class="n">{self.ch(dd)}</td>'
+                       f'<td class="n">{f.day(nx["d"]) if nx else ""}</td></tr>')
+            if c.get("dist_days"):
+                notes.append(f"{t}: yüksek hacimli düşüş günü {', '.join(f.day(d) for d in c['dist_days'])}")
+            if c.get("nd_ebitda") is None and c.get("ebitda_neg"):
+                notes.append(f"{t}: FAVÖK negatif")
+            elif c.get("nd_ebitda") is not None and c["nd_ebitda"] >= float(sw.get("max_net_debt_ebitda", 3)):
+                notes.append(f"{t}: net borç / FAVÖK {f.num(c['nd_ebitda'], 1)}")
+            bad = c.get("analyst_bad") or []
+            for x in bad[:2]:
+                notes.append(f"{t}: {esc(x)}")
+            if len(bad) > 2:
+                notes.append(f"{t}: +{len(bad) - 2} analist aksiyonu daha (30 gün)")
+        mult = f.num(float(sw.get("down_volume_mult", 1.5)), 1)
+        heads = ["", "Hacim", "MA", "Borç", "Kâr+FCF", "Analist", "Geçen", "Alım seviyesine", "52W zirveden", "Bilanço"]
+        th = "".join(f"<th>{h}</th>" for h in heads)
+        legend = (f"Hacim: son {sw.get('down_volume_lookback', 5)} seansta hacmi 20G ortalamanın {mult} katını aşan düşüş günü yok · "
+                  f"MA: fiyat MA200 üstünde{' ve MA50 üstünde' if sw.get('require_above_ma50') else ''} · "
+                  f"Borç: net borç / FAVÖK &lt; {f.num(float(sw.get('max_net_debt_ebitda', 3)), 1)} · Kâr+FCF: net kâr ve serbest nakit akışı pozitif · "
+                  f"Analist: son {sw.get('analyst_lookback_days', 30)} günde not indirimi ya da %{sw.get('target_cut_pct', 20)}+ hedef kesintisi yok")
+        body = (f'<div class="tblw"><table class="board p"><thead><tr>{th}</tr></thead><tbody>{"".join(trs)}</tbody></table></div>'
+                f'<p class="mono mute" style="font-size:11px;margin-top:10px;line-height:1.6">{legend}</p>')
+        if notes:
+            body += f'<div class="panel" style="margin-top:12px"><span class="k">Kalan kuralların dayanağı</span><ul class="tw">{"".join(f"<li>{x}</li>" for x in notes)}</ul></div>'
+        return self.section(("Kurulum ", "tablosu"), "izleme listesi × swing kuralları · geçen kurala göre sıralı", body)
+
+    # ── §03 AI value chain ──────────────────────────────────────────────────
+    def chain(self):
+        A, f = self.A, self.f
+        keys = [k for k in ("neocloud", "memory", "optics", "power") if k in A]
+        if not keys:
+            return ""
+        sox = A.get("sox")
+        out, n = [], 1
+        for k in keys:
+            b = A[k]
+            name, sub = BASKET_NAME[k]
+            chips = "".join(f'<li><span>{NAMES.get(t, t)}</span><b class="mono {dc(self.tick(t)["w"])}">{f.pct(self.tick(t)["w"])}</b></li>'
+                            for t in b["members"] if self.tick(t))
+            for t in b.get("missing_members") or []:
+                self.miss(f"{name} sepeti: {t} verisi yok — sepetten çıkarıldı")
+            rebound = b["w"] is not None and b["m"] is not None and b["w"] > 0 and b["m"] < REBOUND_1M
+            tag = '<span class="pill" style="margin-left:8px">tepki</span>' if rebound else ""
+            wins = []
+            for lab, key in (("1W", "w"), ("1M", "m"), ("3M", "q")):
+                if b.get(key) is None:
+                    self.miss(f"{name} sepeti {lab}: bir üyenin o pencerede verisi yok")
+                    continue
+                rel = (f'<span class="{dc(b[key] - sox[key])}">{f.pts(b[key] - sox[key])}</span>'
+                       if sox and sox.get(key) is not None else "")
+                wins.append(f'<tr><td>{lab}</td><td>{self.ch(b[key])}</td><td>{rel}</td></tr>')
+            out.append(f'''<article class="link"><span class="n mono">0{n}</span><span class="k">{name}{tag}</span><h3>{sub}</h3>
+  <div class="px {dc(b["w"])}">{f.pct(b["w"])}<small class="mono mute"> 1W</small></div>
+  <table class="rel"><tr><th></th><th>getiri</th><th>SOX’a göre</th></tr>{"".join(wins)}</table>
+  <ul class="chips">{chips}</ul></article>''')
+            n += 1
+        H1 = A.get("h100")
+        if H1:
+            out.append(f'''<article class="link gpu"><span class="n mono">0{n}</span><span class="k">GPU kirası · gösterge</span><h3>H100</h3>
+  <div class="px">${f.num(H1["last"])}<small class="mono"> / saat</small></div>
+  <div class="chg mono">{self.ch(H1["w"], suffix=" 1W")}{self.ch(H1["m"], suffix=" 1M") if H1.get("m") is not None else ""}</div>
+  {spark(H1["series"], w=240, h=46, layers=3)}
+  <span class="mono mute src">Düşük güvenilirlik: OKX'te tek, ince hacimli vadeli{(", " + f.long_date(H1["since"]) + "'den beri") if H1.get("since") else ""}. Sonuç çıkarılmaz.</span></article>''')
+        ranked = sorted(keys, key=lambda k: A[k]["w"], reverse=True)
+        best, worst = ranked[0], ranked[-1]
+        read = (f"1W en güçlü halka <b>{BASKET_NAME[best][0].lower()}</b> ({f.pct(A[best]['w'])}), "
+                f"en zayıf <b>{BASKET_NAME[worst][0].lower()}</b> ({f.pct(A[worst]['w'])}).")
+        reb = [BASKET_NAME[k][0] for k in keys if A[k]["w"] > 0 and A[k]["m"] is not None and A[k]["m"] < REBOUND_1M]
+        if reb:
+            read += f" {', '.join(reb)}: pozitif hafta, ama 1M {f.pct(REBOUND_1M, 0)}'ten kötü — tepki olarak etiketlendi."
+        meta = "eşit ağırlıklı sepetler · her pencere = üyelerin o penceredeki getirilerinin ortalaması"
+        return self.section(("AI değer ", "zinciri"), meta, f'<div class="chain">{"".join(out)}</div><p class="read">{read}</p>')
+
+    # ── §04 financing stress + macro (+ compact metals) ─────────────────────
+    def macro(self):
+        A, f = self.A, self.f
+        drv = []
+        if self.has("hy"):
+            h = A["hy"]
+            drv.append(("HY kredi makası", f.lvl(h["last"]), self.chbp(h["w_bp"], " 1W"),
+                        f"ICE BofA ABD yüksek getirili endeks, Hazine'ye göre makas. 1M {f.bp(h['m_bp'])}"
+                        + (f", 3M {f.bp(h['q_bp'])}" if h.get("q_bp") is not None else "")
+                        + f"; 52 haftalık aralık {f.lvl(h['lo52'])} – {f.lvl(h['hi52'])}."))
+        else:
+            self.miss("HY kredi makası (FRED BAMLH0A0HYM2)")
+        if self.has("us2y"):
+            a = A["us2y"]
+            fed = self.d.get("fed")
+            tail = f" Fed {f.long_date(fed['date'])} toplantısı için indirim olasılığı {f.lvl(fed['p'], 0)} (Polymarket)." if fed else ""
+            drv.append((self.n("us2y"), f.lvl(a["last"]), self.chbp(a["w_bp"], " 1W"), f"1M {f.bp(a['m_bp'])}.{tail}"))
+        if self.has("us10y"):
+            a = A["us10y"]
+            txt = f"1M {f.bp(a['m_bp'])}."
+            if self.has("real10", "be10"):
+                r, b = A["real10"]["w_bp"], A["be10"]["w_bp"]
+                part = "reel faizden" if abs(r) >= abs(b) else "enflasyon beklentisinden"
+                txt = (f"Haftalık hareketin {f.bp(r)} kısmı reel faiz (şu an {f.lvl(A['real10']['last'])}), "
+                       f"{f.bp(b)} kısmı başabaş enflasyon; ağırlık {part} geliyor.")
+                if self.supports("gold", "real10"):
+                    txt += f" Altın aynı hafta {f.pct(A['gold']['w'])}, korelasyon {f.num(self.d['corr']['gold_real'])}: ilişki bu hafta çalıştı."
+            drv.append((self.n("us10y"), f.lvl(a["last"]), self.chbp(a["w_bp"], " 1W"), txt))
+        if self.has("dxy"):
+            a = A["dxy"]
+            p52 = pos52(a)
+            where = ("52 haftanın zirvesinde" if p52 >= .95 else "52 haftanın dibinde" if p52 <= .05
+                     else f"52 haftalık aralığın %{f.num(p52 * 100, 0)} noktasında")
+            txt = f"1M {f.pct(a['m'])}; {where}."
+            if self.supports("gold", "dxy"):
+                txt += f" Altın aynı hafta {f.pct(A['gold']['w'])}, korelasyon {f.num(self.d['corr']['gold_dxy'])}."
+            drv.append((self.n("dxy"), f.num(a["last"]), self.ch(a["w"], suffix=" 1W"), txt))
+        if self.has("vxn"):
+            v = A["vxn"]
+            above = v["last"] > v["ma50"]
+            drv.append(("VXN", f.num(v["last"]), self.ch(v["w"], suffix=" 1W"),
+                        f"50 günlük ortalaması {f.num(v['ma50'])}; {'üstünde' if above else 'altında'}."))
+        body = "".join(f'<div class="drv"><span class="k">{k}</span><b>{v}</b><span class="mono">{ch}</span><p>{why}</p></div>'
+                       for k, v, ch, why in drv)
+        corr = self.corr_panel()
+        metals = self.metals_compact() if (self.R.get("show_metals") or "compact") == "compact" else ""
+        if not body and not corr and not metals:
+            return ""
+        return self.section(("Finansman stresi ", "ve makro"), "FRED · ICE · Cboe · korelasyon 63 seans",
+                            f'<div class="drivers">{body}</div>{corr}{metals}')
+
+    def corr_panel(self):
+        f = self.f
+        C = self.d.get("corr") or {}
+        pairs = [("gold_real", "Altın × reel faiz", "faiz yükselince altın düşmeli", -1),
+                 ("gold_dxy", "Altın × dolar", "dolar güçlenince altın düşmeli", -1),
+                 ("ndx_10y", "Nasdaq × 10Y faiz", "faiz yükselince teknoloji düşmeli", -1),
+                 ("ndx_gold", "Nasdaq × altın", "biri diğerini hedge ediyor mu", 0),
+                 ("silver_copper", "Gümüş × bakır", "gümüş sanayi metali gibi mi davranıyor", 1)]
+        items = []
+        for k, name, test, expect in pairs:
+            if k not in C:
+                continue
+            r = C[k]
+            st = abs(r)
+            word = "ilişki yok" if st < .2 else "zayıf" if st < .4 else "orta" if st < .7 else "güçlü"
+            if st < .2:
+                read = f"Bu dönemde {word}."
+            else:
+                dirw = "ters" if r < 0 else "aynı yönde"
+                if expect == 0:
+                    tail = " Aynı yönde hareket ediyorlar; biri diğerini hedge etmiyor." if r > 0 else " Ters yönde: hedge işlevi çalışıyor."
+                else:
+                    ok = sgn(r) == expect and st >= CORR_MIN
+                    tail = " Ders kitabındaki ilişki çalışıyor." if ok else " Ders kitabındaki ilişki bu dönemde çalışmıyor."
+                read = f"{word.capitalize()}, {dirw}." + tail
+            sign = "+" if r >= 0 else "−"
+            w = abs(r) * 50
+            left = 50 if r >= 0 else 50 - w
+            bar = f'<div class="cb"><span class="z"></span><i class="{"up" if r >= 0 else "dn"}" style="left:{left:.1f}%;width:{w:.1f}%"></i></div>'
+            items.append(f'<li><div class="ch"><b>{name}</b><span class="mono">{sign}{f.num(abs(r))}</span></div>{bar}'
+                         f'<p><span class="mute">{test.capitalize()}.</span> {read}</p></li>')
+        if not items:
+            return ""
+        return (f'<div class="panel corr"><div class="ph"><span class="k">Korelasyon · son 63 seans, günlük değişim</span>'
+                f'<span class="mono mute">−1 ters · 0 ilişkisiz · +1 birlikte</span></div><ul>{"".join(items)}</ul></div>')
+
+    def metals_compact(self):
+        A, f = self.A, self.f
+        if not self.has("gold", "silver"):
+            return ""
+        cells = []
+        for k, dec in (("gold", 0), ("silver", 2)):
+            a = A[k]
+            cells.append(f'<div class="panel"><span class="k">{self.n(k)}</span><div class="big">${f.num(a["last"], dec)}</div>'
+                         f'<div class="chg mono">{self.ch(a["w"], suffix=" 1W")}{self.ch(a["m"], suffix=" 1M")}{self.ch(a["ytd"], suffix=" " + f.ylab(a))}</div>'
+                         f'{spark(a["series"], w=400, h=60, layers=3)}</div>')
+        if "gsr" in A:
+            G = A["gsr"]
+            rel = "kötü" if G["m"] > 0 else "iyi"
+            cells.append(f'<div class="panel dark"><span class="k">Altın / gümüş oranı</span><div class="big">{f.num(G["last"], 1)}</div>'
+                         f'<div class="chg mono">{self.ch(G["w"], suffix=" 1W")}{self.ch(G["m"], suffix=" 1M")}</div>'
+                         f'<p>Oran 1M {f.pct(G["m"])}: gümüş son bir ayda altından {rel}.</p></div>')
+        r = (self.d.get("corr") or {}).get("gold_dxy")
+        if r is not None:
+            cells.append(f'<div class="panel"><span class="k">Altın × dolar · 63 seans</span><div class="big">{"+" if r >= 0 else "−"}{f.num(abs(r))}</div>'
+                         f'<p>{"Ters yönlü ilişki çalışıyor." if r <= -CORR_MIN else "Ters yönlü ilişki bu dönemde zayıf ya da yok."}</p></div>')
+        return f'<div class="k subk">Metaller · tek kart</div><div class="metals">{"".join(cells)}</div>'
+
+    # full metals mode keeps the two old sections
+    def assets_full(self):
         A, f = self.A, self.f
         cards = []
-        for key, sub, dec, cur in (("ndx", "NDX", 0, ""), ("gold", "XAU · oz" if self.l == "en" else "XAU · ons", 0, "$"),
-                                   ("silver", "XAG · oz" if self.l == "en" else "XAG · ons", 2, "$")):
+        for key, sub, dec, cur in (("ndx", "NDX", 0, ""), ("gold", "XAU · ons", 0, "$"), ("silver", "XAG · ons", 2, "$")):
             if key not in A:
                 continue
             a = A[key]
-            t, tc = trend(a, f)
+            rg = regime(a["last"], a["ma50"], a.get("ma200"))
+            t = {"up": "Yükseliş trendi", "dn": "Düşüş trendi", "mix": "Kararsız"}[rg]
             ma200 = f'<div><dt>MA200</dt><dd>{cur}{f.num(a["ma200"], dec)}</dd></div>' if a.get("ma200") else ""
-            cards.append(f'''
-    <article class="asset">
-      <header><div><h3>{self.n(key)}</h3><span class="mono mute">{sub}</span></div><span class="pill {tc}">{t}</span></header>
+            cards.append(f'''<article class="asset"><header><div><h3>{self.n(key)}</h3><span class="mono mute">{sub}</span></div><span class="pill {rg if rg != 'mix' else ''}">{t}</span></header>
       <div class="px">{cur}{f.num(a["last"], dec)}</div>
-      <div class="chg mono"><span class="{dc(a["w"])}">{f.pct(a["w"])} 1W</span><span class="{dc(a["m"])}">{f.pct(a["m"], 1)} 1M</span><span class="{dc(a["ytd"])}">{f.pct(a["ytd"], 1)} {f.ylab(a)}</span></div>
-      {spark(a["series"], layers=4)}
-      <div class="k" style="margin-top:2px">{self.s["last5"]}</div>{bars5(a, f)}
+      <div class="chg mono">{self.ch(a["w"], suffix=" 1W")}{self.ch(a["m"], suffix=" 1M")}{self.ch(a["ytd"], suffix=" " + f.ylab(a))}</div>
+      {spark(a["series"], layers=4)}<div class="k" style="margin-top:2px">Son 5 seans</div>{bars5(a, f)}
       <dl class="lv"><div><dt>MA50</dt><dd>{cur}{f.num(a["ma50"], dec)}</dd></div>{ma200}</dl>
-      <div class="r52"><span class="mono mute">52W</span>{rng(a)}<span class="mono">{cur}{f.num(a["lo52"], dec)} — {cur}{f.num(a["hi52"], dec)}</span></div>
-    </article>''')
+      <div class="r52"><span class="mono mute">52W</span>{rng(a)}<span class="mono">{cur}{f.num(a["lo52"], dec)} — {cur}{f.num(a["hi52"], dec)}</span></div></article>''')
         if not cards:
             return ""
-        return self.section(self.s["s01"], self.s["s01m"], f'<div class="assets">{"".join(cards)}</div>')
+        return self.section(("Üç varlık, ", "tek bakış"), "trend = fiyat vs MA50 / MA200", f'<div class="assets">{"".join(cards)}</div>')
 
-    # §02
+    def metals_full(self):
+        A, f = self.A, self.f
+        panels = []
+        if "gsr" in A:
+            G = A["gsr"]
+            panels.append(f'''<div class="panel dark"><span class="k">Altın / gümüş oranı</span><div class="big">{f.num(G["last"], 1)}</div>
+      <div class="chg mono">{self.ch(G["w"], suffix=" 1W")}{self.ch(G["m"], suffix=" 1M")}</div>
+      <p>Oran 1M {f.pct(G["m"])}: gümüş son bir ayda altından {"kötü" if G["m"] > 0 else "iyi"}.</p>{spark(G["series"], w=400, h=70, layers=4)}</div>''')
+        if "cu_au" in A:
+            CA = A["cu_au"]
+            panels.append(f'''<div class="panel"><span class="k">Bakır / altın oranı</span><div class="big">{f.num(CA["last"], 2)}</div>
+      <div class="chg mono">{self.ch(CA["w"], suffix=" 1W")}{self.ch(CA["m"], suffix=" 1M")}</div>
+      <p>Oran 1M {f.pct(CA["m"])}: bakır son bir ayda altından {"iyi" if CA["m"] > 0 else "kötü"}.</p>{spark(CA["series"], w=400, h=70, fill=False)}</div>''')
+        for key, lab in (("sil_silver", "Gümüş madencileri / gümüş (SIL)"), ("gdx_gold", "Madenciler / altın (GDX)")):
+            if key in A:
+                M = A[key]
+                panels.append(f'''<div class="panel"><span class="k">{lab}</span><div class="big {dc(M["w"])}">{f.pct(M["w"])}</div>
+      <div class="chg mono"><span class="mute">1 hafta, göreli</span>{self.ch(M["m"], suffix=" 1M")}</div>
+      <p>Madenciler bu hafta metalden {"iyi" if M["w"] > 0 else "kötü"}; ayda {f.pct(M["m"])}.</p></div>''')
+        read = ""
+        if self.has("cu_au", "gsr"):
+            cu, gs = A["cu_au"]["m"], A["gsr"]["m"]
+            if cu > 0 and gs > 0:
+                read = (f"Çelişki: bakır altından iyi gidiyor (bakır/altın 1M {f.pct(cu)}) ama gümüş altından kötü (altın/gümüş 1M {f.pct(gs)}). "
+                        "İki oran aynı yönü göstermiyor; ikisinden de tek başına büyüme sonucu çıkarılmaz.")
+            elif cu < 0 and gs < 0:
+                read = (f"Çelişki: gümüş altından iyi gidiyor (altın/gümüş 1M {f.pct(gs)}) ama bakır altından kötü (bakır/altın 1M {f.pct(cu)}). "
+                        "İki oran aynı yönü göstermiyor.")
+        if not panels:
+            return ""
+        return self.section(("Metallerin ", "içi"), "oranlar ve madenciler · hepsi USD",
+                            f'<div class="metals">{"".join(panels)}</div>' + (f'<p class="read">{read}</p>' if read else ""))
+
+    # ── §05 earnings ────────────────────────────────────────────────────────
+    def earnings(self):
+        f = self.f
+        today = date.fromisoformat(self.d["today"])
+        names = sorted(self.held() | self.wl())
+        up, past = [], []
+        for t in names:
+            c = self.CO.get(t) or {}
+            nx = c.get("next")
+            if nx and (date.fromisoformat(nx["d"]) - today).days <= 14:
+                up.append((nx["d"], t, nx))
+            if c.get("reported"):
+                past.append((c["reported"]["d"], t, c["reported"]))
+        parts = []
+        if up:
+            trs = []
+            for d, t, nx in sorted(up):
+                sess = {"bmo": "açılış öncesi", "amc": "kapanış sonrası"}.get(nx.get("sess"), "")
+                if not sess:
+                    self.miss(f"{t}: bilanço saati")
+                eps = f.usd(nx["eps"]) if nx.get("eps") is not None else ""
+                im = f"±{f.pct(nx['im'], 1, sign=False)}" if nx.get("im") is not None else ""
+                rv = {"up": '<span class="up">yukarı</span>', "dn": '<span class="dn">aşağı</span>', "flat": "yatay"}.get(nx.get("rev30"), "")
+                if not rv:
+                    self.miss(f"{t}: 30 günlük EPS revizyonu")
+                own = " · portföy" if t in self.held() else ""
+                trs.append(f'<tr><th>{NAMES.get(t, t)}<small>{t}{own}</small></th><td class="n">{f.day(d)}</td><td class="n">{sess}</td>'
+                           f'<td class="n">{eps}</td><td class="n">{im}</td><td class="n">{rv}</td></tr>')
+            th = "".join(f"<th>{h}</th>" for h in ("", "Tarih", "Saat", "EPS beklentisi", "Opsiyon ima hareketi", "EPS revizyonu · 30G"))
+            parts.append(f'<div class="k subk">Önümüzdeki 14 gün</div><div class="tblw"><table class="board p"><thead><tr>{th}</tr></thead><tbody>{"".join(trs)}</tbody></table></div>')
+        else:
+            parts.append('<p class="note">Önümüzdeki 14 günde portföyde ya da izleme listesinde bilanço yok.</p>')
+        if past:
+            trs = []
+            for d, t, r in sorted(past):
+                sur = self.ch(r["surprise"]) if r.get("surprise") is not None else ""
+                rea = self.ch(r["react"]) if r.get("react") is not None else ""
+                if r.get("react") is None:
+                    self.miss(f"{t}: bilanço sonrası fiyat tepkisi (açıklama saati bilinmiyor)")
+                trs.append(f'<tr><th>{NAMES.get(t, t)}<small>{t}</small></th><td class="n">{f.day(d)}</td><td class="n">{sur}</td><td class="n">{rea}</td></tr>')
+            th = "".join(f"<th>{h}</th>" for h in ("", "Tarih", "EPS sürprizi", "Ertesi seans tepkisi"))
+            parts.append(f'<div class="k subk">Geçen hafta açıklayanlar</div><div class="tblw"><table class="board p"><thead><tr>{th}</tr></thead><tbody>{"".join(trs)}</tbody></table></div>')
+        return self.section(("Bilan", "çolar"), "yalnızca portföy ve izleme listesi · ima hareketi = bilanço sonrası ilk vadede ATM straddle", "".join(parts))
+
+    # ── §06 news ────────────────────────────────────────────────────────────
+    def news(self):
+        items = self.d.get("news") or []
+        if not items:
+            self.miss("Haberler: news.yaml boş ya da yok (Grokbot bildirimleri elle eklenir)")
+            return ""
+        lis = []
+        for it in items[:5]:
+            tag = (it.get("tag") or "").lower()
+            tag_l = "tez" if tag == "tez" else "gürültü"
+            cls = "up" if tag == "tez" else ""
+            url = it.get("url") or ""
+            title = esc(it.get("title", ""))
+            link = f'<a href="{esc(url)}" target="_blank" rel="noopener">{title}</a>' if url else title
+            tk = f' <span class="mono mute">{esc(it["ticker"])}</span>' if it.get("ticker") else ""
+            lis.append(f'<li><span class="pill {cls}">{tag_l}</span><div><b>{link}</b>{tk}</div></li>')
+        return self.section(("Tezi değiştiren ", "haberler"), "en fazla beş · kaynak: news.yaml", f'<ul class="news">{"".join(lis)}</ul>')
+
+    # ── §07 positioning ─────────────────────────────────────────────────────
+    def positioning(self):
+        f = self.f
+        parts = []
+        pc = self.P.get("pc")
+        if pc:
+            parts.append(f'''<div class="pair">
+  <div class="panel"><span class="k">Toplam put/call · Cboe</span><b>{f.num(pc["total"])}</b><span class="mono mute">{pc["n"]} seans ort. {f.num(pc["total10"])} · {f.day(pc["date"])}</span></div>
+  <div class="panel"><span class="k">Hisse put/call · Cboe</span><b>{f.num(pc["equity"])}</b><span class="mono mute">{pc["n"]} seans ort. {f.num(pc["equity10"])}</span></div>
+</div>''')
+        rows = []
+        for t in sorted(self.held() | self.wl()):
+            c = self.CO.get(t) or {}
+            if c.get("short") is None:
+                self.miss(f"{t}: açığa satış oranı")
+                continue
+            rows.append((c["short"], t, c.get("short_date")))
+        if rows:
+            rows.sort(reverse=True)
+            trs = "".join(f'<tr><th>{NAMES.get(t, t)}<small>{t}{" · portföy" if t in self.held() else ""}</small></th>'
+                          f'<td class="n">{f.lvl(s, 1)}</td><td class="n">{f.day(d) if d else ""}</td></tr>' for s, t, d in rows)
+            parts.append(f'<div class="k subk">Açığa satış · halka açık payın yüzdesi</div><div class="tblw"><table class="board p" style="min-width:420px">'
+                         f'<thead><tr><th></th><th>Açığa satış</th><th>Rapor tarihi</th></tr></thead><tbody>{trs}</tbody></table></div>')
+        if not parts:
+            return ""
+        return self.section(("Konum", "lanma"), "Cboe günlük istatistik · açığa satış: borsa raporu (ayda iki kez)", "".join(parts))
+
+    # ── §08 Asia ────────────────────────────────────────────────────────────
+    def asia(self):
+        A, f = self.A, self.f
+        rows = [("kospi", "Kore · Samsung, SK hynix", 0), ("twii", "Tayvan · TSMC", 0), ("n225", "Japonya · çip ekipmanı", 0), ("usdjpy", "yen", 2)]
+        rows = [r for r in rows if r[0] in A]
+        if not rows:
+            return ""
+        cards = "".join(f'''<div class="panel{' dark' if k == 'usdjpy' else ''}"><span class="k">{sub}</span><h3>{self.n(k)}</h3>
+  <div class="big">{f.num(A[k]["last"], d)}</div>
+  <div class="chg mono">{self.ch(A[k]["w"], suffix=" 1W")}{self.ch(A[k]["m"], suffix=" 1M")}{self.ch(A[k]["ytd"], suffix=" YTD")}</div>
+  {spark(A[k]["series"], w=300, h=56, fill=k != "usdjpy", layers=0 if k == "usdjpy" else 3)}</div>''' for k, sub, d in rows)
+        read = ""
+        if self.has("kospi", "sox"):
+            read = f"1M: KOSPI {f.pct(A['kospi']['m'])}, SOX {f.pct(A['sox']['m'])}; fark {f.pts(A['kospi']['m'] - A['sox']['m'])}."
+        return self.section(("Asya çip ", "ekseni"), "KOSPI · TAIEX · Nikkei · USD/JPY", f'<div class="asia">{cards}</div>' + (f'<p class="read">{read}</p>' if read else ""))
+
+    # ── §09 breadth ─────────────────────────────────────────────────────────
+    def breadth(self):
+        A, f = self.A, self.f
+        mine = self.held() | self.wl()
+        m7 = [k for k in ("nvda", "aapl", "msft", "googl", "amzn", "meta", "tsla") if k in A and k.upper() in mine]
+        left = ""
+        if m7:
+            m7.sort(key=lambda k: A[k]["w"])
+            mx = max(abs(A[k]["w"]) for k in m7) or 1
+            lis = "".join(f'''<li><span class="nm">{self.n(k)}</span><span class="mono px2">${f.num(A[k]["last"])}</span>
+  <div class="hb"><span class="z"></span><i class="{dc(A[k]["w"])}" style="{"left:50%" if A[k]["w"] >= 0 else "right:50%"};width:{abs(A[k]["w"]) / mx * 50:.1f}%"></i></div>
+  <span class="mono {dc(A[k]["w"])}">{f.pct(A[k]["w"])}</span><span class="mono mute ytd">{f.pct(A[k]["ytd"], 0)} YTD</span></li>''' for k in m7)
+            left = f'<div class="panel"><div class="ph"><span class="k">Muhteşem 7 · portföy ve izleme listesindekiler</span><span class="mono mute">1W sıralı</span></div><ul class="m7">{lis}</ul></div>'
+        right = ""
+        if "ew_cw" in A:
+            ew = A["ew_cw"]
+            better = ew["m"] > 0
+            txt = (f"Eşit ağırlıklı Nasdaq (QQQE), QQQ'dan son bir ayda <b>{f.pct(abs(ew['m']), 1, sign=False)}</b> iyi." if better else
+                   f"QQQ, eşit ağırlıklı Nasdaq'tan (QQQE) son bir ayda <b>{f.pct(abs(ew['m']), 1, sign=False)}</b> iyi: endeksi büyükler taşıyor.")
+            right += (f'<div class="panel dark"><span class="k">Genişlik · eşit ağırlık / piyasa değeri</span>'
+                      f'<div class="big2">{self.ch(ew["m"])}<small class="mono">1 ay</small></div><p>{txt}</p>{spark(ew["series"], w=500, h=70, layers=4)}</div>')
+        pair = ""
+        if "sox_ndx" in A:
+            sx = A["sox_ndx"]
+            pair += (f'<div class="panel"><span class="k">SOX / Nasdaq</span><b class="{dc(sx["w"])}">{f.pct(sx["w"])}</b>'
+                     f'<span class="mono mute">1 hafta</span></div>')
+        vol = (self.d.get("vol") or {}).get("qqq")
+        if vol:
+            pair += f'<div class="panel"><span class="k">QQQ hacmi</span><b>{f.num(vol)}×</b><span class="mono mute">60 günlük ortalamaya göre</span></div>'
+        if pair:
+            right += f'<div class="pair">{pair}</div>'
+        if not left and not right:
+            return ""
+        body = f'<div class="split">{left}<div class="stack">{right}</div></div>' if left else f'<div class="stack">{right}</div>'
+        return self.section(("Genişlik", ""), "eşit ağırlık · SOX/Nasdaq · hacim", body)
+
+    # ── §10 calendar ────────────────────────────────────────────────────────
+    def calendar(self):
+        f = self.f
+        cal = []
+        for e in self.d.get("calendar", []):
+            if e.get("impact") != "high":
+                continue
+            ev = e["event"]
+            name = CAL_TR.get(ev, ev)
+            if ev not in CAL_TR and "Speaks" in ev:
+                name = ev.replace("Fed Chairman", "Fed Başkanı").replace("FOMC Member", "FOMC üyesi").replace(" Speaks", " konuşuyor")
+            pe = ""
+            pv, es = e.get("prev"), e.get("est")
+            bits = []
+            if pv not in (None, "—", ""):
+                bits.append(f"önceki {esc(str(pv).replace('.', ','))}")
+            if es not in (None, "—", ""):
+                bits.append(f"beklenti {esc(str(es).replace('.', ','))}")
+            if bits:
+                pe = f'<span class="mono mute">{" · ".join(bits)}</span>'
+            wd = e.get("wd")
+            if wd is None and e.get("cet_date"):
+                wd = date.fromisoformat(e["cet_date"]).weekday()
+            when = f'{f.s["days"][wd]} {esc(e.get("time", ""))}' if wd is not None else esc(e.get("time", ""))
+            cal.append(f'<li><span class="mono when">{when}</span><div><b>{esc(name)}</b>{pe}</div><span class="imp high"></span></li>')
+        fed = self.d.get("fed")
+        fed_html = ""
+        if fed:
+            when = f.long_date(fed["date"])
+            fed_html = (f'<div class="panel dark"><span class="k">Fed · {when}</span>'
+                        f'<div class="big" style="margin-top:12px">{f.lvl(fed["p"], 0)}</div><span class="mono" style="color:rgba(236,234,227,.6)">'
+                        f'faiz indirimi olasılığı · Polymarket</span></div>')
+        if not cal and not fed_html:
+            self.miss("Takvim: nocashflow.net calendar.json / Fed olasılığı")
+            return ""
+        cal_html = f'<ul class="cal">{"".join(cal[:8])}</ul>' if cal else '<p class="note">Takvimde bu hafta yüksek etkili ABD verisi yok.</p>'
+        return self.section(("Tak", "vim"), "CET · yüksek etkili ABD verisi · Fed", f'<div class="split">{cal_html}{fed_html}</div>')
+
+    # ── §11 scorecard ───────────────────────────────────────────────────────
+    def scorecard(self):
+        f = self.f
+        prev = self.d.get("prev_issue")
+        if not prev or not prev.get("rows"):
+            self.miss("Karne: önceki sayı yok (history/ boş) — ilk sayıdan sonra dolacak")
+            return ""
+        lis = []
+        for r in prev["rows"]:
+            a = self.A.get(r["key"])
+            closes = [(d, v) for d, v in (a or {}).get("week", []) if d > prev["cut"]]
+            if not closes:
+                self.miss(f"Karne: {r['text']} — bu haftanın kapanışları yok")
+                continue
+            lvl = r["level"]
+            if r["dir"] == "below":
+                d, v = min(closes, key=lambda x: x[1])
+                broke = v < lvl
+                why = f"Haftanın en düşük kapanışı {f.num(v)} ({f.day(d)}); seviye {f.num(lvl)}."
+            else:
+                d, v = max(closes, key=lambda x: x[1])
+                broke = v > lvl
+                why = f"Haftanın en yüksek kapanışı {f.num(v)} ({f.day(d)}); seviye {f.num(lvl)}."
+            mark = '<b class="dn">✗</b>' if broke else '<b class="up">✓</b>'
+            verdict = "tutmadı — seviye kapanışta geçildi" if broke else "tuttu — seviye kapanışta geçilmedi"
+            lis.append(f'<li>{mark}<div><b>{esc(r["text"])}</b><p>{verdict}. {why}</p></div></li>')
+        if not lis:
+            return ""
+        return self.section(("Geçen sayının ", "karnesi"), f"{f.long_date(prev['cut'])} sayısının “bu hafta” satırları",
+                            f'<ul class="karne">{"".join(lis)}</ul>')
+
+    # ── §12 board ───────────────────────────────────────────────────────────
     def board(self):
-        A, f, s = self.A, self.f, self.s
-        groups = [(s["g_eq"], [("ndx", 0, ""), ("spx", 0, ""), ("rut", 0, ""), ("sox", 0, "")]),
-                  (s["g_met"], [("gold", 0, "$"), ("silver", 2, "$"), ("plat", 0, "$"), ("copper", 2, "$")]),
-                  (s["g_en"], [("brent", 2, "$"), ("dxy", 2, "")]),
-                  (s["g_vol"], [("vix", 2, ""), ("vxn", 2, ""), ("btc", 0, "$")])]
+        A, f = self.A, self.f
+        groups = [("Hisseler", [("ndx", 0, ""), ("spx", 0, ""), ("sox", 0, "")]),
+                  ("Metaller", [("gold", 0, "$"), ("silver", 2, "$"), ("copper", 2, "$")]),
+                  ("Dolar", [("dxy", 2, "")]),
+                  ("Oynaklık & kripto", [("vix", 2, ""), ("vxn", 2, ""), ("btc", 0, "$")])]
         rows = []
         for grp, items in groups:
             items = [i for i in items if i[0] in A]
@@ -453,467 +1008,92 @@ class Bulletin:
             for k, dec, cur in items:
                 a = A[k]
                 d200 = (a["last"] / a["ma200"] - 1) * 100 if a.get("ma200") else None
-                d200c = f'<td class="n {dc(d200)}">{f.pct(d200, 1)}</td>' if d200 is not None else '<td class="n">—</td>'
                 rows.append(f'''<tr><th>{self.n(k)}</th><td class="n">{cur}{f.num(a["last"], dec)}</td>
-          <td class="n {dc(a["w"])}">{f.pct(a["w"], 1)}</td><td class="n {dc(a["m"])}">{f.pct(a["m"], 1)}</td><td class="n {dc(a["ytd"])}">{f.pct(a["ytd"], 1)}</td>
-          {d200c}<td class="rc">{rng(a)}</td><td class="sc">{spark(a["series"], w=120, h=28, fill=False, dot=False, sw=1.5)}</td></tr>''')
-        rates = [k for k in ("us2y", "us10y", "real10", "be10", "s2s10") if k in A]
+          <td class="n">{self.ch(a["w"])}</td><td class="n">{self.ch(a["m"])}</td><td class="n">{self.ch(a["ytd"])}</td>
+          <td class="n">{self.ch(d200)}</td><td class="rc">{rng(a)}</td><td class="sc">{spark(a["series"], w=120, h=28, fill=False, dot=False, sw=1.5)}</td></tr>''')
+        rates = [k for k in ("us2y", "us10y", "real10", "be10", "s2s10", "hy") if k in A]
         if rates:
-            rows.append(f'<tr class="g"><td colspan="8">{s["g_rates"]} <span class="mute">· {s["g_rates_note"]}</span></td></tr>')
+            rows.append('<tr class="g"><td colspan="8">Faiz ve makas <span class="mute">· değişimler baz puan</span></td></tr>')
             for k in rates:
                 a = A[k]
-                last = f"{round(a['last'])}bp" if k == "s2s10" else f.lvl(a["last"])
-                m_bp = a.get("m_bp")
-                rows.append(f'''<tr><th>{self.n(k)}</th><td class="n">{last}</td><td class="n {dc(wbp(A, k))}">{f.bp(wbp(A, k))}</td>
-      <td class="n {dc(m_bp or 0)}">{f.bp(m_bp) if m_bp is not None else "—"}</td><td class="n">—</td><td class="n">—</td>
+                last = f"{f.num(a['last'] * 100, 0)}bp" if k == "s2s10" else f.lvl(a["last"])
+                rows.append(f'''<tr><th>{self.n(k)}</th><td class="n">{last}</td><td class="n">{self.chbp(a["w_bp"])}</td>
+      <td class="n">{self.chbp(a.get("m_bp"))}</td><td class="n">{self.chbp(a.get("ytd_bp"))}</td><td class="n">{self.chbp(a.get("d200_bp"))}</td>
       <td class="rc">{rng(a)}</td><td class="sc">{spark(a["series"], w=120, h=28, fill=False, dot=False, sw=1.5)}</td></tr>''')
         if not rows:
             return ""
-        th = "".join(f"<th>{h}</th>" for h in s["th"])
+        th = "".join(f"<th>{h}</th>" for h in ("", "Son", "1W", "1M", "YTD", "vs MA200", "52W aralık", "1 yıl"))
         body = f'<div class="tblw"><table class="board"><thead><tr>{th}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
-        return self.section(s["s02"], f'{s["s02m"]} · {self.d["asof"]}', body)
+        return self.section(("Ek: piyasa ", "panosu"), f"kesim {f.long_date(self.d['cut'])}", body)
 
-    # §03
-    def drivers(self):
-        A, f, T = self.A, self.f, self.T
-        drv = []
-        if self.has("us2y"):
-            mv = wbp(A, "us2y")
-            drv.append((self.n("us2y"), f.lvl(A["us2y"]["last"]), f.bp(mv) + " 1W", dc(mv),
-                        T("Fed beklentisinin en saf ölçüsü. " + ("Yükselmesi “indirim yok” demek." if mv > 0 else "Düşmesi indirim beklentisinin güçlendiği anlamına gelir."),
-                          "The purest read on Fed expectations. " + ("Rising means “no cuts”." if mv > 0 else "Falling means cut hopes are building."))))
-        if self.has("us10y"):
-            mv = wbp(A, "us10y")
-            split = ""
-            if self.has("real10", "be10"):
-                r, b = wbp(A, "real10"), wbp(A, "be10")
-                part = T("reel faizden", "real yield") if abs(r) >= abs(b) else T("enflasyon beklentisinden", "inflation expectations")
-                split = T(f"Haftalık hareketin {f.bp(r)} kısmı reel faiz (şu an {f.lvl(A['real10']['last'])}), {f.bp(b)} kısmı başabaş enflasyon; ağırlık {part} geliyor. Reel faiz, getirisi olmayan altını tutmanın fırsat maliyeti.",
-                          f"Of the weekly move, {f.bp(r)} is real yield (now {f.lvl(A['real10']['last'])}) and {f.bp(b)} breakeven inflation; most of it is {part}. The real yield is the opportunity cost of holding gold, which pays nothing.")
-            drv.append((self.n("us10y"), f.lvl(A["us10y"]["last"]), f.bp(mv) + " 1W", dc(mv), split or T("Uzun vadeli borçlanma maliyeti.", "The long-term cost of borrowing.")))
-        if self.has("dxy"):
-            p = pos52(A["dxy"])
-            where = (T("52 haftanın zirvesine yakın.", "Near its 52-week high.") if p >= .85 else
-                     T("52 haftanın dibine yakın.", "Near its 52-week low.") if p <= .15 else "")
-            drv.append((self.n("dxy"), f.num(A["dxy"]["last"]), f.pct(A["dxy"]["w"]) + " 1W", dc(A["dxy"]["w"]),
-                        (where + " " if where else "") + T("Dolar güçlenince dolar cinsinden emtialar ucuzlamak zorunda kalır.",
-                                                            "A stronger dollar forces dollar-priced commodities lower.")))
-        if self.has("vxn"):
-            v = A["vxn"]
-            above = v["last"] > v["ma50"]
-            drv.append(("VXN", f.num(v["last"]), f.pct(v["w"], 1) + " 1W", dc(v["w"]),
-                        T(f"Nasdaq'ın korku endeksi. 50 günlük ortalaması {f.num(v['ma50'])}; {'hâlâ üstünde' if above else 'altına indi'}.",
-                          f"Nasdaq's fear gauge. Its 50-day average is {f.num(v['ma50'])}; it is {'still above it' if above else 'now below it'}.")))
-        body = "".join(f'<div class="drv"><span class="k">{k}</span><b>{v}</b><span class="mono {c}">{ch}</span><p>{why}</p></div>'
-                       for k, v, ch, c, why in drv)
-        C = self.d.get("corr") or {}
-        pairs = [("gold_real", T("Altın × reel faiz", "Gold × real yield"), T("faiz yükselince altın düşmeli", "gold should fall when yields rise"), -1),
-                 ("gold_dxy", T("Altın × dolar", "Gold × dollar"), T("dolar güçlenince altın düşmeli", "gold should fall when the dollar rises"), -1),
-                 ("ndx_10y", T("Nasdaq × 10Y faiz", "Nasdaq × 10Y yield"), T("faiz yükselince teknoloji düşmeli", "tech should fall when yields rise"), -1),
-                 ("ndx_gold", T("Nasdaq × altın", "Nasdaq × gold"), T("biri diğerini hedge ediyor mu", "does one hedge the other"), 0),
-                 ("silver_copper", T("Gümüş × bakır", "Silver × copper"), T("gümüş sanayi metali gibi mi davranıyor", "is silver trading like an industrial metal"), 1)]
-        items = []
-        for k, name, test, expect in pairs:
-            if k not in C:
-                continue
-            r = C[k]
-            st = abs(r)
-            word = (T("ilişki yok", "no relationship") if st < .2 else T("zayıf", "weak") if st < .4 else
-                    T("orta", "moderate") if st < .7 else T("güçlü", "strong"))
-            if st < .2:
-                read = T(f"Bu dönemde {word}.", f"Right now there is {word}.")
-            else:
-                dirw = T("ters", "inverse") if r < 0 else T("aynı yönde", "positive")
-                ok = (expect < 0 and r < 0) or (expect > 0 and r > 0)
-                if expect == 0:
-                    tail = (T(" İkisi birlikte likiditeyle hareket ediyor, birbirini hedge etmiyor.", " They move together with liquidity; neither hedges the other.") if r > 0
-                            else T(" Biri düşerken diğeri tutuyor: hedge işlevi çalışıyor.", " One holds when the other falls: the hedge works."))
-                else:
-                    tail = (T(" Ders kitabındaki ilişki çalışıyor.", " The textbook relationship is working.") if ok
-                            else T(" Ders kitabındaki ilişki bu dönemde çalışmıyor.", " The textbook relationship is not working right now."))
-                read = T(f"{word.capitalize()}, {dirw}.", f"{word.capitalize()}, {dirw}.") + tail
-            sign = "+" if r >= 0 else "−"
-            w = abs(r) * 50
-            left = 50 if r >= 0 else 50 - w
-            bar = f'<div class="cb"><span class="z"></span><i class="{"up" if r >= 0 else "dn"}" style="left:{left:.1f}%;width:{w:.1f}%"></i></div>'
-            items.append(f'<li><div class="ch"><b>{name}</b><span class="mono">{sign}{f.num(abs(r))}</span></div>{bar}'
-                         f'<p><span class="mute">{test.capitalize()}.</span> {read}</p></li>')
-        corr = ""
-        if items:
-            corr = (f'<div class="panel corr"><div class="ph"><span class="k">{self.s["corr_k"]}</span>'
-                    f'<span class="mono mute">{self.s["corr_scale"]}</span></div><ul>{"".join(items)}</ul></div>')
-        if not body and not corr:
-            return ""
-        return self.section(self.s["s03"], self.s["s03m"], f'<div class="drivers">{body}</div>{corr}')
-
-    # §04
-    def hrow(self, sym, mx):
-        a, f = self.A[sym.lower()], self.f
-        side = "left:50%" if a["w"] >= 0 else "right:50%"
-        return (f'<li><div class="hn"><b>{NAMES.get(sym, sym)}</b><span class="mono mute">{sym}</span></div>'
-                f'<span class="mono">${f.num(a["last"])}</span>'
-                f'<div class="hb"><span class="z"></span><i class="{dc(a["w"])}" style="{side};width:{min(abs(a["w"]) / mx * 50, 50):.1f}%"></i></div>'
-                f'<span class="mono {dc(a["w"])} r">{f.pct(a["w"], 1)}</span>'
-                f'<span class="mono {dc(a["ytd"])} r">{f.pct(a["ytd"], 0)} <small>{f.ylab(a)}</small></span></li>')
-
-    def sectors(self):
-        A, f, T = self.A, self.f, self.T
-        pick = T("İzleme listenden 3 hisse", "3 names from the watchlist")
-        secs = [(T("Yarı iletken", "Semiconductors"), "SMH", "smh", ["NVDA", "AMD", "AVGO"], pick),
-                (T("Yazılım", "Software"), "IGV", "igv", ["NOW", "CRWD", "PANW"], pick),
-                (T("Optik & fotonik", "Optics & photonics"), T("Sepet · 4 hisse", "Basket · 4 names"), "optics", ["CRDO", "ALAB", "LITE"],
-                 T("Saf ETF yok: CRDO, ALAB, LITE, AAOI eşit ağırlıklı sepet", "No pure ETF: equal-weight basket of CRDO, ALAB, LITE, AAOI")),
-                (T("Uzay", "Space"), "NASA", "nasa", ["SPCX", "RKLB", "ASTS"],
-                 T("Tema Space Innovators ETF · izleme listenden 3 hisse", "Tema Space Innovators ETF · 3 names from the watchlist"))]
-        cards, live = [], []
-        for name, etf, key, holds, note in secs:
-            if key not in A:
-                continue
-            holds = [t for t in holds if t.lower() in A]
-            e = A[key]
-            live.append((name, e["w"]))
-            mx = max([abs(A[t.lower()]["w"]) for t in holds] + [1])
-            level = (f'<div class="px">{f.num(e["last"], 1)}<small class="mono mute">{self.s["index"]}</small></div>' if key == "optics"
-                     else f'<div class="px">${f.num(e["last"])}</div>')
-            d200 = (e["last"] / e["ma200"] - 1) * 100 if e.get("ma200") else None
-            cards.append(
-                f'<article class="sector"><header><div><span class="k">{name}</span><h3>{etf}</h3></div>'
-                f'{spark(e["series"], w=180, h=46, layers=3)}</header>{level}'
-                f'<div class="chg mono"><span class="{dc(e["w"])}">{f.pct(e["w"], 1)} 1W</span>'
-                f'<span class="{dc(e["m"])}">{f.pct(e["m"], 1)} 1M</span><span class="{dc(e["ytd"])}">{f.pct(e["ytd"], 1)} {f.ylab(e)}</span>'
-                + (f'<span class="{dc(d200)}">{f.pct(d200, 1)} vs MA200</span>' if d200 is not None else '') + '</div>'
-                f'<ul class="holds">{"".join(self.hrow(t, mx) for t in holds)}</ul><p class="mono mute sn">{note}</p></article>')
-        if not cards:
-            return ""
-        lead = max(live, key=lambda x: x[1])[0]
-        return self.section(self.s["s04"], f'{self.s["s04m"]} {lead.lower() if self.l == "tr" else lead.lower()}',
-                            f'<div class="sectors">{"".join(cards)}</div>')
-
-    # §05
-    def chain(self):
-        A, f, T = self.A, self.f, self.T
-        links = [("neocloud", "Neocloud", T("GPU'yu kiraya veren bulutlar", "clouds that rent out GPUs")),
-                 ("memory", T("Bellek", "Memory"), T("HBM ve NAND", "HBM and NAND")),
-                 ("optics", T("Optik", "Optics"), T("veri merkezi bağlantısı", "data-centre interconnect")),
-                 ("power", T("Enerji", "Power"), T("şebeke, yakıt hücresi, nükleer", "grid, fuel cells, nuclear"))]
-        links = [l for l in links if l[0] in A]
-        if not links:
-            return ""
-        out = []
-        n = 1
-        H1, B2 = A.get("h100"), A.get("b200")
-        if H1:
-            b2 = (T(f" B200 ${f.num(B2['last'])} / saat (Bitget, ince hacim).", f" B200 ${f.num(B2['last'])} / hour (Bitget, thin volume).") if B2 else "")
-            since = ""
-            if H1.get("since"):
-                d = date.fromisoformat(H1["since"])
-                since = T(f" · {d.month:02d}.{d.year}'den beri işlem görüyor", f" · trading since {self.s['months'][d.month - 1]} {d.year}")
-            out.append(f'''<article class="link gpu"><span class="n mono">0{n}</span><span class="k">{T("GPU kirası", "GPU rent")}</span><h3>H100</h3>
-  <div class="px">${f.num(H1["last"])}<small class="mono">{self.s["per_hour"]}</small></div>
-  <div class="chg mono"><span class="{dc(H1["w"])}">{f.pct(H1["w"], 1)} 1W</span><span class="{dc(H1["m"])}">{f.pct(H1["m"], 1)} 1M</span></div>
-  {spark(H1["series"], w=240, h=46, layers=3)}
-  <p>{T("Zincirin en erken sinyali: kira düşerse talep zayıflıyor demektir.", "The chain's earliest signal: falling rent means demand is weakening.")}{b2}</p>
-  <span class="mono mute src">{T("OKX vadeli", "OKX perpetual")}{since}</span></article>''')
-            n += 1
-        baskets = self.d.get("baskets", {})
-        for k, name, sub in links:
-            b = A[k]
-            chips = "".join(f'<li><span>{NAMES.get(t, t)}</span><b class="mono {dc(A[t.lower()]["w"])}">{f.pct(A[t.lower()]["w"], 1)}</b></li>'
-                            for t in baskets.get(k, []) if t.lower() in A)
-            out.append(f'''<article class="link"><span class="n mono">0{n}</span><span class="k">{name}</span><h3>{sub}</h3>
-  <div class="px {dc(b["w"])}">{f.pct(b["w"], 1)}<small class="mono mute"> 1W</small></div>
-  <div class="chg mono"><span class="{dc(b["m"])}">{f.pct(b["m"], 1)} 1M</span><span class="{dc(b["ytd"])}">{f.pct(b["ytd"], 0)} {f.ylab(b)}</span></div>
-  <ul class="chips">{chips}</ul></article>''')
-            n += 1
-        ranked = sorted(links, key=lambda x: A[x[0]]["w"], reverse=True)
-        best, worst = ranked[0], ranked[-1]
-        read = T(f"Bu hafta para zincirin <b>{best[1].lower()}</b> halkasına aktı ({f.pct(A[best[0]]['w'], 1)}); en zayıf halka <b>{worst[1].lower()}</b> ({f.pct(A[worst[0]]['w'], 1)}).",
-                 f"This week money flowed to the <b>{best[1].lower()}</b> link ({f.pct(A[best[0]]['w'], 1)}); the weakest link was <b>{worst[1].lower()}</b> ({f.pct(A[worst[0]]['w'], 1)}).")
-        if H1:
-            w, m = H1["w"], H1["m"]
-            if w <= -3 and m < 0:
-                read += T(f" H100 kirası haftada {f.pct(w, 1)}, ayda {f.pct(m, 1)}: talep tarafında bozulma işareti var.",
-                          f" H100 rent {f.pct(w, 1)} on the week and {f.pct(m, 1)} on the month: demand is showing cracks.")
-            elif w <= -3:
-                read += T(f" H100 kirası haftada {f.pct(w, 1)} geriledi ama ayda hâlâ {f.pct(m, 1)}: henüz bozulma değil.",
-                          f" H100 rent fell {f.pct(w, 1)} on the week but is still {f.pct(m, 1)} on the month: not a crack yet.")
-            else:
-                read += T(f" H100 kirası haftada {f.pct(w, 1)}: talep tarafında bozulma yok.",
-                          f" H100 rent {f.pct(w, 1)} on the week: no sign of demand cracking.")
-        return self.section(self.s["s05"], self.s["s05m"], f'<div class="chain">{"".join(out)}</div><p class="read">{read}</p>')
-
-    # §06
-    def asia(self):
-        A, f, T = self.A, self.f, self.T
-        rows = [("kospi", T("Kore · Samsung, SK hynix", "Korea · Samsung, SK hynix"), 0), ("twii", T("Tayvan · TSMC", "Taiwan · TSMC"), 0),
-                ("n225", T("Japonya · çip ekipmanı", "Japan · chip equipment"), 0), ("usdjpy", T("yen taşıma işlemi", "the yen carry trade"), 2)]
-        rows = [r for r in rows if r[0] in A]
-        if not rows:
-            return ""
-        cards = "".join(f'''<div class="panel{' dark' if k == 'usdjpy' else ''}"><span class="k">{sub}</span><h3>{self.n(k)}</h3>
-  <div class="big">{f.num(A[k]["last"], d)}</div>
-  <div class="chg mono"><span class="{dc(A[k]["w"])}">{f.pct(A[k]["w"], 1)} 1W</span><span class="{dc(A[k]["m"])}">{f.pct(A[k]["m"], 1)} 1M</span><span class="{dc(A[k]["ytd"])}">{f.pct(A[k]["ytd"], 0)} YTD</span></div>
-  {spark(A[k]["series"], w=300, h=56, fill=k != "usdjpy", layers=0 if k == "usdjpy" else 3)}</div>''' for k, sub, d in rows)
-        read = ""
-        if self.has("kospi", "sox"):
-            read = T(f"KOSPI 1M {f.pct(A['kospi']['m'], 1)}, SOX {f.pct(A['sox']['m'], 1)}.", f"KOSPI 1M {f.pct(A['kospi']['m'], 1)}, SOX {f.pct(A['sox']['m'], 1)}.")
-        if "usdjpy" in A:
-            read += T(f" USD/JPY {f.num(A['usdjpy']['last'])}: yen hızlı güçlenirse kaldıraçlı pozisyonlar kapanır, Nasdaq bunu ilk hisseden yerdir.",
-                      f" USD/JPY {f.num(A['usdjpy']['last'])}: if the yen strengthens fast, leveraged positions unwind, and Nasdaq feels it first.")
-        return self.section(self.s["s06"], self.s["s06m"], f'<div class="asia">{cards}</div>' + (f'<p class="read">{read.strip()}</p>' if read else ""))
-
-    # §07
-    def giants(self):
-        A, f, T = self.A, self.f, self.T
-        m7 = [k for k in ("nvda", "aapl", "msft", "googl", "amzn", "meta", "tsla") if k in A]
-        if not m7:
-            return ""
-        m7.sort(key=lambda k: A[k]["w"])
-        mx = max(abs(A[k]["w"]) for k in m7) or 1
-        lis = "".join(f'''<li><span class="nm">{self.n(k)}</span><span class="mono px2">${f.num(A[k]["last"])}</span>
-  <div class="hb"><span class="z"></span><i class="{dc(A[k]["w"])}" style="{"left:50%" if A[k]["w"] >= 0 else "right:50%"};width:{abs(A[k]["w"]) / mx * 50:.1f}%"></i></div>
-  <span class="mono {dc(A[k]["w"])}">{f.pct(A[k]["w"], 1)}</span><span class="mono mute ytd">{f.pct(A[k]["ytd"], 0)} YTD</span></li>''' for k in m7)
-        right = ""
-        if "ew_cw" in A:
-            ew = A["ew_cw"]
-            better = ew["m"] > 0
-            txt = (T(f"Eşit ağırlıklı Nasdaq (QQQE), devlerin ağırlıklı olduğu QQQ'dan son bir ayda <b>{f.pct(abs(ew['m']), 1, sign=False)}</b> daha iyi. Ortalama hisse devlerden sağlam.",
-                     f"Equal-weight Nasdaq (QQQE) beat cap-weighted QQQ by <b>{f.pct(abs(ew['m']), 1, sign=False)}</b> over the past month. The average stock is holding up better than the giants.") if better else
-                   T(f"Devlerin ağırlıklı olduğu QQQ, eşit ağırlıklı Nasdaq'tan (QQQE) son bir ayda <b>{f.pct(abs(ew['m']), 1, sign=False)}</b> daha iyi. Yükselişi birkaç dev taşıyor.",
-                     f"Cap-weighted QQQ beat equal-weight Nasdaq (QQQE) by <b>{f.pct(abs(ew['m']), 1, sign=False)}</b> over the past month. A handful of giants are carrying the index."))
-            right += (f'<div class="panel dark"><span class="k">{self.s["breadth_k"]}</span>'
-                      f'<div class="big2"><span class="{dc(ew["m"])}">{f.pct(ew["m"], 1)}</span><small class="mono">{self.s["one_month"]}</small></div>'
-                      f'<p>{txt}</p>{spark(ew["series"], w=500, h=70, layers=4)}</div>')
-        pair = ""
-        if "sox_ndx" in A:
-            sx = A["sox_ndx"]
-            pair += (f'<div class="panel"><span class="k">{self.s["soxndx_k"]}</span><b class="{dc(sx["w"])}">{f.pct(sx["w"], 1)}</b>'
-                     f'<span class="mono mute">{T("1 hafta · yarı iletken " + ("önde" if sx["w"] > 0 else "geride"), "1 week · semis " + ("ahead" if sx["w"] > 0 else "behind"))}</span></div>')
-        vol = (self.d.get("vol") or {}).get("qqq")
-        if vol:
-            pair += f'<div class="panel"><span class="k">{self.s["qqqvol_k"]}</span><b>{f.num(vol)}×</b><span class="mono mute">{self.s["vs60"]}</span></div>'
-        if pair:
-            right += f'<div class="pair">{pair}</div>'
-        body = (f'<div class="split"><div class="panel"><div class="ph"><span class="k">{self.s["m7_k"]}</span><span class="mono mute">{self.s["sorted"]}</span></div>'
-                f'<ul class="m7">{lis}</ul></div><div class="stack">{right}</div></div>')
-        return self.section(self.s["s07"], self.s["s07m"], body)
-
-    # §08
-    def metals(self):
-        A, f, T = self.A, self.f, self.T
-        panels = []
-        if "gsr" in A:
-            G = A["gsr"]
-            panels.append(f'''<div class="panel dark"><span class="k">{T("Altın / gümüş oranı", "Gold / silver ratio")}</span><div class="big">{f.num(G["last"], 1)}</div>
-      <div class="chg mono"><span class="{dc(G["w"])}">{f.pct(G["w"], 1)} 1W</span><span class="{dc(G["ytd"])}">{f.pct(G["ytd"], 0)} YTD</span></div>
-      <p>{T("Oran yükseliyorsa gümüş altından kötü gidiyor. Dönüşü izlerken önce bu oranın dönmesine bak.", "A rising ratio means silver is doing worse than gold. When looking for a turn, watch this ratio turn first.")}</p>{spark(G["series"], w=400, h=70, layers=4)}</div>''')
-        if "cu_au" in A:
-            CA = A["cu_au"]
-            panels.append(f'''<div class="panel"><span class="k">{T("Bakır / altın oranı", "Copper / gold ratio")}</span><div class="big">{f.num(CA["last"], 2)}</div>
-      <div class="chg mono"><span class="{dc(CA["w"])}">{f.pct(CA["w"], 1)} 1W</span><span class="{dc(CA["ytd"])}">{f.pct(CA["ytd"], 1)} YTD</span></div>
-      <p>{T("Büyüme beklentisinin metal karşılığı: bakır altından iyi gidiyorsa piyasa resesyon değil büyüme fiyatlıyor.", "Growth expectations in metal form: copper beating gold means the market is pricing growth, not recession.")}</p>{spark(CA["series"], w=400, h=70, fill=False)}</div>''')
-        for key, lab, metal_tr, metal_en in (("sil_silver", T("Gümüş madencileri / gümüş (SIL)", "Silver miners / silver (SIL)"), "gümüşün", "silver"),
-                                            ("gdx_gold", T("Madenciler / altın (GDX)", "Miners / gold (GDX)"), "altının", "gold")):
-            if key not in A:
-                continue
-            M = A[key]
-            if M["w"] > 0:
-                p = T(f"Madenciler metalden iyi: piyasa {metal_tr} dibe yakın olduğunu düşünüyor.", f"Miners are beating the metal: the market thinks {metal_en} is near a bottom.")
-            else:
-                p = T("Madenciler metalden de kötü: piyasa düşük fiyatın kalıcı olabileceğini fiyatlıyor.", "Miners are doing worse than the metal: the market is pricing low prices as lasting.")
-            extra = ""
-            vol = self.d.get("vol") or {}
-            if key == "gdx_gold" and ("gld" in vol or "slv" in vol):
-                parts = []
-                if "gld" in vol:
-                    parts.append(f'<span>{T("GLD hacmi", "GLD volume")} <b>{f.num(vol["gld"])}×</b></span>')
-                if "slv" in vol:
-                    parts.append(f'<span>{T("SLV hacmi", "SLV volume")} <b>{f.num(vol["slv"])}×</b></span>')
-                extra = f'<div class="vols mono">{"".join(parts)}</div>'
-            panels.append(f'''<div class="panel"><span class="k">{lab}</span><div class="big {dc(M["w"])}">{f.pct(M["w"], 1)}</div>
-      <div class="chg mono"><span class="mute">{self.s["week_rel"]}</span><span class="{dc(M["ytd"])}">{f.pct(M["ytd"], 1)} YTD</span></div>
-      <p>{p}</p>{spark(M["series"], w=400, h=70, fill=False) if key == "sil_silver" else ""}{extra}</div>''')
-        if not panels:
-            return ""
-        return self.section(self.s["s08"], self.s["s08m"], f'<div class="metals">{"".join(panels)}</div>')
-
-    # §09
-    def week_ahead(self):
-        f, T = self.f, self.T
-        cal = []
-        for e in self.d.get("calendar", []):
-            if e.get("impact") != "high" and e.get("event") not in CAL_WHY:
-                continue
-            ev = e["event"]
-            name = CAL_TR.get(ev, ev) if self.l == "tr" else ev
-            if self.l == "tr" and ev not in CAL_TR and "Speaks" in ev:
-                name = ev.replace("Fed Chairman", "Fed Başkanı").replace("FOMC Member", "FOMC üyesi").replace(" Speaks", " konuşuyor")
-            pe = ""
-            if e.get("prev") not in (None, "—") or e.get("est") not in (None, "—"):
-                pv = e.get("prev", "—")
-                es = e.get("est", "—")
-                if self.l == "tr":
-                    pv, es = pv.replace(".", ","), es.replace(".", ",")
-                pe = f'<span class="mono mute">{self.s["prev"]} {esc(pv)} · {self.s["est"]} {esc(es)}</span>'
-            why = CAL_WHY.get(ev)
-            if why is None and "Speaks" in ev and ("Chair" in ev or "Fed" in ev):
-                why = ("Reel faizin yönü için dinlenecek ses", "A voice that matters for real yields")
-            whyh = f'<p>{why[0] if self.l == "tr" else why[1]}</p>' if why else ""
-            wd = e.get("wd", date.fromisoformat(e["cet_date"]).weekday())
-            cal.append(f'<li><span class="mono when">{self.s["days"][wd]} {esc(e.get("time", ""))}</span><div><b>{esc(name)}</b>{pe}{whyh}</div>'
-                       f'<span class="imp {e.get("impact", "")}"></span></li>')
-        cal_html = f'<ul class="cal">{"".join(cal[:8])}</ul>' if cal else f'<p class="note">{self.s["no_cal"]}</p>'
-        fed = self.d.get("fed")
-        fed_html = ""
-        if fed:
-            p = fed["p"]
-            when = f.long_date(fed["date"])
-            if p < 20:
-                txt = T(f"Piyasa {when} toplantısında indirim beklemiyor.", f"The market does not expect a cut at the {when} meeting.")
-            elif p < 60:
-                txt = T(f"Piyasa {when} toplantısı için kararsız.", f"The market is split on the {when} meeting.")
-            else:
-                txt = T(f"Piyasa {when} toplantısında indirim bekliyor.", f"The market expects a cut at the {when} meeting.")
-            if "us2y" in self.A:
-                txt += T(f" 2Y faiz {f.lvl(self.A['us2y']['last'])}.", f" The 2-year is at {f.lvl(self.A['us2y']['last'])}.")
-            fed_html = (f'<div class="panel dark"><span class="k">Fed · {when}</span>'
-                        f'<div class="big" style="margin-top:12px">{f.lvl(p, 1)}</div><span class="mono" style="color:rgba(236,234,227,.6)">'
-                        f'{T("faiz indirimi olasılığı · Polymarket", "probability of a cut · Polymarket")}</span><p>{txt}</p></div>')
-        earn = self.d.get("earn") or []
-        if earn:
-            lis = "".join(f'''<li><span class="mono when">{f.day(e["d"])}</span>
-  <div><b>{NAMES.get(e["t"], e["t"])}</b> <span class="mono mute">{e["t"]}</span></div>
-  <span class="mono r">{("EPS " + ("−" if e["eps"] < 0 else "") + "$" + f.num(abs(e["eps"]))) if e.get("eps") is not None else "—"}</span>
-  <span class="mono mute r">{(self.s["rev"] + " " + f.money(e["rev"])) if e.get("rev") else ""}</span></li>''' for e in earn)
-            earn_html = (f'<div class="panel earn"><div class="ph"><span class="k">{self.s["earn_k"]}</span><span class="mono mute">{self.s["earn_src"]}</span></div>'
-                         f'<ul>{lis}</ul></div>')
-        else:
-            earn_html = f'<p class="note">{self.s["no_earn"]}</p>'
-        return self.section(self.s["s09"], self.s["s09m"], f'<div class="split">{cal_html}{fed_html}</div>{earn_html}')
-
-    # §10 levels, §11 scorecard share one rule: regime = price vs MA50 and MA200
-    LEVEL_ASSETS = (("ndx", 0, ""), ("gold", 0, "$"), ("silver", 2, "$"))
-
-    def levels(self):
-        A, f, T = self.A, self.f, self.T
-        cards = []
-        for k, dec, cur in self.LEVEL_ASSETS:
-            if k not in A or not A[k].get("ma200"):
-                continue
-            a = A[k]
-            m50, m200, p = a["ma50"], a["ma200"], a["last"]
-            rg = regime(p, m50, m200)
-            if rg == "up":
-                title = T("Trend yukarı", "Trend up")
-                lines = [T(f"Fiyat <b>{cur}{f.num(p, dec)}</b>; iki ortalamanın da üstünde.", f"Price <b>{cur}{f.num(p, dec)}</b>; above both averages."),
-                         T(f"<b>{cur}{f.num(m50, dec)}</b> (MA50) ilk destek; altında kapanış trendi kararsıza çevirir.", f"<b>{cur}{f.num(m50, dec)}</b> (MA50) is first support; a close below turns the trend mixed."),
-                         T(f"<b>{cur}{f.num(m200, dec)}</b> (MA200) kırılırsa trend aşağı döner.", f"A break of <b>{cur}{f.num(m200, dec)}</b> (MA200) turns the trend down.")]
-            elif rg == "dn":
-                title = T("Trend aşağı", "Trend down")
-                lines = [T(f"Fiyat <b>{cur}{f.num(p, dec)}</b>; iki ortalamanın da altında.", f"Price <b>{cur}{f.num(p, dec)}</b>; below both averages."),
-                         T(f"<b>{cur}{f.num(m50, dec)}</b> (MA50) ilk direnç; üstünde kapanış ilk toparlanma işareti.", f"<b>{cur}{f.num(m50, dec)}</b> (MA50) is first resistance; a close above is the first sign of repair."),
-                         T(f"<b>{cur}{f.num(m200, dec)}</b> (MA200) geri alınmadan trend aşağı.", f"Until <b>{cur}{f.num(m200, dec)}</b> (MA200) is reclaimed, the trend is down.")]
-            else:
-                title = T("İki ortalamanın arasında", "Between the averages")
-                hi, lo = max(m50, m200), min(m50, m200)
-                lines = [T(f"Fiyat <b>{cur}{f.num(p, dec)}</b>; MA50 ile MA200 arasında.", f"Price <b>{cur}{f.num(p, dec)}</b>; between MA50 and MA200."),
-                         T(f"<b>{cur}{f.num(hi, dec)}</b> üstünde kapanış trendi yukarı çevirir.", f"A close above <b>{cur}{f.num(hi, dec)}</b> turns the trend up."),
-                         T(f"<b>{cur}{f.num(lo, dec)}</b> altında kapanış trendi aşağı çevirir.", f"A close below <b>{cur}{f.num(lo, dec)}</b> turns the trend down.")]
-            p52 = pos52(a)
-            if p52 <= .05 or p52 >= .95:
-                lines.append(T("52 haftalık aralığın " + ("dibinde." if p52 <= .05 else "zirvesinde."),
-                               "At the " + ("bottom" if p52 <= .05 else "top") + " of its 52-week range."))
-            cards.append(f'<div class="panel"><span class="k">{self.n(k)}</span><h3>{title}</h3><ul>{"".join(f"<li>{x}</li>" for x in lines)}</ul></div>')
-        if not cards:
-            return ""
-        return self.section(self.s["s10"], self.s["s10m"], f'<div class="scen">{"".join(cards)}</div>')
-
-    def scorecard(self):
-        A, f, T = self.A, self.f, self.T
-        word = {"up": T("yukarı", "up"), "dn": T("aşağı", "down"), "mix": T("kararsız", "mixed")}
-        was = {"up": "yukarıydı", "dn": "aşağıydı", "mix": "kararsızdı"}   # TR past tense, suffix follows the last sound
-        rows = []
-        for k, dec, cur in self.LEVEL_ASSETS:
-            if k not in A or not A[k].get("ma200") or not (A[k].get("prev") or {}).get("ma200"):
-                continue
-            a, pv = A[k], A[k]["prev"]
-            then = regime(pv["last"], pv["ma50"], pv["ma200"])
-            now = regime(a["last"], a["ma50"], a["ma200"])
-            held = then == now
-            mark = '<b class="up">✓</b>' if held else '<b class="dn">✗</b>'
-            # Factual either way: it compares last week's close with this week's,
-            # and does not claim a previous issue said anything.
-            why = (T(f"Geçen haftanın kapanışında trend {was[then]}; bu hafta da {word[now]}.",
-                     f"At last week's close the trend was {word[then]}; it still is.") if held
-                   else T(f"Geçen haftanın kapanışında trend {was[then]}; bu hafta {word[now]}.",
-                          f"At last week's close the trend was {word[then]}; this week it is {word[now]}."))
-            rows.append(f'<li>{mark}<div><b>{self.n(k)}</b><p>{why} <span class="mono mute">{cur}{f.num(pv["last"], dec)} → {cur}{f.num(a["last"], dec)}</span></p></div></li>')
-        if not rows:
-            return ""
-        return self.section(self.s["s11"], self.s["s11m"], f'<ul class="karne">{"".join(rows)}</ul>')
-
-    # §12
+    # ── §13 crypto ──────────────────────────────────────────────────────────
     def crypto(self):
-        A, f, T = self.A, self.f, self.T
+        A, f = self.A, self.f
         parts = []
         if "btc" in A:
             b = A["btc"]
-            parts.append(f'<span><b>Bitcoin</b><span class="mono">${f.num(b["last"], 0)} <span class="{dc(b["w"])}">{f.pct(b["w"], 1)} 1W</span> · '
-                         f'<span class="{dc(b["ytd"])}">{f.pct(b["ytd"], 1)} YTD</span></span></span>')
+            parts.append(f'<span><b>Bitcoin</b><span class="mono">${f.num(b["last"], 0)} {self.ch(b["w"], suffix=" 1W")} · {self.ch(b["ytd"], suffix=" YTD")}</span></span>')
         fg = self.d.get("fg")
         if fg and fg.get("px"):
-            lab = fg.get("chg", "")
-            if self.l == "tr":
-                lab = {"Extreme Fear": "Aşırı korku", "Fear": "Korku", "Neutral": "Nötr", "Greed": "Açgözlülük",
-                       "Extreme Greed": "Aşırı açgözlülük"}.get(lab, lab)
-            parts.append(f'<span><b>{self.s["fg"]}</b><span class="mono">{esc(fg["px"])} · {esc(lab)}</span></span>')
+            lab = {"Extreme Fear": "Aşırı korku", "Fear": "Korku", "Neutral": "Nötr", "Greed": "Açgözlülük",
+                   "Extreme Greed": "Aşırı açgözlülük"}.get(fg.get("chg", ""), fg.get("chg", ""))
+            parts.append(f'<span><b>Korku &amp; Açgözlülük</b><span class="mono">{esc(fg["px"])} · {esc(lab)}</span></span>')
         if not parts:
             return ""
-        return self.section(self.s["s12"], self.s["s12m"], f'<div class="strip">{"".join(parts)}</div>')
+        return self.section(("Kripto ", "köşesi"), "kısaca", f'<div class="strip">{"".join(parts)}</div>')
 
-    def render(self, web_url=None):
-        s, f = self.s, self.f
+    # ── page ────────────────────────────────────────────────────────────────
+    def render(self):
+        f = self.f
         hd = self.headline()
         css = open(os.path.join(HERE, "style.css")).read()
         hero = ""
         if hd:
-            sub = f'<span class="mono" style="color:rgba(236,234,227,.6)">{hd["sub"]}</span>' if hd["sub"] else ""
             hero = f'''<section class="hero">
-  <span class="k">{s["hero_k"]}</span>
+  <span class="k">Haftanın tek cümlesi</span>
   <h1>{hd["h1"]} — <i>{hd["h2"]}</i></h1>
   <p class="lede">{self.lede()}</p>
-  <div class="chart"><div class="lab"><span class="k">{hd["lab"]}</span><b>{hd["val"]}</b>{sub}</div>{spark(hd["series"], w=1000, h=150, layers=9)}</div>
+  <div class="chart"><div class="lab"><span class="k">{hd["lab"]}</span><b>{hd["val"]}</b></div>{spark(hd["series"], w=1000, h=150, layers=9)}</div>
 </section>'''
         k5 = "".join(f'<div><span class="k">{a}</span><b class="{c}">{b}</b><span class="mono mute">{x}</span></div>' for a, b, x, c in self.key5())
-        body = "".join([self.assets(), self.board(), self.drivers(), self.sectors(), self.chain(), self.asia(),
-                        self.giants(), self.metals(), self.week_ahead(), self.levels(), self.scorecard(), self.crypto()])
-        web = f'<a class="weblink mono" href="{web_url}">{s["web"]} →</a>' if web_url else ""
-        alt = "en" if self.l == "tr" else "tr"
+        full = (self.R.get("show_metals") or "compact") == "full"
+        sections = [self.decision(), self.setups(), self.chain(), self.macro()]
+        if full:
+            sections += [self.assets_full(), self.metals_full()]
+        sections += [self.earnings(), self.news(), self.positioning(), self.asia(), self.breadth(),
+                     self.calendar(), self.scorecard(), self.board(), self.crypto()]
+        body = "".join(sections)
+        lag = [f"{MISSING_NAME.get(k, k.upper())} ({f.day(a['date'])})" for k, a in self.A.items() if a.get("date") and a["date"] < self.d["cut"]]
+        if lag:
+            self.miss("Kesimden önce biten seriler — son yayımlanan değer kullanıldı: " + ", ".join(lag))
+        for k in self.d.get("report_missing") or []:
+            self.miss(MISSING_NAME.get(k, k.upper()))
+        for m in self.P.get("missing") or []:
+            self.miss(m)
+        example = self.d.get("example_files") or []
+        banner = (f'<p class="note" style="margin-bottom:18px"><b>Örnek veriyle üretildi:</b> {", ".join(example)} bulunamadı; '
+                  f'{", ".join(x.replace(".yaml", ".example.yaml") for x in example)} kullanıldı. Pozisyonlar ve seviyeler gerçek değil.</p>') if example else ""
+        miss = (f'<div class="note missing"><b>Eksik veri</b> · bu sayıda gösterilmeyenler<ul>{"".join(f"<li>{esc(m)}</li>" for m in self.missing)}</ul></div>'
+                if self.missing else "")
+        cut = f.long_date(self.d["cut"])
         return f'''<!doctype html>
-<html lang="{self.l}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NO/CASHFLOW · {s["title"]} · {f.long_date(self.d["today"])}</title>
-<meta name="description" content="{esc(self.lede())}">
-<link rel="alternate" hreflang="{alt}" href="https://nocashflow.net/bulletins/weekly/latest.{alt}.html">
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NO/CASHFLOW · Haftalık karar bülteni · {cut}</title>
+<meta name="robots" content="noindex,nofollow">
 <link rel="icon" href="https://nocashflow.net/favicon.svg?v=4" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Instrument+Serif:ital@0;1&family=Geist+Mono:wght@400;500&display=swap">
 <style>{css}</style></head><body><div class="wrap">
-<div class="top"><a class="wm" href="https://nocashflow.net/{'tr/' if self.l == 'tr' else ''}">NO<b>/</b>CASHFLOW</a><span class="eyebrow"><em>{s["eyebrow"]}</em> · {f.long_date(self.d["today"])}</span></div>
-{hero}
+<div class="top"><span class="wm">NO<b>/</b>CASHFLOW</span><span class="eyebrow"><em>Haftalık karar bülteni</em> · kesim: {cut} Cuma kapanışı</span></div>
+{banner}{hero}
 <div class="key5">{k5}</div>
 {body}
-<footer><span class="wm">NO<b>/</b>CASHFLOW</span><p>{s["foot"]}</p>{web}</footer>
+{miss}
+<footer><span class="wm">NO<b>/</b>CASHFLOW</span><p>Kişisel karar bülteni; yatırım tavsiyesi değildir. Koşullar rules.yaml'dan, pozisyonlar portfolio.yaml'dan okunur. Tüm getiriler {cut} Cuma kapanışına göre. Veriler: Yahoo Finance, FRED, ICE BofA, Cboe, OKX, Polymarket, Forex Factory.</p></footer>
 </div></body></html>'''
 
-    def teaser(self):
-        """What the email shows: the headline, the lede and the five key numbers."""
-        hd = self.headline()
-        return {"h1": hd["h1"] if hd else "", "h2": hd["h2"] if hd else "", "lede": self.lede(), "key5": self.key5()}
 
-
-def render(data, lang, web_url=None):
-    return Bulletin(data, lang).render(web_url)
-
-
-def teaser(data, lang):
-    return Bulletin(data, lang).teaser()
+def render(data, lang="tr", web_url=None):
+    b = Bulletin(data, lang)
+    html = b.render()
+    return html, b.week_rows

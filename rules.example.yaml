@@ -1,0 +1,47 @@
+# ÖRNEK DOSYA — eşikler ve seviyeler örnektir. Kendi değerlerinle rules.yaml olarak kopyala:
+#   cp rules.example.yaml rules.yaml
+# rules.yaml git dışında kalır (.gitignore).
+
+# İzleme listesi. buy_at opsiyonel (USD); boşsa "alım seviyesine mesafe" sütunu boş kalır.
+watchlist:
+  - {ticker: AMD,  buy_at: 500.00, basket: swing}
+  - {ticker: AVGO, buy_at: 330.00, basket: swing}
+  - {ticker: CRWD, buy_at: 215.00, basket: swing}
+  - {ticker: CRDO, buy_at: 125.00, basket: spekulatif}
+  - {ticker: ALAB, buy_at: 210.00, basket: spekulatif}
+  - {ticker: IREN, basket: spekulatif}
+  - {ticker: RKLB, basket: spekulatif}
+
+# Swing kuralları — her biri izleme listesindeki her isim için geçti / kaldı üretir.
+swing:
+  # 1) Düşüş günü hacmi: son N seansta, hacmi önceki 20 seans ortalamasının
+  #    `down_volume_mult` katını aşan bir düşüş günü VARSA kural kalır (dağıtım işareti).
+  down_volume_mult: 1.5
+  down_volume_lookback: 5
+  # 2) Ortalamalara göre konum: MA200 üstü şart; MA50 üstü opsiyonel.
+  require_above_ma200: true
+  require_above_ma50: false
+  # 3) Net borç / FAVÖK bu eşiğin altında olmalı (FAVÖK negatifse kalır).
+  max_net_debt_ebitda: 3.0
+  # 4) Kârlı ve serbest nakit akışı pozitif. Kalanlar "nakit yakıyor → spekülatif sepet" notu alır.
+  require_profit_and_fcf: true
+  # 5) Son N günde not indirimi ya da hedef fiyatta bu yüzdeden büyük kesinti yoksa geçer.
+  analyst_lookback_days: 30
+  target_cut_pct: 20
+
+# "Bu hafta" listesine girme eşikleri.
+this_week:
+  stop_within_pct: 10     # stop'a bu yüzdeden yakın pozisyonlar listelenir
+  buy_within_pct: 5       # alım seviyesine bu yüzdeden yakın izleme isimleri listelenir
+  stop_highlight_pct: 5   # portföy tablosunda vurgulanan stop mesafesi
+
+# Rejim: Nasdaq 100'ün MA200'e, VXN'in kendi MA50'sine göre konumu → azami hisse oranı (%).
+regime:
+  states:
+    - {when: {ndx_above_ma200: true,  vxn_above_ma50: false}, label: "Risk açık",   max_equity_pct: 90}
+    - {when: {ndx_above_ma200: true,  vxn_above_ma50: true},  label: "Temkinli",    max_equity_pct: 70}
+    - {when: {ndx_above_ma200: false, vxn_above_ma50: false}, label: "Savunma",     max_equity_pct: 50}
+    - {when: {ndx_above_ma200: false, vxn_above_ma50: true},  label: "Risk kapalı", max_equity_pct: 30}
+
+# Metaller: compact = tek kart (altın, gümüş, altın/gümüş oranı, dolar korelasyonu); full = eski iki bölüm.
+show_metals: compact

@@ -1,0 +1,13 @@
+# ÖRNEK DOSYA — gerçek pozisyon değil. Kendi değerlerinle portfolio.yaml olarak kopyala:
+#   cp portfolio.example.yaml portfolio.yaml
+# portfolio.yaml git dışında kalır (.gitignore); bu repo herkese açık.
+# Bu dosya kullanıldığında bülten en üstte "örnek veriyle üretildi" yazar.
+#
+# basket: core | swing | spekulatif
+# cost ve stop: hisse başına, USD.
+cash: 25000
+positions:
+  - {ticker: NVDA, shares: 60, cost: 150.00, stop: 155.00, basket: core}
+  - {ticker: MSFT, shares: 15, cost: 480.00, stop: 495.00, basket: core}
+  - {ticker: MU,   shares: 8,  cost: 700.00, stop: 740.00, basket: swing}
+  - {ticker: NBIS, shares: 40, cost: 140.00, stop: 105.00, basket: spekulatif}

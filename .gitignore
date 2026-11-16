@@ -55,3 +55,10 @@ build_report.json
 
 # Local render/demo artifacts
 out/
+
+# Personal weekly bulletin (public repo: never commit these)
+portfolio.yaml
+rules.yaml
+news.yaml
+history/
+personal_out/

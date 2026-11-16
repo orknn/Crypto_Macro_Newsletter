@@ -1,0 +1,4 @@
+# ÖRNEK — Grokbot bildiriminden önemli bulduklarını buraya ekle, news.yaml olarak kaydet.
+# En fazla 5 madde okunur. tag: tez | gurultu. news.yaml yoksa §06 hiç görünmez.
+items:
+  - {tag: tez, ticker: NBIS, title: "Örnek başlık — kendi maddenle değiştir", url: "https://example.com"}

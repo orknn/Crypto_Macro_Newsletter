@@ -1,16 +1,17 @@
-"""Weekly bulletin v2 — one command, start to finish.
+"""Weekly bulletin v2 — personal decision edition, one command.
 
-    python -m weekly_v2.run                 # build HTML + PDF, no email
-    python -m weekly_v2.run --send-email    # ...and email confirmed subscribers
-    TEST_TO=<address> python -m weekly_v2.run --send-email   # one test email only
+    python -m weekly_v2.run              # fetch, build HTML + PDF into personal_out/
+    python -m weekly_v2.run --no-pdf     # HTML only
+    python -m weekly_v2.run --open       # ...and open it in the browser
+    python -m weekly_v2.run --from-cache path.json   # re-render a saved fetch (no network)
 
-Writes weekly_bulletin_{tr,en}.{html,pdf} (the names the workflow publishes)
-and fetch_report.json. No model is called: every sentence is a rule over the
-numbers, so a run costs nothing and cannot invent a figure.
+Runs on the owner's Mac: portfolio.yaml, rules.yaml, news.yaml and history/
+are git-ignored and never leave the machine. No model is called; every
+sentence is a rule over the numbers. The issue's "this week" rows are saved
+to history/<cut>.json for next week's scorecard.
 
-Quality gate: if the three core assets are missing, or the newest close is
-more than four days old, the files are still written for inspection but no
-email goes out and the run exits non-zero.
+Quality gate: if the core series are missing, the page is still written for
+inspection, history is not saved and the run exits non-zero.
 """
 import json
 import os
@@ -21,15 +22,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from weekly_v2 import data as D, mail as M, render as R   # noqa: E402
+from weekly_v2 import data as D, personal as P, render as R   # noqa: E402
 
 CORE = ("ndx", "gold", "silver")
-MAX_AGE_DAYS = 4
-
-
-def archive_url(lang, today):
-    y, w, _ = today.isocalendar()
-    return f"https://nocashflow.net/bulletins/weekly/{y}-W{w:02d}.{lang}.html"
+OUT = os.path.join(ROOT, "personal_out")
 
 
 def html_to_pdf(html_path, pdf_path):
@@ -47,60 +43,62 @@ def html_to_pdf(html_path, pdf_path):
         b.close()
 
 
-def gate(data, report, today):
-    problems = [k for k in CORE if k not in data["a"]]
-    if problems:
-        return [f"missing core series: {', '.join(problems)}"]
-    age = (today - date.fromisoformat(data["asof"])).days
-    if age > MAX_AGE_DAYS:
-        return [f"newest close is {age} days old ({data['asof']})"]
-    return []
+def gate(data):
+    missing = [k for k in CORE if k not in data["a"]]
+    return [f"missing core series: {', '.join(missing)}"] if missing else []
+
+
+def build(today=None, root=ROOT, cache=None):
+    """Fetch everything and return the data dict the renderer takes."""
+    portfolio, rules, news, example = P.load_inputs(root)
+    if cache:
+        with open(cache, encoding="utf-8") as fh:
+            data = json.load(fh)
+    else:
+        today = today or date.today()
+        extra = P.tickers(portfolio, rules)
+        data, report, C, V = D.fetch(today, extra=extra)
+        cut = data["cut"]
+        data["personal"] = P.fetch_personal(portfolio, rules, C, V, cut, today, report)
+        data["report_missing"] = sorted(set(report["missing"]))
+        data["warnings"] = report["warnings"]
+    data.update({"portfolio": portfolio, "rules": rules, "news": news, "example_files": example,
+                 "prev_issue": P.previous_issue(data["cut"], root)})
+    return data
 
 
 def main(argv):
-    send = "--send-email" in argv
-    today = date.today()
-    print(f"Weekly v2 · {today}")
-    data, report = D.fetch(today)
-    print(f"  series: {len(data['a'])} · missing: {report['missing'] or 'none'}")
-    for w in report["warnings"]:
-        print(f"  ⚠️  {w}")
-    problems = gate(data, report, today)
-    report["gate"] = problems
-    with open(os.path.join(ROOT, "fetch_report.json"), "w") as fh:
-        json.dump({"edition": "weekly-v2", "asof": data["asof"], **report}, fh, indent=2)
-
-    ok = not problems
-    for lang in ("tr", "en"):
-        url = archive_url(lang, today)
-        html_path = os.path.join(ROOT, f"weekly_bulletin_{lang}.html")
-        pdf_path = os.path.join(ROOT, f"weekly_bulletin_{lang}.pdf")
-        with open(html_path, "w", encoding="utf-8") as fh:
-            fh.write(R.render(data, lang, web_url=url))
-        print(f"  ✅ {os.path.basename(html_path)}")
+    cache = argv[argv.index("--from-cache") + 1] if "--from-cache" in argv else None
+    print(f"Weekly v2 · personal · {date.today()}")
+    data = build(cache=cache)
+    print(f"  cut: {data['cut']} · series: {len(data['a'])} · example inputs: {data['example_files'] or 'none'}")
+    os.makedirs(OUT, exist_ok=True)
+    if not cache:
+        with open(os.path.join(OUT, f"data_{data['cut']}.json"), "w") as fh:
+            json.dump({k: v for k, v in data.items() if k not in ("portfolio", "rules", "news", "prev_issue", "example_files")}, fh)
+    problems = gate(data)
+    html, rows = R.render(data)
+    path = os.path.join(OUT, f"karar_{data['cut']}.html")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(html)
+    print(f"  ✅ {path}")
+    if "--no-pdf" not in argv:
         try:
-            html_to_pdf(html_path, pdf_path)
-            print(f"  ✅ {os.path.basename(pdf_path)}")
+            html_to_pdf(path, path[:-5] + ".pdf")
+            print(f"  ✅ {path[:-5]}.pdf")
         except Exception as e:
-            print(f"  ⚠️  PDF failed ({e}); the email goes out without it.")
-            if os.path.exists(pdf_path):
-                os.remove(pdf_path)
-        if not send:
-            continue
-        if problems:
-            print(f"  ⛔ email skipped ({lang}): {'; '.join(problems)}")
-            continue
-        from email_sender import send_to_subscribers
-        t = R.teaser(data, lang)
-        body = M.build(t, lang, url, data["today"])
-        sent = send_to_subscribers(body, M.subject(t, lang), lang,
-                                   pdf_path=pdf_path if os.path.exists(pdf_path) else None,
-                                   from_addr="NO/CASHFLOW Weekly <dailyfinancialbulletin@nocashflow.net>",
-                                   label="WEEKLY v2")
-        ok = ok and bool(sent)
+            print(f"  ⚠️  PDF failed: {e}")
     if problems:
-        print(f"::error title=Weekly v2 quality gate::{'; '.join(problems)}")
-    return ok
+        print(f"  ⛔ {'; '.join(problems)} — history not saved")
+        return False
+    if not data["example_files"]:
+        P.save_issue(data["cut"], rows, ROOT)
+        print(f"  history/{data['cut']}.json · {len(rows)} rows for next week's scorecard")
+    else:
+        print("  example inputs → history not saved")
+    if "--open" in argv:
+        os.system(f"open '{path}'")
+    return True
 
 
 if __name__ == "__main__":
