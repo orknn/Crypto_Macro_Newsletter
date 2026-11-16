@@ -4,6 +4,7 @@
     python -m weekly_v2.run --no-pdf     # HTML only
     python -m weekly_v2.run --open       # ...and open it in the browser
     python -m weekly_v2.run --from-cache path.json   # re-render a saved fetch (no network)
+    python -m weekly_v2.run --lang en    # English edition (karar_<cut>_en.html); --lang both = TR + EN
 
 Runs on the owner's Mac: portfolio.yaml, rules.yaml, news.yaml and history/
 are git-ignored and never leave the machine. No model is called; every
@@ -77,17 +78,23 @@ def main(argv):
         with open(os.path.join(OUT, f"data_{data['cut']}.json"), "w") as fh:
             json.dump({k: v for k, v in data.items() if k not in ("portfolio", "rules", "news", "prev_issue", "example_files")}, fh)
     problems = gate(data)
-    html, rows = R.render(data)
-    path = os.path.join(OUT, f"karar_{data['cut']}.html")
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write(html)
-    print(f"  ✅ {path}")
-    if "--no-pdf" not in argv:
-        try:
-            html_to_pdf(path, path[:-5] + ".pdf")
-            print(f"  ✅ {path[:-5]}.pdf")
-        except Exception as e:
-            print(f"  ⚠️  PDF failed: {e}")
+    lang = argv[argv.index("--lang") + 1] if "--lang" in argv else "tr"
+    langs = ("tr", "en") if lang == "both" else (lang,)
+    paths, rows = [], []
+    for lg in langs:
+        html, r = R.render(data, lang=lg)
+        rows = rows or r
+        path = os.path.join(OUT, f"karar_{data['cut']}{'' if lg == 'tr' else '_' + lg}.html")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(html)
+        paths.append(path)
+        print(f"  ✅ {path}")
+        if "--no-pdf" not in argv:
+            try:
+                html_to_pdf(path, path[:-5] + ".pdf")
+                print(f"  ✅ {path[:-5]}.pdf")
+            except Exception as e:
+                print(f"  ⚠️  PDF failed: {e}")
     if problems:
         print(f"  ⛔ {'; '.join(problems)} — history not saved")
         return False
@@ -97,7 +104,8 @@ def main(argv):
     else:
         print("  example inputs → history not saved")
     if "--open" in argv:
-        os.system(f"open '{path}'")
+        for path in paths:
+            os.system(f"open '{path}'")
     return True
 
 

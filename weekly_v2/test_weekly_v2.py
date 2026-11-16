@@ -303,6 +303,31 @@ class MissingData(unittest.TestCase):
         assert_clean(self, page(d))
 
 
+# ── English edition ─────────────────────────────────────────────────────────
+class English(unittest.TestCase):
+    def en(self, d):
+        return visible_text(R.render(d, lang="en")[0])
+
+    def test_no_turkish_left_and_no_raw_values(self):
+        d = base()
+        d["prev_issue"] = {"cut": "2026-11-06", "rows": [{"kind": "stop", "key": "aaa", "level": 97.0, "dir": "below", "text": "AAA $97,00 altında kapanırsa stop çalışır", "text_en": "AAA closes below $97.00: stop triggers"}]}
+        d["personal"]["missing"] = ["AAA: EPS revizyonu", "Put/call oranı (CBOE)"]
+        txt = re.sub(r"\s+", " ", self.en(d))
+        self.assertIsNone(re.search(r"[çğışöüÇĞİŞÖÜ]", txt), re.findall(r"\S*[çğışöüÇĞİŞÖÜ]\S*", txt))
+        for bad in (r"\bN/?A\b", r"\bnan\b", r"\bNone\b", r"\binf\b", r"\bnull\b", r"\bpuan\b", r"%\d"):
+            self.assertIsNone(re.search(bad, txt), bad)
+        self.assertIn("If AAA closes below $97.00, the stop triggers", txt.replace(" ,", ",").replace("  ", " "))
+        self.assertIn("AAA closes below $97.00: stop triggers", txt)       # scorecard row in English
+
+    def test_same_rules_both_languages(self):
+        tr_rows = R.render(base(), lang="tr")[1]
+        en_rows = R.render(base(), lang="en")[1]
+        self.assertEqual(tr_rows, en_rows)       # history stays in one language
+
+    def test_rebound_label(self):
+        self.assertIn("rebound", self.en(base()))
+
+
 # ── §11 scorecard ───────────────────────────────────────────────────────────
 class Scorecard(unittest.TestCase):
     def test_round_trip(self):
