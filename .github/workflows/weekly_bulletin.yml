@@ -5,6 +5,11 @@ on:
     # Every Sunday at 16:00 UTC
     - cron: '0 16 * * 0'
   workflow_dispatch:  # Allow manual trigger
+    inputs:
+      test_only:
+        description: "Test: email only the EMAIL_TO secret, do not publish to the site"
+        type: boolean
+        default: false
 
 concurrency:
   group: bulletin-website-push
@@ -45,10 +50,19 @@ jobs:
           # without a deploy; both paths stay wired.
           LLM_PROVIDER: openai
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          # Test runs mail the owner only (secret, masked in logs); never subscribers.
+          TEST_TO: ${{ inputs.test_only && secrets.EMAIL_TO || '' }}
+          # Rollback: set the repository variable WEEKLY_V1=true to run the old pipeline.
+          WEEKLY_V1: ${{ vars.WEEKLY_V1 }}
         run: |
-          python main.py --edition weekly --send-email
+          if [ "${WEEKLY_V1}" = "true" ]; then
+            python main.py --edition weekly --send-email
+          else
+            python -m weekly_v2.run --send-email
+          fi
 
       - name: Push to website repository
+        if: ${{ !inputs.test_only }}
         env:
           WEBSITE_PUSH_TOKEN: ${{ secrets.WEBSITE_PUSH_TOKEN }}
         run: |

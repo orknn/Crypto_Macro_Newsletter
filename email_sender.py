@@ -281,41 +281,73 @@ def send_newsletter_email(html_path="daily_bulletin.html", pdf_path="daily_bulle
     subject_tmpl = STR[f"email_subject_{edition}"][lang]
     subject = subject_tmpl.format(date=formatted_date)
 
-    # Recipients: confirmed subscribers for this language, from the site API only.
-    print(f"  → Fetching confirmed {lang.upper()} subscribers from {SUBSCRIBERS_API_URL}...")
-    try:
-        recipients = fetch_confirmed_subscribers(lang, admin_token)
-    except urllib.error.HTTPError as e:
-        print(f"  ❌ Subscriber API error: {e.code} {e.read().decode('utf-8', 'replace')}")
-        return False
-    except Exception as e:
-        print(f"  ❌ Could not reach subscriber API: {e}")
-        return False
-
-    print(f"  → Found {len(recipients)} confirmed subscriber(s).")
-    if not recipients:
-        print("  ⚠️ No confirmed recipients to send to.")
-        return True
-
-    print(f"\n📧 Sending {edition.upper()} ({lang.upper()}) bulletin to {len(recipients)} subscribers via Resend...")
-
-    # PDF attachment (same for everyone) — read once.
-    attachments = None
-    if os.path.isfile(pdf_path):
-        with open(pdf_path, "rb") as pdf_file:
-            pdf_b64 = base64.b64encode(pdf_file.read()).decode("utf-8")
-        attachments = [{"filename": os.path.basename(pdf_path), "content": pdf_b64}]
-
     from_addr = (
         "NoCashFlow Daily Bulletin <dailyfinancialbulletin@nocashflow.net>"
         if edition == 'daily'
         else "NoCashFlow Weekly Deep Dive <dailyfinancialbulletin@nocashflow.net>"
     )
+    return send_to_subscribers(html_content, subject, lang, pdf_path=pdf_path,
+                               from_addr=from_addr, label=edition.upper(),
+                               api_key=api_key, admin_token=admin_token)
+
+
+def send_to_subscribers(html_content, subject, lang, pdf_path=None, from_addr=None,
+                        label="BULLETIN", api_key=None, admin_token=None):
+    """Send one prepared email body to every confirmed subscriber of `lang`.
+
+    `html_content` must contain {{UNSUB_URL}}; it is replaced per recipient with
+    a token-scoped unsubscribe link (mandatory). If TEST_TO is set, the list is
+    that single address and the subscriber API is not called; the address is
+    never printed (this repo's logs are public).
+    """
+    api_key = api_key or os.environ.get("RESEND_API_KEY")
+    admin_token = admin_token or os.environ.get("NCF_ADMIN_TOKEN")
+    from_addr = from_addr or "NoCashFlow <dailyfinancialbulletin@nocashflow.net>"
+    if not api_key:
+        print("❌ RESEND_API_KEY env variable not set. Skipping email.")
+        return False
+    if "{{UNSUB_URL}}" not in html_content:
+        print("❌ Email body has no {{UNSUB_URL}} placeholder — refusing to send without an unsubscribe link.")
+        return False
+
+    test_to = os.environ.get("TEST_TO", "").strip()
+    if test_to:
+        print("  → TEST mode: sending only to the test recipient (subscriber list not used).")
+        recipients = [{"email": test_to, "token": "test"}]
+        subject = "[TEST] " + subject
+    else:
+        if not admin_token:
+            print("❌ NCF_ADMIN_TOKEN not set — cannot fetch subscriber list. Skipping email.")
+            return False
+        # Recipients: confirmed subscribers for this language, from the site API only.
+        print(f"  → Fetching confirmed {lang.upper()} subscribers from {SUBSCRIBERS_API_URL}...")
+        try:
+            recipients = fetch_confirmed_subscribers(lang, admin_token)
+        except urllib.error.HTTPError as e:
+            print(f"  ❌ Subscriber API error: {e.code} {e.read().decode('utf-8', 'replace')}")
+            return False
+        except Exception as e:
+            print(f"  ❌ Could not reach subscriber API: {e}")
+            return False
+
+        print(f"  → Found {len(recipients)} confirmed subscriber(s).")
+        if not recipients:
+            print("  ⚠️ No confirmed recipients to send to.")
+            return True
+
+    print(f"\n📧 Sending {label} ({lang.upper()}) to {len(recipients)} recipient(s) via Resend...")
+
+    # PDF attachment (same for everyone) — read once.
+    attachments = None
+    if pdf_path and os.path.isfile(pdf_path):
+        with open(pdf_path, "rb") as pdf_file:
+            pdf_b64 = base64.b64encode(pdf_file.read()).decode("utf-8")
+        attachments = [{"filename": os.path.basename(pdf_path), "content": pdf_b64}]
 
     success_count = 0
     fail_count = 0
 
-    for sub in recipients:
+    for n, sub in enumerate(recipients, 1):
         recipient = sub.get("email")
         token = sub.get("token", "")
         if not recipient:
@@ -352,15 +384,15 @@ def send_newsletter_email(html_path="daily_bulletin.html", pdf_path="daily_bulle
 
             with urllib.request.urlopen(req) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
-                print(f"  ✅ Sent → {recipient} (id: {result.get('id', '?')})")
+                print(f"  ✅ Sent → recipient #{n} (id: {result.get('id', '?')})")
                 success_count += 1
 
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8")
-            print(f"  ❌ Failed → {recipient}: {e.code} {body}")
+            print(f"  ❌ Failed → recipient #{n}: {e.code} {body}")
             fail_count += 1
         except Exception as e:
-            print(f"  ❌ Error → {recipient}: {e}")
+            print(f"  ❌ Error → recipient #{n}: {e}")
             fail_count += 1
 
     print(f"📊 Email summary ({lang.upper()}): {success_count} sent, {fail_count} failed")

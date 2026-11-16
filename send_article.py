@@ -247,7 +247,7 @@ def send(arts, langs, topic):
             continue
         print(f"📧 Sending SPECIAL EDITION ({lang.upper()}) to {len(recipients)}...")
         ok = fail = 0
-        for sub in recipients:
+        for n, sub in enumerate(recipients, 1):
             rec = sub.get("email")
             token = sub.get("token", "")
             if not rec:
@@ -255,13 +255,13 @@ def send(arts, langs, topic):
             html = html_tmpl.replace("{{UNSUB_URL}}", f"{UNSUBSCRIBE_URL}?token={token}")
             try:
                 r = _resend_send(api_key, FROM_ADDR, rec, subject, html)
-                print(f"  ✅ {rec} (id: {r.get('id','?')})")
+                print(f"  ✅ recipient #{n} (id: {r.get('id','?')})")
                 ok += 1
             except urllib.error.HTTPError as e:
-                print(f"  ❌ {rec}: {e.code} {e.read().decode('utf-8','replace')}")
+                print(f"  ❌ recipient #{n}: {e.code} {e.read().decode('utf-8','replace')}")
                 fail += 1
             except Exception as e:
-                print(f"  ❌ {rec}: {e}")
+                print(f"  ❌ recipient #{n}: {e}")
                 fail += 1
         print(f"📊 {lang.upper()}: {ok} sent, {fail} failed")
         g_ok += ok
