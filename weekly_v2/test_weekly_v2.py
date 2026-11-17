@@ -328,6 +328,57 @@ class English(unittest.TestCase):
         self.assertIn("rebound", self.en(base()))
 
 
+# ── editor's read (no network: the model call is stubbed) ───────────────────
+class Editor(unittest.TestCase):
+    def setUp(self):
+        from weekly_v2 import editor as E
+        self.E = E
+        self.tr, self.en = R.render(base(), lang="tr")[0], R.render(base(), lang="en")[0]
+        self.ttr, self.ten = E.page_text(self.tr), E.page_text(self.en)
+
+    def test_page_numbers_pass_invented_numbers_fail(self):
+        ok = "AAA stop seviyesine %3,1 uzakta; rejim sınırı %90, mevcut hisse oranı %50,0. Bellek sepeti 1M −%20,0 sonrası tepki."
+        self.assertEqual(self.E.check(ok, self.ttr, "tr"), [])
+        bad = "AAA stop seviyesine %3,7 uzakta ve rejim sınırı %90 seviyesinde, haftanın en önemli koşulu bu."
+        self.assertTrue(any("3,7" in p for p in self.E.check(bad, self.ttr, "tr")))
+
+    def test_number_format_is_per_language(self):
+        self.assertEqual(self.E.check("AAA is 3.1% from its stop; the regime limit is 90% and equity share 50.0% for now.", self.ten, "en"), [])
+        self.assertTrue(self.E.check("AAA stop seviyesine %3.1 uzakta; rejim sınırı %90 ve hisse oranı %50,0 düzeyinde.", self.ttr, "tr"))
+
+    def test_flow_and_advice_wording_rejected(self):
+        self.assertTrue(self.E.check("Bellek sepetine para aktı; rejim sınırı %90 olduğu için AAA alınmalı ve tutulmalı.", self.ttr, "tr"))
+        self.assertTrue(self.E.check("Investors should buy AAA here because the regime limit is 90% and equity share 50.0%.", self.ten, "en"))
+
+    def test_cash_and_total_never_sent(self):
+        self.assertNotIn("$1.000", self.ttr)
+        self.assertNotIn("$2,000", self.ten)
+
+    def test_retry_then_print(self):
+        drafts = iter([({"tr": "Bellek sepetine para aktı, rejim sınırı %90 ve hisse oranı %50,0.", "en": "Money flowed into memory, limit 90% and share 50.0%."},
+                        {"model": "m", "usd": 0.01}),
+                       ({"tr": "AAA stop seviyesine %3,1 uzakta; rejim sınırı %90, mevcut hisse oranı %50,0.",
+                         "en": "AAA is 3.1% from its stop; the regime limit is 90% against an equity share of 50.0%."}, {"model": "m", "usd": 0.01})])
+        ed = self.E.write(self.tr, self.en, call=lambda p: next(drafts))
+        self.assertIsNotNone(ed["tr"])
+        self.assertEqual(len(ed["usage"]), 2)
+        d = base()
+        d["editor"] = ed
+        self.assertIn("Editörün okuması", page(d))
+        self.assertIn("Editor’s read", R.render(d, lang="en")[0])
+        assert_clean(self, page(d))
+
+    def test_two_failures_print_nothing(self):
+        bad = ({"tr": "Para aktı, %99 ile.", "en": "Money flowed, 99%."}, {"model": "m", "usd": 0.0})
+        ed = self.E.write(self.tr, self.en, call=lambda p: bad)
+        self.assertIsNone(ed["tr"])
+        d = base()
+        d["editor"] = ed
+        html = page(d)
+        self.assertNotIn("Editörün okuması ·", html.split("Eksik veri")[0])
+        self.assertIn("denetimden geçmedi", html)
+
+
 # ── §11 scorecard ───────────────────────────────────────────────────────────
 class Scorecard(unittest.TestCase):
     def test_round_trip(self):

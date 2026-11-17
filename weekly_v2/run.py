@@ -4,11 +4,14 @@
     python -m weekly_v2.run --no-pdf     # HTML only
     python -m weekly_v2.run --open       # ...and open it in the browser
     python -m weekly_v2.run --from-cache path.json   # re-render a saved fetch (no network)
+    python -m weekly_v2.run --no-editor  # skip the model-written "editor's read" (gpt-6.1-sol, numbers checked)
     python -m weekly_v2.run --lang en    # English edition (karar_<cut>_en.html); --lang both = TR + EN
 
 Runs on the owner's Mac: portfolio.yaml, rules.yaml, news.yaml and history/
-are git-ignored and never leave the machine. No model is called; every
-sentence is a rule over the numbers. The issue's "this week" rows are saved
+are git-ignored and never leave the machine. Every number and condition is a
+rule over the data; one model call (weekly_v2/editor.py) writes the short
+"editor's read" on top from the finished page text, and it is printed only if
+every number in it is on the page. Cash and total value are not sent. The issue's "this week" rows are saved
 to history/<cut>.json for next week's scorecard.
 
 Quality gate: if the core series are missing, the page is still written for
@@ -79,6 +82,18 @@ def main(argv):
             json.dump({k: v for k, v in data.items() if k not in ("portfolio", "rules", "news", "prev_issue", "example_files")}, fh)
     problems = gate(data)
     lang = argv[argv.index("--lang") + 1] if "--lang" in argv else "tr"
+    if "--no-editor" not in argv:
+        from weekly_v2 import editor as E
+        try:
+            ed = E.write(R.render(data, lang="tr")[0], R.render(data, lang="en")[0])
+            data["editor"] = ed
+            cost = sum(u["usd"] for u in ed["usage"])
+            print(f"  editor: {ed['model']} · {len(ed['usage'])} call(s) · ${cost:.4f} · "
+                  + ("passed" if ed["tr"] else f"rejected {ed['rejected']}"))
+            with open(os.path.join(OUT, f"editor_{data['cut']}.json"), "w", encoding="utf-8") as fh:
+                json.dump(ed, fh, ensure_ascii=False, indent=1)
+        except Exception as e:
+            print(f"  ⚠️  editor failed, page goes out without it: {e}")
     langs = ("tr", "en") if lang == "both" else (lang,)
     paths, rows = [], []
     for lg in langs:

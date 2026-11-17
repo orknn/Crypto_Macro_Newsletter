@@ -470,7 +470,7 @@ class Bulletin:
             d_ndx = (A["ndx"]["last"] / A["ndx"]["ma200"] - 1) * 100
             d_vxn = (A["vxn"]["last"] / A["vxn"]["ma50"] - 1) * 100
             cash, tot = f.usd(float(self.PF.get("cash") or 0), 0), f.usd(nav, 0) if nav else ""
-            cur = (f'<div class="big">{f.lvl(eq_pct, 1)}</div><span class="mono mute">{t("nakit", "cash")} {cash} · {t("toplam", "total")} {tot}</span>'
+            cur = (f'<div class="big">{f.lvl(eq_pct, 1)}</div><span class="mono mute priv">{t("nakit", "cash")} {cash} · {t("toplam", "total")} {tot}</span>'
                    if eq_pct is not None else f'<p>{t("Hisse oranı hesaplanamadı (eksik fiyat).", "Equity share could not be computed (missing price).")}</p>')
             gap = ""
             if eq_pct is not None:
@@ -1250,6 +1250,15 @@ class Bulletin:
   <p class="lede">{self.lede()}</p>
   <div class="chart"><div class="lab"><span class="k">{hd["lab"]}</span><b>{hd["val"]}</b></div>{spark(hd["series"], w=1000, h=150, layers=9)}</div>
 </section>'''
+        ed = self.d.get("editor") or {}
+        editor = ""
+        if ed.get(self.l):
+            editor = (f'<div class="panel dark" style="margin:0 0 22px"><span class="k">{t("Editörün okuması", "Editor’s read")} · '
+                      f'{esc(ed.get("model", ""))} · {t("sayılar sayfayla doğrulandı", "numbers checked against the page")}</span>'
+                      f'<p style="margin-top:10px;font-size:17px;line-height:1.55">{esc(ed[self.l])}</p></div>')
+        elif ed.get("rejected"):
+            self.miss(t("Editörün okuması: model taslağı denetimden geçmedi, basılmadı",
+                        "Editor’s read: the model draft failed the check and was not printed"))
         k5 = "".join(f'<div><span class="k">{a}</span><b class="{c}">{b}</b><span class="mono mute">{x}</span></div>' for a, b, x, c in self.key5())
         full = (self.R.get("show_metals") or "compact") == "full"
         sections = [self.decision(), self.setups(), self.chain(), self.macro()]
@@ -1294,6 +1303,7 @@ class Bulletin:
 <div class="top"><span class="wm">NO<b>/</b>CASHFLOW</span><span class="eyebrow"><em>{t("Haftalık karar bülteni", "Weekly decision bulletin")}</em> · {t(f"kesim: {cut} Cuma kapanışı", f"cut: Friday close, {cut}")}</span></div>
 {banner}{hero}
 <div class="key5">{k5}</div>
+{editor}
 {body}
 {miss}
 <footer><span class="wm">NO<b>/</b>CASHFLOW</span><p>{foot} {src}: Yahoo Finance, FRED, ICE BofA, Cboe, OKX, Polymarket, Forex Factory.</p></footer>
