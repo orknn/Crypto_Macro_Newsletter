@@ -147,6 +147,12 @@ class Baskets(unittest.TestCase):
 
 # ── 2. single cut ───────────────────────────────────────────────────────────
 class SingleCut(unittest.TestCase):
+    def test_latest_completed_close(self):
+        self.assertEqual(D.last_close(date(2026, 11, 17), 15), date(2026, 11, 16))   # Tuesday, market open
+        self.assertEqual(D.last_close(date(2026, 11, 17), 22), date(2026, 11, 17))   # Tuesday, after close
+        self.assertEqual(D.last_close(date(2026, 11, 16), 10), date(2026, 11, 13))   # Monday morning → Friday
+        self.assertEqual(D.last_close(date(2026, 11, 15), 22), date(2026, 11, 13))   # Sunday
+
     def test_last_completed_friday(self):
         self.assertEqual(D.last_friday(date(2026, 11, 16)), date(2026, 11, 13))      # Monday
         self.assertEqual(D.last_friday(date(2026, 11, 15)), date(2026, 11, 13))      # Sunday

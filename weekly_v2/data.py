@@ -5,7 +5,7 @@ in: a series that fails to load is simply absent, and the renderer shows "—"
 or hides the block. Sources: Yahoo Finance (yfinance), FRED CSV, OKX and Bitget
 public market APIs (GPU rental perpetuals) and nocashflow.net's own data
 files (calendar, Fed odds, F&G). Every series is cut at the same point: the
-last completed Friday close. Company-level data (fundamentals, earnings,
+latest completed US close (--friday: last Friday). Company-level data (fundamentals, earnings,
 options, analyst actions) lives in personal.py.
 """
 import io
@@ -105,6 +105,19 @@ def last_friday(today, utc_hour=None):
     if off == 0 and (utc_hour is None or utc_hour < 21):
         off = 7
     return today - timedelta(days=off)
+
+
+def last_close(today, utc_hour=None):
+    """The most recent *completed* US session: today once the close is in
+    (21:00 UTC), otherwise the previous weekday. Holidays are handled in
+    fetch() by stepping back to the last day the Nasdaq actually traded."""
+    d = today
+    if d.weekday() < 5 and utc_hour is not None and utc_hour >= 21:
+        return d
+    d -= timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d
 
 
 def _at(s, when):
@@ -262,11 +275,16 @@ def fetch(today=None, extra=(), cut=None):
     tickers (portfolio + watchlist) to the same download."""
     import yfinance as yf
     today = today or date.today()
-    cut = cut or last_friday(today, datetime.utcnow().hour)
+    cut = cut or last_close(today, datetime.utcnow().hour)
     report = {"missing": [], "warnings": []}
     tick = list(dict.fromkeys(list(TICKERS.values()) + [t for b in BASKETS.values() for t in b] + list(extra)))
     raw = yf.download(tick, period="2y", interval="1d", progress=False, auto_adjust=True)
     C, V = raw["Close"], raw["Volume"]
+    # a market holiday: the cut is the last day the Nasdaq actually closed
+    nd = C[TICKERS["ndx"]].dropna()
+    nd = nd[nd.index <= pd.Timestamp(cut)]
+    if len(nd):
+        cut = min(cut, nd.index[-1].date())
     A = {}
     for t in extra:
         k = t.lower()

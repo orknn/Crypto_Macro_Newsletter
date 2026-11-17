@@ -2,6 +2,7 @@
 
     python -m weekly_v2.run              # fetch, build HTML + PDF into personal_out/
     python -m weekly_v2.run --no-pdf     # HTML only
+    python -m weekly_v2.run --friday     # cut at the last Friday close instead of the latest close
     python -m weekly_v2.run --open       # ...and open it in the browser
     python -m weekly_v2.run --from-cache path.json   # re-render a saved fetch (no network)
     python -m weekly_v2.run --no-editor  # skip the model-written "editor's read" (gpt-6.1-sol, numbers checked)
@@ -20,7 +21,7 @@ inspection, history is not saved and the run exits non-zero.
 import json
 import os
 import sys
-from datetime import date
+from datetime import date, datetime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
@@ -52,7 +53,7 @@ def gate(data):
     return [f"missing core series: {', '.join(missing)}"] if missing else []
 
 
-def build(today=None, root=ROOT, cache=None):
+def build(today=None, root=ROOT, cache=None, friday=False):
     """Fetch everything and return the data dict the renderer takes."""
     portfolio, rules, news, example = P.load_inputs(root)
     if cache:
@@ -61,7 +62,8 @@ def build(today=None, root=ROOT, cache=None):
     else:
         today = today or date.today()
         extra = P.tickers(portfolio, rules)
-        data, report, C, V = D.fetch(today, extra=extra)
+        cut = D.last_friday(today, datetime.utcnow().hour) if friday else None
+        data, report, C, V = D.fetch(today, extra=extra, cut=cut)
         cut = data["cut"]
         data["personal"] = P.fetch_personal(portfolio, rules, C, V, cut, today, report)
         data["report_missing"] = sorted(set(report["missing"]))
@@ -74,7 +76,7 @@ def build(today=None, root=ROOT, cache=None):
 def main(argv):
     cache = argv[argv.index("--from-cache") + 1] if "--from-cache" in argv else None
     print(f"Weekly v2 · personal · {date.today()}")
-    data = build(cache=cache)
+    data = build(cache=cache, friday="--friday" in argv)
     print(f"  cut: {data['cut']} · series: {len(data['a'])} · example inputs: {data['example_files'] or 'none'}")
     os.makedirs(OUT, exist_ok=True)
     if not cache:

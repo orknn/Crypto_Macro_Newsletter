@@ -38,10 +38,12 @@ NAMES = {"NVDA": "Nvidia", "AMD": "AMD", "AVGO": "Broadcom", "NOW": "ServiceNow"
 S = {
     "tr": {"days": ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"],
            "months": ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"],
-           "bn": " mr", "mn": " mn"},
+           "bn": " mr", "mn": " mn",
+           "dayfull": ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]},
     "en": {"days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
            "months": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
-           "bn": "bn", "mn": "m"},
+           "bn": "bn", "mn": "m",
+           "dayfull": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]},
 }
 
 _COMMON = {"ndx": "Nasdaq 100", "spx": "S&P 500", "vix": "VIX", "vxn": "VXN", "btc": "Bitcoin",
@@ -975,8 +977,8 @@ class Bulletin:
                 own = t(" · portföy", " · held") if tk in self.held() else ""
                 trs.append(f'<tr><th>{NAMES.get(tk, tk)}<small>{tk}{own}</small></th><td class="n">{f.day(d)}</td><td class="n">{sess}</td>'
                            f'<td class="n">{eps}</td><td class="n">{im}</td><td class="n">{rv}</td></tr>')
-            heads = t(("", "Tarih", "Saat", "EPS beklentisi", "Opsiyon ima hareketi", "EPS revizyonu · 30G"),
-                      ("", "Date", "Time", "EPS estimate", "Options-implied move", "EPS revision · 30D"))
+            heads = t(("", "Tarih", "Saat", "Çeyreklik EPS beklentisi", "Opsiyon ima hareketi", "EPS revizyonu · 30G"),
+                      ("", "Date", "Time", "Quarterly EPS estimate", "Options-implied move", "EPS revision · 30D"))
             th = "".join(f"<th>{h}</th>" for h in heads)
             parts.append(f'<div class="k subk">{t("Önümüzdeki 14 gün", "Next 14 days")}</div><div class="tblw"><table class="board p"><thead><tr>{th}</tr></thead><tbody>{"".join(trs)}</tbody></table></div>')
         else:
@@ -1294,10 +1296,11 @@ class Bulletin:
         miss = (f'<div class="note missing"><b>{t("Eksik veri", "Missing data")}</b> · {t("bu sayıda gösterilmeyenler", "not shown in this issue")}'
                 f'<ul>{"".join(f"<li>{esc(m)}</li>" for m in self.missing)}</ul></div>' if self.missing else "")
         cut = f.long_date(self.d["cut"])
+        wd = f.s["dayfull"][date.fromisoformat(self.d["cut"]).weekday()]
         foot = t(f"Kişisel karar bülteni; yatırım tavsiyesi değildir. Koşullar rules.yaml'dan, pozisyonlar portfolio.yaml'dan okunur. "
-                 f"Tüm getiriler {cut} Cuma kapanışına göre.",
+                 f"Tüm getiriler {cut} {wd} kapanışına göre.",
                  f"Personal decision bulletin; not investment advice. Conditions are read from rules.yaml, positions from portfolio.yaml. "
-                 f"All returns are measured to the Friday close of {cut}.")
+                 f"All returns are measured to the {wd} close of {cut}.")
         src = t("Veriler", "Data")
         return f'''<!doctype html>
 <html lang="{self.l}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1307,7 +1310,7 @@ class Bulletin:
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Instrument+Serif:ital@0;1&family=Geist+Mono:wght@400;500&display=swap">
 <style>{css}</style></head><body><div class="wrap">
-<div class="top"><span class="wm">NO<b>/</b>CASHFLOW</span><span class="eyebrow"><em>{t("Haftalık karar bülteni", "Weekly decision bulletin")}</em> · {t(f"kesim: {cut} Cuma kapanışı", f"cut: Friday close, {cut}")}</span></div>
+<div class="top"><span class="wm">NO<b>/</b>CASHFLOW</span><span class="eyebrow"><em>{t("Haftalık karar bülteni", "Weekly decision bulletin")}</em> · {t(f"kesim: {cut} {wd} kapanışı", f"cut: {wd} close, {cut}")}</span></div>
 {banner}{hero}
 <div class="key5">{k5}</div>
 {editor}
