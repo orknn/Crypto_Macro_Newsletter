@@ -85,9 +85,9 @@ CAL_TR = {
 }
 
 BASKET_NAME = {
-    "tr": {"neocloud": ("Neocloud", "GPU'yu kiraya veren bulutlar"), "memory": ("Bellek", "HBM ve NAND"),
+    "tr": {"neocloud": ("Neocloud", "GPU kiralayan şirketler · hisse fiyatı"), "memory": ("Bellek", "HBM ve NAND"),
            "optics": ("Optik", "veri merkezi bağlantısı"), "power": ("Enerji", "şebeke, yakıt hücresi, nükleer")},
-    "en": {"neocloud": ("Neocloud", "clouds that rent out GPUs"), "memory": ("Memory", "HBM and NAND"),
+    "en": {"neocloud": ("Neocloud", "GPU-renting clouds · share price"), "memory": ("Memory", "HBM and NAND"),
            "optics": ("Optics", "data-centre connectivity"), "power": ("Power", "grid, fuel cells, nuclear")},
 }
 # regime labels in the example rules.yaml; a real file may set label_en per state
@@ -715,7 +715,7 @@ class Bulletin:
                 since = t(", " + f.long_date(H1["since"]) + "'den beri", ", since " + f.long_date(H1["since"]))
             src = t(f"Düşük güvenilirlik: OKX'te tek, ince hacimli vadeli{since}. Sonuç çıkarılmaz.",
                     f"Low reliability: a single thinly traded future on OKX{since}. No conclusion is drawn.")
-            out.append(f'''<article class="link gpu"><span class="n mono">0{n}</span><span class="k">{t("GPU kirası · gösterge", "GPU rental · indicator")}</span><h3>H100</h3>
+            out.append(f'''<article class="link gpu"><span class="n mono">0{n}</span><span class="k" style="display:block;padding-right:34px">{t("GPU kirası · gösterge", "GPU rent · indicator")}</span><h3>H100</h3>
   <div class="px">${f.num(H1["last"])}<small class="mono"> / {t("saat", "hour")}</small></div>
   <div class="chg mono">{self.ch(H1["w"], suffix=" 1W")}{self.ch(H1["m"], suffix=" 1M") if H1.get("m") is not None else ""}</div>
   {spark(H1["series"], w=240, h=46, layers=3)}
@@ -731,10 +731,17 @@ class Bulletin:
             th_ = f.pct(REBOUND_1M, 0)
             read += t(f" {', '.join(reb)}: pozitif hafta, ama 1M {th_}'ten kötü — tepki olarak etiketlendi.",
                       f" {', '.join(reb)}: a positive week, but 1M worse than {th_} — labelled a rebound.")
+        legend = t("Sepet kartları hisse fiyatını gösterir, kira ücretini değil · getiri = sepetin eşit ağırlıklı hisse getirisi · "
+                   "SOX'a göre = yarı iletken endeksine (SOX) göre fark, yüzde puan · alttaki isimler = her hissenin 1W getirisi",
+                   "Basket cards show share prices, not rental rates · return = the basket's equal-weight share return · "
+                   "vs SOX = difference from the semiconductor index (SOX), percentage points · names below = each stock's 1W return")
+        if H1:
+            legend += t(" · GPU kirası yalnızca H100 kartında", " · GPU rent appears only on the H100 card")
         meta = t("eşit ağırlıklı sepetler · her pencere = üyelerin o penceredeki getirilerinin ortalaması",
                  "equal-weight baskets · each window = mean of the members' returns over that window")
         return self.section(t(("AI değer ", "zinciri"), ("AI value ", "chain")), meta,
-                            f'<div class="chain">{"".join(out)}</div><p class="read">{read}</p>')
+                            f'<div class="chain">{"".join(out)}</div>'
+                            f'<p class="mono mute" style="font-size:11px;margin-top:10px;line-height:1.6">{legend}</p><p class="read">{read}</p>')
 
     # ── §04 financing stress + macro (+ compact metals) ─────────────────────
     def macro(self):
