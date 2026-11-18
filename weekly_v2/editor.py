@@ -19,11 +19,13 @@ import html as H
 from config import models
 
 # Chosen 2026-11-17 after a side-by-side on the 13 Nov issue (terra / sol, thinking off and free):
-# sol with free thinking found the cross-section link that mattered (NVDA −12.7% vs SOX +8.1%)
-# for $0.023 a run. Free = no reasoning setting is sent; the model picks its own depth.
-MODEL = os.environ.get("WEEKLY_EDITOR_MODEL", "gpt-6.1-sol")
+# sol with free thinking found the cross-section link that mattered (NVDA −12.7% vs SOX +8.1%).
+# 2026-11-19: moved to gpt-6.2-sol after a side-by-side with 6.1-sol on the 16 Nov issue —
+# same price, fewer tokens ($0.022 vs $0.024), 10 s vs 16 s, both regime triggers named.
+# Free = no reasoning setting is sent; the model picks its own depth.
+MODEL = os.environ.get("WEEKLY_EDITOR_MODEL", "gpt-6.2-sol")
 # USD per million tokens (input, output) — same table as stock-analyzer/src/providers.py
-PRICES = {"gpt-6.1-terra": (1.00, 5.00), "gpt-6.1-sol": (2.00, 10.00)}
+PRICES = {"gpt-6.1-terra": (1.00, 5.00), "gpt-6.1-sol": (2.00, 10.00), "gpt-6.2-sol": (2.00, 10.00)}
 # reasoning tokens share max_output_tokens with the answer, so leave room
 MAX_OUT = 20000
 

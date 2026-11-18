@@ -5,7 +5,7 @@
     python -m weekly_v2.run --friday     # cut at the last Friday close instead of the latest close
     python -m weekly_v2.run --open       # ...and open it in the browser
     python -m weekly_v2.run --from-cache path.json   # re-render a saved fetch (no network)
-    python -m weekly_v2.run --no-editor  # skip the model-written "editor's read" (gpt-6.1-sol, numbers checked)
+    python -m weekly_v2.run --no-editor  # skip the model-written "editor's read" (gpt-6.2-sol, numbers checked)
     python -m weekly_v2.run --lang en    # English edition (karar_<cut>_en.html); --lang both = TR + EN
 
 Runs on the owner's Mac: portfolio.yaml, rules.yaml, news.yaml and history/
